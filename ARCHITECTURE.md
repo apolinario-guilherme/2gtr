@@ -337,3 +337,6 @@ Modelo: categories.parent_category_id (NULL = principal). Validacao central (val
 ## 36. Marca 2gtr (só apresentação; arquitetura intacta).
 
 Nome exibido: 2gtr (title, meta description, boot, sidebar, onboarding, fallback de rota, document.title "Secao | 2gtr", nomes de CSV exportados). Preservados: namespace window.Juntos, chaves juntos_*, filenames internos, JNT-XXXXXX, rotas/IDs/servicos, textos comuns ("juntos" como palavra). Sem manifest/PWA no projeto (nada a atualizar alem do title/meta). Open Finance segue invisivel e desativado.
+## 37. Visual OpenDesign (só CSS + fontes; zero logica).
+
+Transplante do sistema visual do prototipo OpenDesign (C:\Users\Guilherme\Desktop\2gtr\index.html, preservado fora do repo): tokens (verde #0E8F5B/#0A6E46, rosa 2gtr, fundo #F4F7F5, raio 20px, sombras suaves), fontes Inter + Plus Jakarta Sans (com fallbacks), botoes/inputs 12px, linhas de lancamento sem borda com tile, hero verde-escuro (Resultado + Quanto podemos gastar), sidebar clara, bottomnav com pill ativa, FAB com borda, toast pill, marca bicolor 2g/tres + dot rosa. Nenhum HTML gerado pelo app.js foi alterado; nenhuma regra/calculo/banco; Open Finance segue invisivel e desativado.
