@@ -1,4 +1,4 @@
-/* Juntos Finanças — camada de dados (adapter).
+/* 2gtr — camada de dados (adapter).
    Etapa 1: users, couples, couple_members (members), couple_invitations (invitations).
    Etapa 2: + categories, + transactions.
    Etapa 3: + transaction_splits + motor de acertos. Etapa 5: + budgets, goals.
@@ -1094,7 +1094,7 @@ window.Juntos = window.Juntos || {};
       }
       function dmy(s) { return String(s || '').slice(0, 10).split('-').reverse().join('/'); }
       function br(v) { return (Math.round(Number(v) * 100) / 100).toFixed(2); }
-      if (!cid) return { filename: 'juntos.csv', csv: '﻿tipo;valor\n' };
+      if (!cid) return { filename: '2gtr.csv', csv: '﻿tipo;valor\n' };
       if (kind === 'transactions') {
         rows.push(['data', 'descricao', 'categoria', 'tipo', 'valor', 'conta', 'cartao', 'pago_por', 'divisao']);
         DB.listTx(userId, { from: from, to: to }).forEach(function (t) {
@@ -1144,7 +1144,7 @@ window.Juntos = window.Juntos || {};
         var s = String(x == null ? '' : x);
         return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
       }
-      return { filename: 'juntos-' + kind + '-' + (from || 'geral') + '-' + (to || 'geral') + '.csv', csv: '﻿' + rows.map(function (r) { return r.map(escCell).join(';'); }).join('\n') };
+      return { filename: '2gtr-' + kind + '-' + (from || 'geral') + '-' + (to || 'geral') + '.csv', csv: '﻿' + rows.map(function (r) { return r.map(escCell).join(';'); }).join('\n') };
     },
     calculateSettlementBalance: function (userId) { return DB.settle(userId); },
     settle: function (userId) {
@@ -10169,7 +10169,10 @@ window.Juntos = window.Juntos || {};
       var rows = [['relatorio', reportType], ['periodo', f.from + ' a ' + f.to], ['visao', f.vision], ['gerado_em', now().slice(0, 10)], []];
       if (reportType === 'category') {
         rows.push(['categoria', 'valor', 'percentual', 'transacoes', 'media']);
-        R.categories.forEach(function (c) { rows.push([c.name, br(c.total), String(c.pct).replace('.', ','), c.count, br(c.avg)]); });
+        R.categories.forEach(function (c) {
+          rows.push([c.name, br(c.total), String(c.pct).replace('.', ','), c.count, br(c.avg)]);
+          (c.children || []).forEach(function (k) { rows.push(['  ' + k.parentName + ' → ' + k.name, br(k.total), String(k.pct).replace('.', ','), k.count, br(k.avg)]); });
+        });
       } else if (reportType === 'income_expense' || reportType === 'trend') {
         rows.push(['mes', 'receitas', 'despesas', 'resultado', 'estado']);
         R.monthly.forEach(function (m) { rows.push([m.ym || m.month, br(m.income), br(m.expenses), br(m.result), m.kind || 'history']); });

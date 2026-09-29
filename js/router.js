@@ -18,7 +18,8 @@
     var b = base(r);
     var bare = ['login', 'register', 'forgot-password', 'onboarding'].includes(b);
     document.getElementById('shell').classList.toggle('bare', bare);
-    document.getElementById('page-title').textContent = TITLES[b] || 'Juntos';
+    document.getElementById('page-title').textContent = TITLES[b] || '2gtr';
+    try { document.title = (TITLES[b] ? TITLES[b] + ' | ' : '') + '2gtr'; } catch (e) {}
     document.querySelectorAll('#side-nav a,#bottomnav a').forEach(function (a) { a.classList.toggle('active', a.dataset.r === b); });
     document.getElementById('avatar-btn').textContent = (J.Auth.current() || { nome: '?' }).nome.charAt(0).toUpperCase();
     var _hn = document.getElementById('hello-name'); if (_hn) { var _me = J.Auth.current(); _hn.textContent = _me ? 'Olá, ' + _me.nome.split(' ')[0] : 'Olá'; }

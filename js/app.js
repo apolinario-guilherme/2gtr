@@ -1,4 +1,4 @@
-/* Juntos Finanças — telas.
+/* 2gtr — telas.
    Etapas 1–3 preservadas. Etapa 4: dashboard central (só leitura de dados reais). */
 (function (J) {
   var ob = { step: 1, choice: null };
@@ -76,7 +76,7 @@
   /* ---------- ONBOARDING (etapa 1, preservado) ---------- */
   function pOnboarding(v, me) {
     if (ob.step === 1) {
-      v.innerHTML = '<div class="card center" style="padding:40px 24px"><div style="font-size:56px">❤️</div><h1>Bem-vindo ao Juntos</h1><p class="muted">Organize as finanças de vocês de forma simples e transparente.</p><button class="btn" id="go">Começar</button></div>';
+      v.innerHTML = '<div class="card center" style="padding:40px 24px"><div style="font-size:56px">❤️</div><h1>Bem-vindo ao 2gtr</h1><p class="muted">Organize as finanças de vocês de forma simples e transparente.</p><button class="btn" id="go">Começar</button></div>';
       document.getElementById('go').onclick = function () { ob.step = 2; render('onboarding'); };
     } else if (!ob.choice) {
       v.innerHTML = '<div class="card"><h1>Como você quer começar?</h1><div id="e"></div><button class="opt" id="c1">🏠 <b>Sou o primeiro do casal</b><br><span class="muted">Criar o espaço do casal e convidar depois</span></button><button class="opt" id="c2">✉️ <b>Tenho um convite</b><br><span class="muted">Entrar com o código JNT-XXXXXX</span></button></div>';
@@ -3965,7 +3965,7 @@
     }
     var body = '<h2>Correspondência (' + Math.round(m.confidence_score * 100) + '%)</h2><div id="me"></div><p class="muted">' + esc(m.match_reason || '') + '</p>';
     if (isPair) {
-      body += '<p>Par de transferência ainda não existe no Juntos.</p><button class="btn" id="mk-tr">Criar transferência</button>';
+      body += '<p>Par de transferência ainda não existe no 2gtr.</p><button class="btn" id="mk-tr">Criar transferência</button>';
     } else if (m.entity_type === 'invoice_payment' || m.entity_type === 'invoice') {
       body += '<p>Possível pagamento de fatura. Escolha a fatura:</p><div id="mk-invs"></div>';
     } else {
