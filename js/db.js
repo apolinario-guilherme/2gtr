@@ -1,0 +1,12228 @@
+/* Juntos Finanças — camada de dados (adapter).
+   Etapa 1: users, couples, couple_members (members), couple_invitations (invitations).
+   Etapa 2: + categories, + transactions.
+   Etapa 3: + transaction_splits + motor de acertos. Etapa 5: + budgets, goals.
+   Etapa 6: + recurring_transactions, recurring_occurrences.
+   Etapa 7 (auditoria): + settlements (acertos registrados) integrados ao motor.
+   Em produção, trocar este adapter por Supabase/Firebase com RLS.
+   Regra crítica: todo acesso a casal passa por myCoupleId() — nunca por parâmetro de tela.
+   Toda informação financeira carrega couple_id + created_by e é filtrada pelo casal do usuário.
+   REGRA PRINCIPAL (etapa 3): QUEM PAGOU ≠ QUANTO CADA UM DEVERIA PAGAR. */
+window.Juntos = window.Juntos || {};
+(function (J) {
+  var KEY = 'juntos_db_v1';
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [] }; }
+  function read() {
+    try {
+      var db = JSON.parse(localStorage.getItem(KEY)) || blank();
+      if (!db.categories) db.categories = [];
+      if (!db.transactions) db.transactions = [];
+      if (!db.splits) db.splits = [];
+      if (!db.budgets) db.budgets = [];
+      if (!db.goals) db.goals = [];
+      if (!db.goal_events) db.goal_events = [];
+      if (!db.recurring_transactions) db.recurring_transactions = [];
+      if (!db.recurring_occurrences) db.recurring_occurrences = [];
+      if (!db.settlements) db.settlements = [];
+      if (!db.accounts) db.accounts = [];
+      if (!db.transfers) db.transfers = [];
+      if (!db.credit_cards) db.credit_cards = [];
+      if (!db.installment_purchases) db.installment_purchases = [];
+      if (!db.installments) db.installments = [];
+      if (!db.invoices) db.invoices = [];
+      if (!db.invoice_payments) db.invoice_payments = [];
+      if (!db.audit_logs) db.audit_logs = [];
+      if (!db.automation_jobs) db.automation_jobs = [];
+      if (!db.automation_executions) db.automation_executions = [];
+      if (!db.financial_events) db.financial_events = [];
+      if (!db.automation_rules) db.automation_rules = [];
+      if (!db.automation_rule_executions) db.automation_rule_executions = [];
+      if (!db.category_suggestions) db.category_suggestions = [];
+      if (!db.category_feedback) db.category_feedback = [];
+      if (!db.import_batches) db.import_batches = [];
+      if (!db.imported_transactions) db.imported_transactions = [];
+      if (!db.import_mappings) db.import_mappings = [];
+      if (!db.reconciliation_matches) db.reconciliation_matches = [];
+      if (!db.resets) db.resets = [];
+      return db;
+    } catch (e) { return blank(); }
+  }
+  function write(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
+  function id(p) { return (p || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function now() { return new Date().toISOString(); }
+  function toCents(v) { return Math.round(v * 100); }
+  function fromCents(c) { return Math.round(c) / 100; }
+  function genCode(db) {
+    var c, tries = 0;
+    do {
+      c = 'JNT-' + Array.from({ length: 6 }, function () { return 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 31)]; }).join('');
+      tries++;
+    } while (db.invitations.some(function (i) { return i.code === c; }) && tries < 50);
+    return c;
+  }
+
+  /* Categorias padrão (etapa 2): nível principal para não poluir o mobile. */
+  var DEFAULT_CATS = [
+    { name: 'Moradia', type: 'expense', icon: '🏠' },
+    { name: 'Alimentação', type: 'expense', icon: '🍽️' },
+    { name: 'Transporte', type: 'expense', icon: '🚗' },
+    { name: 'Saúde', type: 'expense', icon: '🏥' },
+    { name: 'Lazer', type: 'expense', icon: '🎬' },
+    { name: 'Casa', type: 'expense', icon: '🛋️' },
+    { name: 'Educação', type: 'expense', icon: '📚' },
+    { name: 'Pets', type: 'expense', icon: '🐾' },
+    { name: 'Financeiro', type: 'expense', icon: '🏦' },
+    { name: 'Assinaturas', type: 'expense', icon: '🔁' },
+    { name: 'Compras', type: 'expense', icon: '🛍️' },
+    { name: 'Outros', type: 'both', icon: '📦' },
+    { name: 'Salário', type: 'income', icon: '💼' },
+    { name: 'Freelance', type: 'income', icon: '🧑‍💻' },
+    { name: 'Comissão', type: 'income', icon: '🤝' },
+    { name: 'Rendimentos', type: 'income', icon: '📈' },
+    { name: 'Aluguel recebido', type: 'income', icon: '🏘️' }
+  ];
+
+  /* Subcategorias padrão (2 níveis): pai por nome → filhas. Só semeadura
+     compatível: pai existe, sem duplicada normalizada, sem mexer em histórico. */
+  var DEFAULT_SUBCATS = {
+    'Moradia': [['Aluguel', '🔑'], ['Condomínio', '🏢'], ['Energia', '💡'], ['Água', '💧'], ['Gás', '🧯'], ['Internet', '🌐'], ['Manutenção', '🔧']],
+    'Alimentação': [['Supermercado', '🛒'], ['Restaurantes', '🍽️'], ['Delivery', '🛵'], ['Padaria', '🥖'], ['Lanches', '🍔']],
+    'Transporte': [['Combustível', '⛽'], ['Uber/99', '🚕'], ['Transporte público', '🚌'], ['Estacionamento', '🅿️'], ['Manutenção', '🔧']],
+    'Saúde': [['Consultas', '🩺'], ['Exames', '🧪'], ['Medicamentos', '💊'], ['Plano de saúde', '🏥'], ['Odontologia', '🦷']],
+    'Lazer': [['Viagens', '✈️'], ['Cinema', '🎬'], ['Eventos', '🎪'], ['Hobbies', '🎨']],
+    'Casa': [['Móveis', '🪑'], ['Eletrodomésticos', '🔌'], ['Limpeza', '🧹'], ['Decoração', '🖼️']],
+    'Educação': [['Cursos', '🎓'], ['Livros', '📖'], ['Mensalidades', '🧾'], ['Material', '✏️']],
+    'Pets': [['Alimentação', '🦴'], ['Veterinário', '🐾'], ['Higiene', '🧼'], ['Medicamentos', '💊']],
+    'Assinaturas': [['Streaming', '📺'], ['Aplicativos', '📱'], ['Software', '💻'], ['Serviços', '🧰']],
+    'Compras': [['Roupas', '👕'], ['Eletrônicos', '🔌'], ['Presentes', '🎁'], ['Outros', '📦']],
+    'Salário': [['Salário principal', '💼'], ['13º', '🎄'], ['Férias', '🏖️'], ['Bonificação', '🏆']],
+    'Rendimentos': [['Juros', '💹'], ['Dividendos', '📊'], ['Outros rendimentos', '💰']]
+  };
+
+  function seedDefaults(db, coupleId) {
+    if (db.categories.some(function (c) { return c.couple_id === coupleId; })) return;
+    DEFAULT_CATS.forEach(function (d) {
+      db.categories.push({ id: id('cat'), couple_id: coupleId, name: d.name, type: d.type, icon: d.icon, active: true, parent_category_id: null, created_at: now(), updated_at: now() });
+    });
+    seedMissingSubcats(db, coupleId);
+  }
+  /* Semeadura idempotente de subcategorias padrão (casais novos e antigos).
+     Nunca altera categoria existente nem transação: só adiciona filhas. */
+  function seedMissingSubcats(db, coupleId) {
+    var changed = false;
+    var tops = db.categories.filter(function (c) { return c.couple_id === coupleId && !c.parent_category_id; });
+    Object.keys(DEFAULT_SUBCATS).forEach(function (pname) {
+      var pnorm = DB.normalizeDescription(pname);
+      var parent = tops.filter(function (c) { return DB.normalizeDescription(c.name) === pnorm; })[0];
+      if (!parent || !parent.active) return;
+      DEFAULT_SUBCATS[pname].forEach(function (pair) {
+        var snorm = DB.normalizeDescription(pair[0]);
+        var exists = db.categories.some(function (c) { return c.couple_id === coupleId && (c.parent_category_id || null) === parent.id && DB.normalizeDescription(c.name) === snorm; });
+        if (exists) return;
+        db.categories.push({ id: id('cat'), couple_id: coupleId, name: pair[0], type: parent.type, icon: pair[1], active: true, parent_category_id: parent.id, created_at: now(), updated_at: now() });
+        changed = true;
+      });
+    });
+    return changed;
+  }
+  /* Ordem determinística dos membros (dono primeiro): usada no arredondamento residual. */
+  function orderedMemberIds(db, coupleId) {
+    return db.members.filter(function (m) { return m.couple_id === coupleId; })
+      .sort(function (a, b) { return (a.joined_at + a.id).localeCompare(b.joined_at + b.id); })
+      .map(function (m) { return m.user_id; });
+  }
+  function pushSplitRows(db, coupleId, txId, computed) {
+    computed.forEach(function (s) {
+      db.splits.push({ id: id('sp'), transaction_id: txId, couple_id: coupleId, user_id: s.user_id, split_type: s.split_type, percentage: s.percentage, fixed_amount: s.fixed_amount, calculated_amount: s.calculated_amount, created_at: now(), updated_at: now() });
+    });
+  }
+  function backfillSplits(db) {
+    var changed = false;
+    db.transactions.forEach(function (t) {
+      if (t.deleted_at || t.type !== 'expense' || !t.is_shared) return;
+      if (db.splits.some(function (s) { return s.transaction_id === t.id; })) return;
+      var ids = orderedMemberIds(db, t.couple_id);
+      if (!ids.length) ids = [t.payer_user_id];
+      var total = toCents(t.amount), acc = 0;
+      ids.forEach(function (u, i, arr) {
+        var share = (i === arr.length - 1) ? total - acc : Math.floor(total / arr.length);
+        acc += share;
+        db.splits.push({ id: id('sp'), transaction_id: t.id, couple_id: t.couple_id, user_id: u, split_type: '5050', percentage: Math.round(10000 / arr.length) / 100, fixed_amount: null, calculated_amount: fromCents(share), created_at: now(), updated_at: now() });
+      });
+      changed = true;
+    });
+    return changed;
+  }
+  function migrate() {
+    var db = read(), changed = false;
+    if (!db.categories) { db.categories = []; changed = true; }
+    if (!db.transactions) { db.transactions = []; changed = true; }
+    if (!db.splits) { db.splits = []; changed = true; }
+    if (!db.budgets) { db.budgets = []; changed = true; }
+    if (!db.goals) { db.goals = []; changed = true; }
+    if (!db.goal_events) { db.goal_events = []; changed = true; }
+    if (!db.recurring_transactions) { db.recurring_transactions = []; changed = true; }
+    if (!db.recurring_occurrences) { db.recurring_occurrences = []; changed = true; }
+    if (!db.settlements) { db.settlements = []; changed = true; }
+    if (!db.accounts) { db.accounts = []; changed = true; }
+    if (!db.transfers) { db.transfers = []; changed = true; }
+    if (!db.credit_cards) { db.credit_cards = []; changed = true; }
+    if (!db.installment_purchases) { db.installment_purchases = []; changed = true; }
+    if (!db.installments) { db.installments = []; changed = true; }
+    if (!db.invoices) { db.invoices = []; changed = true; }
+    if (!db.invoice_payments) { db.invoice_payments = []; changed = true; }
+    if (!db.audit_logs) { db.audit_logs = []; changed = true; }
+    if (!db.automation_jobs) { db.automation_jobs = []; changed = true; }
+    if (!db.automation_executions) { db.automation_executions = []; changed = true; }
+    if (!db.financial_events) { db.financial_events = []; changed = true; }
+    if (!db.automation_rules) { db.automation_rules = []; changed = true; }
+    if (!db.automation_rule_executions) { db.automation_rule_executions = []; changed = true; }
+    if (!db.category_suggestions) { db.category_suggestions = []; changed = true; }
+    if (!db.category_feedback) { db.category_feedback = []; changed = true; }
+    if (!db.import_batches) { db.import_batches = []; changed = true; }
+    if (!db.imported_transactions) { db.imported_transactions = []; changed = true; }
+    if (!db.import_mappings) { db.import_mappings = []; changed = true; }
+    if (!db.reconciliation_matches) { db.reconciliation_matches = []; changed = true; }
+    if (!db.financial_insights) { db.financial_insights = []; changed = true; }
+    if (!db.financial_insight_preferences) { db.financial_insight_preferences = []; changed = true; }
+    if (!db.ai_conversations) { db.ai_conversations = []; changed = true; }
+    if (!db.ai_messages) { db.ai_messages = []; changed = true; }
+    if (!db.ai_actions) { db.ai_actions = []; changed = true; }
+    if (!db.whatsapp_connections) { db.whatsapp_connections = []; changed = true; }
+    if (!db.whatsapp_link_codes) { db.whatsapp_link_codes = []; changed = true; }
+    if (!db.whatsapp_messages) { db.whatsapp_messages = []; changed = true; }
+    if (!db.whatsapp_preferences) { db.whatsapp_preferences = []; changed = true; }
+    if (!db.whatsapp_message_failures) { db.whatsapp_message_failures = []; changed = true; }
+    if (!db.notifications) { db.notifications = []; changed = true; }
+    if (!db.notification_preferences) { db.notification_preferences = []; changed = true; }
+    if (!db.notification_deliveries) { db.notification_deliveries = []; changed = true; }
+    if (!db.notification_decisions) { db.notification_decisions = []; changed = true; }
+    if (!db.notification_digests) { db.notification_digests = []; changed = true; }
+    if (!db.financial_plans) { db.financial_plans = []; changed = true; }
+    if (!db.financial_plan_items) { db.financial_plan_items = []; changed = true; }
+    if (!db.financial_plan_scenarios) { db.financial_plan_scenarios = []; changed = true; }
+    if (!db.financial_plan_scenario_items) { db.financial_plan_scenario_items = []; changed = true; }
+    if (!db.saved_reports) { db.saved_reports = []; changed = true; }
+    if (!db.security_audit_logs) { db.security_audit_logs = []; changed = true; }
+    if (!db.financial_integrity_checks) { db.financial_integrity_checks = []; changed = true; }
+    if (!db.audio_messages) { db.audio_messages = []; changed = true; }
+    if (!db.image_messages) { db.image_messages = []; changed = true; }
+    if (!db.financial_documents) { db.financial_documents = []; changed = true; }
+    if (!db.multimodal_inputs) { db.multimodal_inputs = []; changed = true; }
+    if (!db.multimodal_contexts) { db.multimodal_contexts = []; changed = true; }
+    if (!db.input_evidence) { db.input_evidence = []; changed = true; }
+    if (!db.openfinance_connections) { db.openfinance_connections = []; changed = true; }
+    if (!db.openfinance_bank_accounts) { db.openfinance_bank_accounts = []; changed = true; }
+    if (!db.openfinance_bank_transactions) { db.openfinance_bank_transactions = []; changed = true; }
+    if (!db.open_finance_sync_runs) { db.open_finance_sync_runs = []; changed = true; }
+    if (!db.open_finance_transaction_versions) { db.open_finance_transaction_versions = []; changed = true; }
+    if (!db.open_finance_reconciliation_exceptions) { db.open_finance_reconciliation_exceptions = []; changed = true; }
+    if (!db.open_finance_balance_snapshots) { db.open_finance_balance_snapshots = []; changed = true; }
+    db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
+      if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
+    });
+    db.couples.forEach(function (c) {
+      var before = db.categories.length;
+      seedDefaults(db, c.id);
+      if (seedMissingSubcats(db, c.id)) changed = true;
+      if (db.categories.length !== before) changed = true;
+      if (!c.money_management_mode) { c.money_management_mode = 'SEPARATE'; changed = true; } // P38: casais existentes = separado
+    });
+    if (backfillSplits(db)) changed = true; // etapa 3: compartilhadas antigas = 50/50
+    db.import_batches.forEach(function (b) { // 19.1: lotes antigos = extrato bancário
+      if (!b.import_source_type) { b.import_source_type = 'bank_statement'; changed = true; }
+    });
+    if (changed) write(db);
+  }
+
+  /* Valor pt-BR -> número. Aceita "150", "150.50", "1.234,56", "R$ 150". Sempre > 0. */
+  function parseAmount(raw) {
+    var s = String(raw == null ? '' : raw).replace(/R\$\s?/gi, '').trim();
+    if (!s) throw new Error('Informe o valor.');
+    if (/,/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    var v = Math.round(parseFloat(s) * 100) / 100;
+    if (!isFinite(v) || v <= 0) throw new Error('O valor precisa ser maior que zero.');
+    return v;
+  }
+  function parsePct(raw) {
+    var s = String(raw == null ? '' : raw).replace('%', '').trim().replace(',', '.');
+    if (s === '') throw new Error('Informe os percentuais.');
+    var v = Math.round(parseFloat(s) * 100) / 100;
+    if (!isFinite(v) || v < 0 || v > 100) throw new Error('Percentual precisa estar entre 0 e 100.');
+    return v;
+  }
+  /* Valor >= 0 (para valor atual de meta). Aceita "0" e formato pt-BR. */
+  function parseZeroPlus(raw, what) {
+    var s = String(raw == null ? '' : raw).replace(/R\$\s?/gi, '').trim();
+    if (s === '') return 0;
+    if (/,/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    var v = Math.round(parseFloat(s) * 100) / 100;
+    if (!isFinite(v) || v < 0) throw new Error((what || 'O valor') + ' não pode ser negativo.');
+    return v;
+  }
+  /* Saldo (inicial de conta): numérico, aceita zero e negativos, com centavos. */
+  function parseBalance(raw) {
+    var s = String(raw == null ? '' : raw).replace(/R\$\s?/gi, '').trim();
+    if (s === '') return 0;
+    if (/,/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    var v = Math.round(parseFloat(s) * 100) / 100;
+    if (!isFinite(v)) throw new Error('Informe um saldo válido.');
+    return v;
+  }
+  function money(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  /* Datas de recorrência: dia 31 em fevereiro vira 28/29 — nunca data inválida. */
+  function dim(y, m) { return new Date(y, m, 0).getDate(); }
+  function dstr(y, m, d) { return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2); }
+  function ymAdd(ym, delta) { return shiftMonth(ym, delta); }
+  function monthsBetween(a, b) {
+    var out = [], cur = a;
+    while (cur <= b && out.length < 36) { out.push(cur); if (cur === b) break; cur = ymAdd(cur, 1); }
+    return out;
+  }
+  /* Período de fatura puro (sem I/O): compras até o fechamento (inclusive) entram.
+     Dia inexistente sofre clamp. Vencimento: due>closing = mesmo mês, senão próximo. */
+  function invoicePeriodFor(card, refISO) {
+    var ref = cleanDate(refISO);
+    var ym = ref.slice(0, 7);
+    function closingOf(yymm) {
+      var y = parseInt(yymm.slice(0, 4), 10), m = parseInt(yymm.slice(5, 7), 10);
+      return dstr(y, m, Math.min(card.closing_day, dim(y, m)));
+    }
+    var c0 = closingOf(ym), closingDate, refYm;
+    if (ref <= c0) { closingDate = c0; refYm = ym; }
+    else { var nx = ymAdd(ym, 1); closingDate = closingOf(nx); refYm = nx; }
+    var prevYm = ymAdd(refYm, -1);
+    var yP = parseInt(prevYm.slice(0, 4), 10), mP = parseInt(prevYm.slice(5, 7), 10);
+    var start = DB.dateAddDays(dstr(yP, mP, Math.min(card.closing_day, dim(yP, mP))), 1);
+    var dueYm = card.due_day > card.closing_day ? refYm : ymAdd(refYm, 1);
+    var yD = parseInt(dueYm.slice(0, 4), 10), mD = parseInt(dueYm.slice(5, 7), 10);
+    var due = dstr(yD, mD, Math.min(card.due_day, dim(yD, mD)));
+    return { start: start, end: closingDate, closing: closingDate, due: due, refMonth: parseInt(refYm.slice(5, 7), 10), refYear: parseInt(refYm.slice(0, 4), 10), refYm: refYm };
+  }
+  /* Vincula compra/parcela à fatura aberta do período, no mesmo objeto db (atômico).
+     Fatura fechada/paga/cancelada não recebe (preserva histórico). */
+  function findOrCreateInvoiceInDb(db, cid, cardId, dateISO) {
+    var card = db.credit_cards.find(function (c) { return c.id === cardId && c.couple_id === cid; });
+    if (!card) return null;
+    var per = invoicePeriodFor(card, dateISO);
+    var inv = db.invoices.find(function (i) { return i.couple_id === cid && i.credit_card_id === cardId && i.reference_month === per.refMonth && i.reference_year === per.refYear; });
+    if (inv) return inv;
+    inv = { id: id('iv'), couple_id: cid, credit_card_id: cardId, reference_month: per.refMonth, reference_year: per.refYear, billing_period_start: per.start, billing_period_end: per.end, closing_date: per.closing, due_date: per.due, total_amount: 0, paid_amount: 0, status: 'open', payment_account_id: null, paid_at: null, created_at: now(), updated_at: now(), cancelled_at: null };
+    db.invoices.push(inv); return inv;
+  }
+  function invoiceIsOpen(inv) { return inv && inv.status === 'open'; }
+  /* Trilha de auditoria interna (sem segredos): só append, nunca altera regras. */
+  function logAudit(db, couple_id, user_id, entity_type, entity_id, action, metadata) {
+    if (!db.audit_logs) db.audit_logs = [];
+    var safe = {};
+    if (metadata) Object.keys(metadata).forEach(function (k) {
+      var v = metadata[k];
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') safe[k] = v;
+    });
+    db.audit_logs.push({ id: id('al'), couple_id: couple_id, user_id: user_id, entity_type: entity_type, entity_id: entity_id, action: action, metadata: safe, created_at: now() });
+  }
+  function cleanDate(d) {
+    d = String(d || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(new Date(d + 'T12:00:00').getTime())) throw new Error('Informe uma data válida.');
+    return d;
+  }
+  function shiftMonth(ym, delta) {
+    var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10) - 1 + delta;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return y + '-' + ('0' + (m + 1)).slice(-2);
+  }
+
+  /* Cálculo de divisão em centavos (inteiros): a soma SEMPRE fecha no total.
+     Diferença residual de arredondamento vai deterministicamente p/ o último membro. */
+  function computeSplits(totalCents, memberIds, mode, entries) {
+    entries = entries || [];
+    var ids = memberIds.slice();
+    if (!ids.length) throw new Error('O casal precisa de ao menos 1 pessoa.');
+    function byUser(u) { return entries.find(function (e) { return e.user_id === u; }) || {}; }
+    var out = [], acc = 0;
+    if (mode === 'percent') {
+      var pcts = ids.map(function (x) { return parsePct(byUser(x).pct); });
+      var sum = Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) * 100) / 100;
+      if (sum !== 100) throw new Error('A divisão precisa totalizar 100%.');
+      ids.forEach(function (x, idx) {
+        var share = (idx === ids.length - 1) ? totalCents - acc : Math.round(totalCents * pcts[idx] / 100);
+        acc += share;
+        out.push({ user_id: x, split_type: 'percentage', percentage: pcts[idx], fixed_amount: null, calculated_amount: fromCents(share) });
+      });
+    } else if (mode === 'fixed') {
+      var vals = ids.map(function (x) { return toCents(parseAmount(byUser(x).amount)); });
+      var tot = vals.reduce(function (a, b) { return a + b; }, 0);
+      if (tot !== totalCents) throw new Error('A divisão precisa totalizar o valor da despesa.');
+      ids.forEach(function (x, idx) {
+        out.push({ user_id: x, split_type: 'fixed', percentage: null, fixed_amount: fromCents(vals[idx]), calculated_amount: fromCents(vals[idx]) });
+      });
+    } else { // 5050
+      ids.forEach(function (x, idx) {
+        var share = (idx === ids.length - 1) ? totalCents - acc : Math.floor(totalCents / ids.length);
+        acc += share;
+        out.push({ user_id: x, split_type: '5050', percentage: Math.round(10000 / ids.length) / 100, fixed_amount: null, calculated_amount: fromCents(share) });
+      });
+    }
+    return out;
+  }
+
+  var DB = {
+    all: read, save: write, parseAmount: parseAmount, parsePct: parsePct, shiftMonth: shiftMonth,
+    // --- isolamento: resolve o casal do usuário logado, sem aceitar couple_id da UI ---
+    myMembership: function (userId) {
+      var db = read();
+      return db.members.find(function (m) { return m.user_id === userId; }) || null;
+    },
+    myCoupleId: function (userId) {
+      var m = DB.myMembership(userId); return m ? m.couple_id : null;
+    },
+    myCouple: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return { couple: null, members: [], users: [] };
+      var couple = db.couples.find(function (c) { return c.id === cid; }) || null;
+      var members = db.members.filter(function (m) { return m.couple_id === cid; });
+      var users = members.map(function (m) { return db.users.find(function (u) { return u.id === m.user_id; }); }).filter(Boolean);
+      return { couple: couple, members: members, users: users };
+    },
+    memberIds: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return orderedMemberIds(db, cid);
+    },
+    /* ============ PROMPT 38: GESTÃO DO DINHEIRO DO CASAL ============
+       Configuração oficial do casal (SEPARATE|JOINT). Só interpretação e
+       comportamento da experiência; nenhum registro financeiro é alterado.
+       Cálculos (settle/dashboardCalc/splits) permanecem intactos; a camada
+       de apresentação decide o que exibir via moneyMode/settlementView. */
+    MONEY_MODES: ['SEPARATE', 'JOINT'],
+    moneyMode: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 'SEPARATE';
+      var c = db.couples.find(function (x) { return x.id === cid; });
+      return (c && c.money_management_mode === 'JOINT') ? 'JOINT' : 'SEPARATE';
+    },
+    setMoneyManagementMode: function (userId, mode) {
+      if (DB.MONEY_MODES.indexOf(mode) < 0) throw new Error('Modo de gestão inválido.');
+      var c = DB.requireAuthz(userId, 'update_couple_settings', null);
+      if (c.role !== 'owner') throw new Error('Só quem criou o casal pode alterar essa configuração.');
+      var db = read();
+      var cp = db.couples.find(function (x) { return x.id === c.couple_id; });
+      if (!cp) throw new Error('Casal não encontrado.');
+      var prev = cp.money_management_mode === 'JOINT' ? 'JOINT' : 'SEPARATE';
+      if (prev === mode) return { mode: mode, changed: false };
+      cp.money_management_mode = mode;
+      cp.updated_at = now();
+      logAudit(db, cp.id, userId, 'couple', cp.id, 'money_management_mode_changed', { previous_mode: prev, new_mode: mode });
+      write(db);
+      return { mode: mode, changed: true, previous_mode: prev };
+    },
+    /* Visão de acerto p/ apresentação: no JOINT o débito oficial existe nos
+       registros, mas não é apresentado como obrigação (sem CTA/cobrança). */
+    settlementView: function (userId) {
+      var eng = DB.settle(userId);
+      var mode = DB.moneyMode(userId);
+      return { mode: mode, eng: eng, debt: mode === 'JOINT' ? null : eng.debt };
+    },
+    // --- casal (ETAPA 1, preservado) ---
+    createCouple: function (userId, coupleName) {
+      var db = read();
+      if (db.members.some(function (m) { return m.user_id === userId; })) throw new Error('Você já faz parte de um casal.');
+      var c = { id: id('cp'), name: coupleName, created_at: now(), money_management_mode: 'SEPARATE' };
+      db.couples.push(c);
+      db.members.push({ id: id('cm'), couple_id: c.id, user_id: userId, role: 'owner', joined_at: now() });
+      seedDefaults(db, c.id);
+      write(db); return c;
+    },
+    // --- convites (ETAPA 1, preservado) ---
+    createInvite: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var count = db.members.filter(function (m) { return m.couple_id === cid; }).length;
+      if (count >= 2) throw new Error('Este casal já tem 2 pessoas.');
+      db.invitations.forEach(function (i) { if (i.couple_id === cid && i.status === 'pending') i.status = 'cancelled'; });
+      var inv = { id: id('inv'), couple_id: cid, code: genCode(db), created_by: userId, status: 'pending', created_at: now(), expires_at: new Date(Date.now() + 7 * 864e5).toISOString() };
+      db.invitations.push(inv); write(db); return inv;
+    },
+    myInvites: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.invitations.filter(function (i) { return i.couple_id === cid; }).sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
+    },
+    acceptInvite: function (userId, code) {
+      var db = read();
+      code = String(code || '').trim().toUpperCase();
+      if (db.members.some(function (m) { return m.user_id === userId; })) throw new Error('Você já faz parte de um casal.');
+      var inv = db.invitations.find(function (i) { return i.code === code; });
+      if (!inv || inv.status !== 'pending') throw new Error('Código inválido ou já utilizado.');
+      if (new Date(inv.expires_at) < new Date()) { inv.status = 'expired'; write(db); throw new Error('Este convite expirou. Peça um novo código.'); }
+      var count = db.members.filter(function (m) { return m.couple_id === inv.couple_id; }).length;
+      if (count >= 2) throw new Error('Este casal já está completo.');
+      inv.status = 'accepted';
+      db.members.push({ id: id('cm'), couple_id: inv.couple_id, user_id: userId, role: 'member', joined_at: now() });
+      seedDefaults(db, inv.couple_id);
+      logAudit(db, inv.couple_id, userId, 'invite', inv.id, 'accepted', {});
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'invite_accepted', entity_type: 'invitation', entity_id: inv.id, metadata: {} }); } catch (e) {}
+      write(db); return inv.couple_id;
+    },
+
+    /* ============ CATEGORIAS (etapa 2, preservado) ============ */
+    myCategories: function (userId, type, includeInactive) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.categories.filter(function (c) {
+        return c.couple_id === cid && (includeInactive || c.active) && (!type || c.type === type || c.type === 'both');
+      }).sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+    },
+    /* ============ SUBCATEGORIAS (2 níveis): validação central ============
+       NULL = principal; preenchido = sub de exatamente 1 principal.
+       Mesmo casal + mesmo tipo + pai ativo + sem ciclo + sem 3º nível.
+       Nomes únicos por nível (comparação normalizada). */
+    catLevelKey: function (c) { return (c.parent_category_id || null) + '|' + DB.normalizeDescription(c.name); },
+    validateCategoryHierarchy: function (db, cid, data, selfId) {
+      var parentId = (data && data.parent_category_id) || null;
+      if (!parentId) return null;
+      if (parentId === selfId) throw new Error('A subcategoria não pode apontar para ela mesma.');
+      var parent = db.categories.find(function (c) { return c.id === parentId && c.couple_id === cid; });
+      if (!parent) throw new Error('Categoria principal não encontrada neste casal.');
+      if (!parent.active) throw new Error('A categoria principal está desativada.');
+      if (parent.parent_category_id) throw new Error('Subcategoria não pode ter filha (máximo 2 níveis).');
+      var t = (data && data.type) || parent.type;
+      if (t !== parent.type) throw new Error('Subcategoria precisa ser do mesmo tipo da principal (' + (parent.type === 'income' ? 'receita' : parent.type === 'expense' ? 'despesa' : 'ambos') + ').');
+      return parent;
+    },
+    validateCategoryType: function (type) {
+      if (!['income', 'expense', 'both'].includes(type)) throw new Error('Tipo de categoria inválido.');
+      return type;
+    },
+    createCategory: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var name = String((data && data.name) || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      var parentId = (data && data.parent_category_id) || null;
+      var type = (data && data.type) || null;
+      if (name.length < 2) throw new Error('Dê um nome para a categoria.');
+      if (name.length > 60) throw new Error('Nome muito longo (máx 60 caracteres).');
+      var parent = null;
+      if (parentId) {
+        parent = DB.validateCategoryHierarchy(db, cid, { parent_category_id: parentId, type: type }, null);
+        type = parent.type;
+      }
+      type = DB.validateCategoryType(type || 'expense');
+      var norm = DB.normalizeDescription(name);
+      if (db.categories.some(function (c) { return c.couple_id === cid && c.active && (c.parent_category_id || null) === (parent ? parent.id : null) && DB.normalizeDescription(c.name) === norm; })) throw new Error('Esse nome já existe neste nível.');
+      var cat = { id: id('cat'), couple_id: cid, name: name, type: type, icon: String((data && data.icon) || (parent ? parent.icon : '🏷️')).slice(0, 4), active: true, parent_category_id: parent ? parent.id : null, created_at: now(), updated_at: now() };
+      db.categories.push(cat); logAudit(db, cid, userId, 'category', cat.id, 'create', { name: cat.name }); write(db); return cat;
+    },
+    createSubcategory: function (userId, parentId, data) {
+      data = data || {};
+      data.parent_category_id = parentId;
+      return DB.createCategory(userId, data);
+    },
+    updateCategory: function (userId, catId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cat = db.categories.find(function (c) { return c.id === catId && c.couple_id === cid; });
+      if (!cat) throw new Error('Categoria não encontrada.');
+      data = data || {};
+      if (data.name !== undefined) {
+        var name = String(data.name || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (name.length < 2) throw new Error('Dê um nome para a categoria.');
+        if (name.length > 60) throw new Error('Nome muito longo (máx 60 caracteres).');
+        var norm = DB.normalizeDescription(name);
+        if (db.categories.some(function (c) { return c.id !== cat.id && c.couple_id === cid && c.active && (c.parent_category_id || null) === (cat.parent_category_id || null) && DB.normalizeDescription(c.name) === norm; })) throw new Error('Esse nome já existe neste nível.');
+        cat.name = name;
+      }
+      if (data.icon !== undefined) cat.icon = String(data.icon || '🏷️').slice(0, 4);
+      if (data.active !== undefined) cat.active = data.active !== false;
+      if (data.parent_category_id !== undefined) {
+        var np = data.parent_category_id || null;
+        if (np === cat.id) throw new Error('A subcategoria não pode apontar para ela mesma.');
+        if (np) {
+          var kids = db.categories.filter(function (c) { return (c.parent_category_id || null) === cat.id; });
+          if (kids.length) throw new Error('Esta categoria tem subcategorias e não pode virar subcategoria.');
+          var parent = DB.validateCategoryHierarchy(db, cid, { parent_category_id: np, type: cat.type }, cat.id);
+          cat.parent_category_id = parent.id;
+        } else {
+          cat.parent_category_id = null;
+        }
+      }
+      cat.updated_at = now();
+      logAudit(db, cid, userId, 'category', cat.id, 'update', { name: cat.name }); write(db); return cat;
+    },
+    updateSubcategory: function (userId, catId, data) { return DB.updateCategory(userId, catId, data); },
+    /* Exclusão segura: com dependências (lançamentos, orçamentos,
+       recorrentes, regras) → arquiva em vez de apagar. Sem dependências →
+       remove a categoria e as filhas (que também não têm histórico). */
+    deleteCategory: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cat = db.categories.find(function (c) { return c.id === catId && c.couple_id === cid; });
+      if (!cat) throw new Error('Categoria não encontrada.');
+      var fam = [cat.id].concat(db.categories.filter(function (c) { return (c.parent_category_id || null) === cat.id; }).map(function (c) { return c.id; }));
+      function used(id) {
+        if (db.transactions.some(function (t) { return t.category_id === id && !t.deleted_at; })) return true;
+        if ((db.budgets || []).some(function (b) { return b.category_id === id; })) return true;
+        if ((db.recurring_transactions || []).some(function (r) { return r.category_id === id; })) return true;
+        if ((db.automation_rules || []).some(function (r) { return (r.actions || []).some(function (a) { return a.type === 'set_category' && a.category_id === id; }); })) return true;
+        return false;
+      }
+      if (fam.some(used)) {
+        fam.forEach(function (id) {
+          var c = db.categories.find(function (x) { return x.id === id; });
+          if (c) { c.active = false; c.updated_at = now(); }
+        });
+        logAudit(db, cid, userId, 'category', cat.id, 'archive', {});
+        write(db);
+        return { archived: true };
+      }
+      db.categories = db.categories.filter(function (c) { return fam.indexOf(c.id) < 0; });
+      logAudit(db, cid, userId, 'category', cat.id, 'delete', {});
+      write(db);
+      return { archived: false };
+    },
+    archiveCategory: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cat = db.categories.find(function (c) { return c.id === catId && c.couple_id === cid; });
+      if (!cat) throw new Error('Categoria não encontrada.');
+      var fam = [cat.id].concat(db.categories.filter(function (c) { return (c.parent_category_id || null) === cat.id; }).map(function (c) { return c.id; }));
+      fam.forEach(function (id) {
+        var c = db.categories.find(function (x) { return x.id === id; });
+        if (c) { c.active = false; c.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'category', cat.id, 'archive', {});
+      write(db);
+      return { archived: true };
+    },
+    archiveSubcategory: function (userId, catId) { return DB.archiveCategory(userId, catId); },
+    getCategories: function (userId, type, includeInactive) { return DB.myCategories(userId, type, includeInactive); },
+    getSubcategories: function (userId, parentId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.categories.filter(function (c) { return c.couple_id === cid && c.active && (c.parent_category_id || null) === parentId; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+    },
+    /* Árvore do casal em 1 leitura: [{...pai, children:[...]}]. */
+    getCategoryTree: function (userId, type, includeInactive) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      function ok(c) { return c.couple_id === cid && (includeInactive || c.active) && (!type || c.type === type || c.type === 'both'); }
+      var kids = {};
+      db.categories.forEach(function (c) {
+        if (!ok(c) || !c.parent_category_id) return;
+        (kids[c.parent_category_id] = kids[c.parent_category_id] || []).push(c);
+      });
+      Object.keys(kids).forEach(function (k) { kids[k].sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); }); });
+      return db.categories.filter(function (c) { return ok(c) && !c.parent_category_id; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); })
+        .map(function (c) {
+          var o = Object.assign({}, c);
+          o.children = (kids[c.id] || []).map(function (k) { return Object.assign({}, k); });
+          return o;
+        });
+    },
+    catParent: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.categories.find(function (x) { return x.id === catId && x.couple_id === cid; });
+      if (!c || !c.parent_category_id) return null;
+      return db.categories.find(function (x) { return x.id === c.parent_category_id && x.couple_id === cid; }) || null;
+    },
+    /* Caminho oficial p/ exibição: "Alimentação → Supermercado" ou só o nome. */
+    catDisplayPath: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.categories.find(function (x) { return x.id === catId && x.couple_id === cid; });
+      if (!c) return 'Categoria';
+      if (!c.parent_category_id) return c.name;
+      var p = db.categories.find(function (x) { return x.id === c.parent_category_id && x.couple_id === cid; });
+      return p ? (p.name + ' → ' + c.name) : c.name;
+    },
+    catTxCount: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 0;
+      var n = 0;
+      db.transactions.forEach(function (t) { if (t.couple_id === cid && !t.deleted_at && t.category_id === catId) n++; });
+      return n;
+    },
+    catGet: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.categories.find(function (x) { return x.id === catId && x.couple_id === cid; });
+      return c ? { id: c.id, name: c.name, icon: c.icon, type: c.type, active: c.active, parent_category_id: c.parent_category_id || null } : null;
+    },
+    deactivateCategory: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cat = db.categories.find(function (c) { return c.id === catId && c.couple_id === cid; });
+      if (!cat) throw new Error('Categoria não encontrada.');
+      var inUse = db.transactions.some(function (t) { return t.category_id === catId && !t.deleted_at; });
+      if (inUse) throw new Error('Essa categoria já tem lançamentos e não pode ser removida. Ela seguirá no histórico.');
+      cat.active = false; cat.updated_at = now();
+      db.categories.forEach(function (k) { if ((k.parent_category_id || null) === cat.id) { k.active = false; k.updated_at = now(); } });
+      logAudit(db, cid, userId, 'category', cat.id, 'deactivate', {}); write(db);
+    },
+
+    /* ============ TRANSAÇÕES (etapa 2, preservado + splits etapa 3) ============ */
+    validateTx: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var type = data.type;
+      if (type !== 'income' && type !== 'expense') throw new Error('Escolha receita ou despesa.');
+      var description = String(data.description || '').trim();
+      if (!description) throw new Error('Descreva a transação (ex: Mercado da semana).');
+      if (description.length > 120) throw new Error('Descrição muito longa (máx 120 caracteres).');
+      var amount = parseAmount(data.amount);
+      var date = cleanDate(data.date);
+      var cat = db.categories.find(function (c) { return c.id === data.category_id && c.couple_id === cid && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type !== 'both' && cat.type !== type) throw new Error('Essa categoria é de ' + (cat.type === 'income' ? 'receita' : 'despesa') + '.');
+      var payer = String(data.payer_user_id || '');
+      if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === payer; })) throw new Error('Escolha quem pagou/recebeu.');
+      var account_id = String(data.account_id || '') || null;
+      var credit_card_id = String(data.credit_card_id || '') || null;
+      if (account_id && credit_card_id) throw new Error('Uma compra é paga pela conta OU pelo cartão, não pelos dois.');
+      if (account_id) {
+        var acc = db.accounts.find(function (a) { return a.id === account_id && a.couple_id === cid; });
+        if (!acc) throw new Error('Conta inválida para este casal.');
+        if (!acc.active) throw new Error('Esta conta está desativada. Reative-a ou escolha outra.');
+      }
+      if (credit_card_id) {
+        if (type !== 'expense') throw new Error('Cartão só pode ser usado em despesas.');
+        var cc = db.credit_cards.find(function (c) { return c.id === credit_card_id && c.couple_id === cid; });
+        if (!cc) throw new Error('Cartão inválido para este casal.');
+        if (!cc.active) throw new Error('Este cartão está desativado. Reative-o ou escolha outro.');
+      }
+      return { couple_id: cid, type: type, description: description, amount: amount, date: date, category_id: cat.id, is_shared: !!data.is_shared, payer_user_id: payer, account_id: account_id, credit_card_id: credit_card_id, notes: String(data.notes || '').slice(0, 500) };
+    },
+    // Valida e calcula a divisão (etapa 3). Exige membros do casal; residual no último.
+    buildSplits: function (userId, amount, split) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var ids = orderedMemberIds(db, cid);
+      var mode = (split && split.mode) || '5050';
+      if (!['5050', 'percent', 'fixed'].includes(mode)) throw new Error('Tipo de divisão inválido.');
+      var entries = (split && split.entries) || [];
+      entries.forEach(function (e) {
+        if (!ids.includes(e.user_id)) throw new Error('Divisão com pessoa de fora do casal.');
+      });
+      return { couple_id: cid, rows: computeSplits(toCents(amount), ids, mode, entries) };
+    },
+    createTx: function (userId, data) {
+      DB.requireAuthz(userId, 'create_transaction', null);
+      var v = DB.validateTx(userId, data);
+      var splitRows = null;
+      if (v.type === 'expense' && v.is_shared) splitRows = DB.buildSplits(userId, v.amount, data.split).rows;
+      var db = read();
+      var t = { id: id('tx'), couple_id: v.couple_id, created_by: userId, type: v.type, description: v.description, amount: v.amount, date: v.date, category_id: v.category_id, is_shared: v.is_shared, payer_user_id: v.payer_user_id, account_id: v.account_id || null, credit_card_id: v.credit_card_id || null, invoice_id: null, needs_review: false, notes: v.notes, created_at: now(), updated_at: now(), deleted_at: null };
+      if (t.credit_card_id) {
+        var inv0 = findOrCreateInvoiceInDb(db, v.couple_id, t.credit_card_id, t.date);
+        if (invoiceIsOpen(inv0)) t.invoice_id = inv0.id;
+      }
+      db.transactions.push(t);
+      if (splitRows) pushSplitRows(db, v.couple_id, t.id, splitRows);
+      logAudit(db, v.couple_id, userId, 'transaction', t.id, 'create', { type: t.type, amount: t.amount });
+      var evC = DB.pushEventInDb(db, v.couple_id, userId, 'transaction.created', 'transaction', t.id, { type: t.type });
+      write(db);
+      DB.processRulesForEvent(userId, evC);
+      DB.autoSuggestForTx(userId, t.id);
+      return t;
+    },
+    getTx: function (userId, txId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transactions.find(function (x) { return x.id === txId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transação não encontrada.');
+      return t;
+    },
+    getSplits: function (userId, txId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transactions.find(function (x) { return x.id === txId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transação não encontrada.');
+      return db.splits.filter(function (s) { return s.transaction_id === txId; });
+    },
+    updateTx: function (userId, txId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transactions.find(function (x) { return x.id === txId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transação não encontrada.');
+      var v = DB.validateTx(userId, data);
+      var splitRows = null;
+      if (v.type === 'expense' && v.is_shared) splitRows = DB.buildSplits(userId, v.amount, data.split).rows;
+      var oldInvId = t.invoice_id || null;
+      var oldInv = oldInvId ? db.invoices.find(function (x) { return x.id === oldInvId; }) : null;
+      var oldOpen = invoiceIsOpen(oldInv);
+      var oldCat = t.category_id;
+      t.type = v.type; t.description = v.description; t.amount = v.amount; t.date = v.date;
+      t.category_id = v.category_id; t.is_shared = v.is_shared; t.payer_user_id = v.payer_user_id;
+      t.account_id = v.account_id || null; t.credit_card_id = v.credit_card_id || null;
+      t.needs_review = false; // revisão manual conclui a revisão pendente
+      if (!t.credit_card_id) {
+        if (oldInvId && oldOpen) t.invoice_id = null; // tirou o cartão de fatura aberta
+      } else {
+        var target = findOrCreateInvoiceInDb(db, cid, t.credit_card_id, t.date);
+        if (target && invoiceIsOpen(target)) {
+          if (!oldInvId || oldOpen || oldInvId === target.id) t.invoice_id = target.id;
+          // histórico fechado/pago em outra fatura: preserva, não move
+        } else if (target && oldInvId && oldOpen && oldInvId !== target.id) {
+          t.invoice_id = null;
+        }
+      }
+      t.notes = v.notes; t.updated_at = now();
+      db.splits = db.splits.filter(function (s) { return s.transaction_id !== txId; });
+      if (splitRows) pushSplitRows(db, cid, txId, splitRows);
+      /* Feedback automático de sugestões (Prompt 18): mudança de categoria
+         resolve pendências (aceita se igual à sugerida, corrige se diferente). */
+      if (oldCat !== v.category_id) {
+        db.category_suggestions.forEach(function (s) {
+          if (s.transaction_id !== txId || s.status !== 'pending') return;
+          var fb = (v.category_id === s.suggested_category_id) ? 'accepted' : 'corrected';
+          s.status = fb === 'accepted' ? 'accepted' : 'rejected';
+          s.resolved_at = now(); s.resolved_by = userId; s.updated_at = now();
+          var norm = DB.normalizeDescription(t.description);
+          db.category_feedback.push({ id: id('cf'), couple_id: cid, transaction_id: txId, suggestion_id: s.id, suggested_category_id: s.suggested_category_id, final_category_id: v.category_id, feedback_type: fb, norm_desc: norm, merchant: DB.extractMerchant(norm), user_id: userId, created_at: now() });
+          logAudit(db, cid, userId, 'suggestion', s.id, 'feedback_' + fb, {});
+        });
+      }
+      logAudit(db, cid, userId, 'transaction', txId, 'update', { type: v.type, amount: v.amount });
+      var evU = DB.pushEventInDb(db, cid, userId, 'transaction.updated', 'transaction', txId, {});
+      write(db);
+      DB.processRulesForEvent(userId, evU);
+      DB.autoSuggestForTx(userId, txId);
+      return t;
+    },
+    deleteTx: function (userId, txId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transactions.find(function (x) { return x.id === txId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transação não encontrada.');
+      var linked = db.recurring_occurrences.some(function (o) { return o.couple_id === cid && o.transaction_id === txId; });
+      if (linked) throw new Error('Esta transação veio de uma conta recorrente paga e não pode ser excluída, para preservar o histórico.');
+      t.deleted_at = now(); t.updated_at = now();
+      db.category_suggestions.forEach(function (s) {
+        if (s.transaction_id === txId && s.status === 'pending') { s.status = 'expired'; s.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'transaction', txId, 'delete', { amount: t.amount });
+      var evD = DB.pushEventInDb(db, cid, userId, 'transaction.deleted', 'transaction', txId, {});
+      write(db);
+      DB.processRulesForEvent(userId, evD);
+    },
+    /* Filtro hierárquico: categoria exata OU filha da categoria filtrada.
+       Busca textual casa descrição, observações e nomes de categoria/sub. */
+    catInFilter: function (db, cid, txCatId, filterId) {
+      if (!filterId || txCatId === filterId) return true;
+      var c = (db.categories || []).find(function (x) { return x.id === txCatId && x.couple_id === cid; });
+      return !!(c && (c.parent_category_id || null) === filterId);
+    },
+    txMatchesSearch: function (db, cid, t, search, catMap) {
+      if (!search) return true;
+      if ((t.description + ' ' + (t.notes || '')).toLowerCase().indexOf(search) >= 0) return true;
+      var c = catMap ? catMap[t.category_id] : (db.categories || []).find(function (x) { return x.id === t.category_id && x.couple_id === cid; });
+      if (!c) return false;
+      if (DB.normalizeDescription(c.name).indexOf(DB.normalizeDescription(search)) >= 0) return true;
+      if (c.parent_category_id) {
+        var p = (db.categories || []).find(function (x) { return x.id === c.parent_category_id && x.couple_id === cid; });
+        if (p && DB.normalizeDescription(p.name).indexOf(DB.normalizeDescription(search)) >= 0) return true;
+      }
+      return false;
+    },
+    listTx: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var search = String(f.search || '').trim().toLowerCase();
+      var catMap = {};
+      db.categories.forEach(function (c) { if (c.couple_id === cid) catMap[c.id] = c; });
+      var rows = db.transactions.filter(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return false;
+        if (f.type && t.type !== f.type) return false;
+        if (f.category_id && !DB.catInFilter(db, cid, t.category_id, f.category_id)) return false;
+        if (f.payer_user_id && t.payer_user_id !== f.payer_user_id) return false;
+        if (f.account_id && (t.account_id || null) !== f.account_id) return false;
+        if (f.credit_card_id && (t.credit_card_id || null) !== f.credit_card_id) return false;
+        if (f.shared === 'shared' && !t.is_shared) return false;
+        if (f.shared === 'individual' && t.is_shared) return false;
+        if (f.month && t.date.slice(0, 7) !== f.month) return false;
+        if (f.from && t.date.slice(0, 7) < f.from) return false;
+        if (f.to && t.date.slice(0, 7) > f.to) return false;
+        if (!DB.txMatchesSearch(db, cid, t, search, catMap)) return false;
+        return true;
+      });
+      rows.sort(function (a, b) { return (b.date + b.created_at).localeCompare(a.date + a.created_at); });
+      return rows;
+    },
+    /* Contagem de despesas por categoria no período em UMA passada (relatórios). */
+    expenseCounts: function (userId, from, to) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = {};
+      if (!cid) return out;
+      db.transactions.forEach(function (t) {
+        if (t.couple_id === cid && !t.deleted_at && t.type === 'expense' && t.date.slice(0, 7) >= from && t.date.slice(0, 7) <= to) {
+          out[t.category_id] = (out[t.category_id] || 0) + 1;
+        }
+      });
+      return out;
+    },
+    monthSummary: function (userId, month) {
+      var rows = DB.listTx(userId, { month: month });
+      var income = 0, expense = 0;
+      rows.forEach(function (t) { t.type === 'income' ? income += t.amount : expense += t.amount; });
+      return { income: income, expense: expense, balance: income - expense, count: rows.length };
+    },
+    /* Quanto podemos gastar? Fórmula PROVISÓRIA (etapa 4, item 35):
+       receitas − despesas do período/visão. Função central e modular:
+       futuros fatores (contas futuras, orçamento, metas) entram como
+       parâmetros sem reescrever o dashboard. */
+    calculateAvailableToSpend: function (userId, opt) {
+      var d = DB.dashboardCalc(userId, opt || {});
+      return { available: d.income - d.expense, income: d.income, expense: d.expense };
+    },
+    /* Central de acompanhamento (etapa 4): UMA leitura, tudo derivado do mesmo
+       conjunto (couple_id + sem deleted_at + período). Visões:
+       'couple' = valor cheio da transação (1x, sem duplicar compartilhadas);
+       'me'/'partner' = receitas recebidas + individuais pagas + responsabilidade
+       (splits) nas compartilhadas. Sem nenhum número fictício. */
+    dashboardCalc: function (userId, opt) {
+      opt = opt || {};
+      var empty = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0, balance: 0, saveRate: null, byCat: [], incomeByCat: [], topCat: null, paidBy: [], recvBy: [], perPerson: [], evolution: [], prev: null, last5: [], totalTx: 0 };
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return empty;
+      var from = opt.from, to = opt.to;
+      if (!from || !to) return empty;
+      var ids = orderedMemberIds(db, cid);
+      var vision = opt.vision || 'couple';
+      var focus = vision === 'me' ? userId : (vision === 'partner' ? ids.find(function (x) { return x !== userId; }) : null);
+      var ff = { type: opt.type || '', category_id: opt.category_id || '', account_id: opt.account_id || '', credit_card_id: opt.credit_card_id || '' };
+      function take(t) { // filtros de relatório; binário por transação (sem rateio)
+        if (ff.type && t.type !== ff.type) return null;
+        if (ff.category_id && !DB.catInFilter(db, cid, t.category_id, ff.category_id)) return null;
+        if (ff.account_id && (t.account_id || null) !== ff.account_id) return null;
+        if (ff.credit_card_id && (t.credit_card_id || null) !== ff.credit_card_id) return null;
+        var c = toCents(t.amount);
+        return t.type === 'income' ? { inc: c, exp: 0 } : { inc: 0, exp: c };
+      }
+      var splitMap = {};
+      db.splits.forEach(function (s) { (splitMap[s.transaction_id] = splitMap[s.transaction_id] || []).push(s); });
+      function shareOf(t, uid) {
+        var ss = splitMap[t.id] || [];
+        for (var i = 0; i < ss.length; i++) if (ss[i].user_id === uid) return toCents(ss[i].calculated_amount);
+        var n = ids.length || 1, idx = ids.indexOf(uid);
+        if (idx < 0) return 0;
+        var tot = toCents(t.amount);
+        return (idx === ids.length - 1 || n === 1) ? tot - Math.floor(tot / n) * (n - 1) : Math.floor(tot / n);
+      }
+      var catMap = {};
+      db.categories.forEach(function (c) { catMap[c.id] = c; });
+      var r = { income: 0, expense: 0, incomeCount: 0, expenseCount: 0, byCat: {}, incomeByCat: {}, paid: {}, recv: {}, per: {}, months: {}, inRange: [] };
+      ids.forEach(function (u) { r.per[u] = { recv: 0, indivPaid: 0, sharedPaid: 0 }; r.paid[u] = 0; r.recv[u] = 0; });
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        var tk0 = take(t);
+        if (!tk0) return;
+        var mk = t.date.slice(0, 7), c = toCents(t.amount);
+        var m = r.months[mk] || (r.months[mk] = { inc: 0, exp: 0, per: {} });
+        if (t.type === 'income') {
+          m.inc += tk0.inc;
+          var mp = m.per[t.payer_user_id] || (m.per[t.payer_user_id] = { inc: 0, exp: 0 });
+          mp.inc += tk0.inc;
+        } else {
+          m.exp += tk0.exp;
+          if (t.is_shared) ids.forEach(function (u) {
+            var q = m.per[u] || (m.per[u] = { inc: 0, exp: 0 });
+            q.exp += Math.round(shareOf(t, u) * tk0.exp / c) || 0;
+          });
+          else { var q2 = m.per[t.payer_user_id] || (m.per[t.payer_user_id] = { inc: 0, exp: 0 }); q2.exp += tk0.exp; }
+        }
+        if (mk < from || mk > to) return;
+        r.inRange.push(t);
+        if (t.type === 'income') {
+          r.recv[t.payer_user_id] = (r.recv[t.payer_user_id] || 0) + tk0.inc;
+          var p = r.per[t.payer_user_id]; if (p) p.recv += tk0.inc;
+          var vi = (vision === 'couple' || t.payer_user_id === focus) ? tk0.inc : 0;
+          r.income += vi; if (vi) r.incomeCount++;
+          if (vi) { var ki = t.category_id; r.incomeByCat[ki] = (r.incomeByCat[ki] || 0) + vi; }
+        } else {
+          r.paid[t.payer_user_id] = (r.paid[t.payer_user_id] || 0) + tk0.exp;
+          var q3 = r.per[t.payer_user_id]; if (q3) q3[t.is_shared ? 'sharedPaid' : 'indivPaid'] += tk0.exp;
+          var ve = 0;
+          if (vision === 'couple') ve = tk0.exp;
+          else if (!t.is_shared) ve = (t.payer_user_id === focus) ? tk0.exp : 0;
+          else ve = (focus ? Math.round(shareOf(t, focus) * tk0.exp / c) || 0 : 0);
+          r.expense += ve; if (ve) r.expenseCount++;
+          if (ve) { var k = t.category_id; r.byCat[k] = (r.byCat[k] || 0) + ve; }
+        }
+      });
+      /* Agregação hierárquica: filhas somam no pai (totais idênticos),
+         com detalhamento em children p/ drill-down. */
+      function topOf(id) { var c = catMap[id]; return (c && c.parent_category_id && catMap[c.parent_category_id]) ? c.parent_category_id : id; }
+      var byCatAgg = {}, byCatKid = {};
+      Object.keys(r.byCat).forEach(function (k) {
+        var pk = topOf(k);
+        byCatAgg[pk] = (byCatAgg[pk] || 0) + r.byCat[k];
+        if (pk !== k) { byCatKid[pk] = byCatKid[pk] || {}; byCatKid[pk][k] = (byCatKid[pk][k] || 0) + r.byCat[k]; }
+      });
+      var byCat = Object.keys(byCatAgg).map(function (k) {
+        var cat = catMap[k] || { name: 'Categoria', icon: '🏷️' };
+        var kids = Object.keys(byCatKid[k] || {}).map(function (sk) {
+          var sc = catMap[sk] || { name: 'Categoria', icon: '🏷️' };
+          return { id: sk, name: sc.name, icon: sc.icon, value: fromCents(byCatKid[k][sk]), pct: r.expense ? Math.round(byCatKid[k][sk] / r.expense * 1000) / 10 : 0 };
+        }).sort(function (a, b) { return b.value - a.value; });
+        return { id: k, name: cat.name, icon: cat.icon, value: fromCents(byCatAgg[k]), pct: r.expense ? Math.round(byCatAgg[k] / r.expense * 1000) / 10 : 0, children: kids };
+      }).sort(function (a, b) { return b.value - a.value; });
+      var incAgg = {}, incKid = {};
+      Object.keys(r.incomeByCat).forEach(function (k) {
+        var pk = topOf(k);
+        incAgg[pk] = (incAgg[pk] || 0) + r.incomeByCat[k];
+        if (pk !== k) { incKid[pk] = incKid[pk] || {}; incKid[pk][k] = (incKid[pk][k] || 0) + r.incomeByCat[k]; }
+      });
+      var incomeByCat = Object.keys(incAgg).map(function (k) {
+        var cat = catMap[k] || { name: 'Categoria', icon: '🏷️' };
+        var kids = Object.keys(incKid[k] || {}).map(function (sk) {
+          var sc = catMap[sk] || { name: 'Receita', icon: '🏷️' };
+          return { id: sk, name: sc.name, icon: sc.icon, value: fromCents(incKid[k][sk]), pct: r.income ? Math.round(incKid[k][sk] / r.income * 1000) / 10 : 0 };
+        }).sort(function (a, b) { return b.value - a.value; });
+        return { id: k, name: cat.name, icon: cat.icon, value: fromCents(incAgg[k]), pct: r.income ? Math.round(incAgg[k] / r.income * 1000) / 10 : 0, children: kids };
+      }).sort(function (a, b) { return b.value - a.value; });
+      // evolução: últimos 6 meses com dados até `to` (só meses existentes)
+      var evo = [], cur = to;
+      for (var i = 0; i < 24 && evo.length < 6; i++) {
+        var mm = r.months[cur];
+        if (mm && (mm.inc || mm.exp)) {
+          var ei = 0, ee = 0;
+          if (vision === 'couple') { ei = mm.inc; ee = mm.exp; }
+          else if (focus) {
+            var pm = mm.per[focus] || { inc: 0, exp: 0 };
+            ei = pm.inc; ee = pm.exp;
+          }
+          evo.unshift({ month: cur, income: fromCents(ei), expense: fromCents(ee), balance: fromCents(ei - ee) });
+        }
+        cur = shiftMonth(cur, -1);
+      }
+      var prev = null;
+      if (from === to) {
+        var pk = shiftMonth(from, -1), pm2 = r.months[pk];
+        if (pm2 && (pm2.inc || pm2.exp)) {
+          var pi = 0, pe = 0;
+          if (vision === 'couple') { pi = pm2.inc; pe = pm2.exp; }
+          else if (focus) { var f = pm2.per[focus] || { inc: 0, exp: 0 }; pi = f.inc; pe = f.exp; }
+          prev = { month: pk, income: fromCents(pi), expense: fromCents(pe) };
+        }
+      }
+      r.inRange.sort(function (a, b) { return (b.date + b.created_at).localeCompare(a.date + a.created_at); });
+      return {
+        income: fromCents(r.income), expense: fromCents(r.expense),
+        incomeCount: r.incomeCount, expenseCount: r.expenseCount,
+        balance: fromCents(r.income - r.expense),
+        saveRate: r.income ? Math.round((r.income - r.expense) / r.income * 1000) / 10 : null,
+        byCat: byCat, incomeByCat: incomeByCat, topCat: byCat[0] || null,
+        paidBy: ids.map(function (u) { return { user_id: u, value: fromCents(r.paid[u] || 0) }; }),
+        recvBy: ids.map(function (u) { return { user_id: u, value: fromCents(r.recv[u] || 0) }; }),
+        perPerson: ids.map(function (u) { return { user_id: u, recv: fromCents(r.per[u].recv), indivPaid: fromCents(r.per[u].indivPaid), sharedPaid: fromCents(r.per[u].sharedPaid) }; }),
+        evolution: evo, prev: prev, last5: r.inRange.slice(0, 5), totalTx: r.inRange.length
+      };
+    },
+
+    /* ============ MOTOR DE ACERTOS (única fonte de verdade) ============
+       valor_liquido = valor_pago − valor_que_deveria_pagar − acertos já pagos.
+       Considera só despesas compartilhadas não excluídas + seus splits.
+       Alias exigido pela auditoria: calculateSettlementBalance(). */
+    /* Fluxo de caixa por conta em UMA leitura: inicial do período + entradas
+       (receitas, transferências recebidas) − saídas (despesas, enviadas,
+       faturas pagas). Base dos relatórios de contas/fluxo e do CSV. */
+    cashFlowByAccount: function (userId, from, to) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { accounts: [], totals: { start: 0, inIncome: 0, inTransfers: 0, outExpense: 0, outTransfers: 0, outPays: 0, end: 0 } };
+      if (!cid || !from || !to) return out;
+      var startB = from + '-01', endB = to + '-31';
+      db.accounts.forEach(function (a) {
+        if (a.couple_id !== cid) return;
+        var acc = { id: a.id, name: a.name, type: a.type, owner_type: a.owner_type, owner_user_id: a.owner_user_id, active: a.active, start: toCents(a.initial_balance), inIncome: 0, inTransfers: 0, outExpense: 0, outTransfers: 0, outPays: 0, end: 0 };
+        db.transactions.forEach(function (t) {
+          if (t.couple_id !== cid || t.deleted_at || (t.account_id || null) !== a.id) return;
+          var v = toCents(t.amount);
+          if (t.date < startB) { acc.start += (t.type === 'income' ? v : -v); }
+          else if (t.date <= endB) {
+            if (t.type === 'income') { acc.inIncome += v; } else { acc.outExpense += v; }
+          }
+        });
+        db.transfers.forEach(function (t) {
+          if (t.couple_id !== cid || t.deleted_at) return;
+          var v = toCents(t.amount);
+          var isFrom = t.from_account_id === a.id, isTo = t.to_account_id === a.id;
+          if (!isFrom && !isTo) return;
+          if (t.date < startB) { acc.start += (isTo ? v : -v); }
+          else if (t.date <= endB) {
+            if (isFrom) acc.outTransfers += v;
+            if (isTo) acc.inTransfers += v;
+          }
+        });
+        db.invoice_payments.forEach(function (p) {
+          if (p.couple_id !== cid || p.deleted_at || p.payment_account_id !== a.id) return;
+          var v = toCents(p.amount);
+          if (p.payment_date < startB) { acc.start -= v; }
+          else if (p.payment_date <= endB) { acc.outPays += v; }
+        });
+        acc.end = acc.start + acc.inIncome + acc.inTransfers - acc.outExpense - acc.outTransfers - acc.outPays;
+        ['start', 'inIncome', 'inTransfers', 'outExpense', 'outTransfers', 'outPays', 'end'].forEach(function (k) {
+          out.totals[k] += acc[k];
+          acc[k] = fromCents(acc[k]);
+        });
+        out.accounts.push(acc);
+      });
+      Object.keys(out.totals).forEach(function (k) { out.totals[k] = fromCents(out.totals[k]); });
+      out.accounts.sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+      return out;
+    },
+    /* CSV central (UTF-8 + BOM): só dados do casal. App só dispara o download. */
+    buildCsv: function (userId, kind, opt) {
+      opt = opt || {};
+      var from = opt.from || '', to = opt.to || '';
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = [];
+      function catName(id) {
+        var c = db.categories.find(function (x) { return x.id === id; });
+        if (!c) return '';
+        if (!c.parent_category_id) return c ? (c.icon + ' ' + c.name) : '';
+        var p = db.categories.find(function (x) { return x.id === c.parent_category_id; });
+        return (c.icon + ' ' + c.name) + (p ? ' (' + p.name + ')' : '');
+      }
+      function userName(id) {
+        var u = db.users.find(function (x) { return x.id === id; });
+        return u ? u.nome : '';
+      }
+      function accName(id) {
+        if (!id) return '';
+        var a = db.accounts.find(function (x) { return x.id === id; });
+        return a ? a.name : '';
+      }
+      function cardName(id) {
+        if (!id) return '';
+        var c = db.credit_cards.find(function (x) { return x.id === id; });
+        return c ? c.name : '';
+      }
+      function dmy(s) { return String(s || '').slice(0, 10).split('-').reverse().join('/'); }
+      function br(v) { return (Math.round(Number(v) * 100) / 100).toFixed(2); }
+      if (!cid) return { filename: 'juntos.csv', csv: '﻿tipo;valor\n' };
+      if (kind === 'transactions') {
+        rows.push(['data', 'descricao', 'categoria', 'tipo', 'valor', 'conta', 'cartao', 'pago_por', 'divisao']);
+        DB.listTx(userId, { from: from, to: to }).forEach(function (t) {
+          rows.push([dmy(t.date), t.description, catName(t.category_id), t.type === 'income' ? 'Receita' : 'Despesa', br(t.amount), accName(t.account_id), cardName(t.credit_card_id), userName(t.payer_user_id), t.is_shared ? 'Compartilhada' : 'Individual']);
+        });
+      } else if (kind === 'categories') {
+        rows.push(['categoria', 'valor', 'percentual', 'transacoes']);
+        var d = DB.dashboardCalc(userId, { from: from, to: to, vision: 'couple' });
+        var counts = DB.expenseCounts(userId, from, to);
+        d.byCat.forEach(function (c) { rows.push([c.icon + ' ' + c.name, br(c.value), String(c.pct).replace('.', ',') + '%', counts[c.id] || 0]); });
+      } else if (kind === 'cashflow') {
+        rows.push(['conta', 'tipo', 'proprietario', 'saldo_inicial', 'entradas_receitas', 'entradas_transferencias', 'saidas_despesas', 'saidas_transferencias', 'saidas_faturas', 'saldo_final']);
+        DB.cashFlowByAccount(userId, from, to).accounts.forEach(function (a) {
+          rows.push([a.name, DB.accountTypeLabel(a.type), a.owner_type === 'joint' ? 'Casal' : userName(a.owner_user_id), br(a.start), br(a.inIncome), br(a.inTransfers), br(a.outExpense), br(a.outTransfers), br(a.outPays), br(a.end)]);
+        });
+      } else if (kind === 'invoices') {
+        rows.push(['cartao', 'referencia', 'vencimento', 'total', 'pago', 'pendente', 'status']);
+        DB.listInvoices(userId, {}).filter(function (i) { return i.reference_year + '-' + ('0' + i.reference_month).slice(-2) >= from && i.reference_year + '-' + ('0' + i.reference_month).slice(-2) <= to; }).forEach(function (i) {
+          rows.push([cardName(i.credit_card_id), ('0' + i.reference_month).slice(-2) + '/' + i.reference_year, dmy(i.due_date), br(i.total_amount), br(i.paid_amount), br(DB.calculateInvoiceOutstanding(userId, i.id)), i.status]);
+        });
+      } else if (kind === 'installments') {
+        rows.push(['compra', 'cartao', 'parcela', 'de', 'valor', 'vencimento', 'status']);
+        DB.listInstallmentPurchases(userId, {}).forEach(function (p) {
+          DB.purchaseInstallments(userId, p.id).forEach(function (r) {
+            rows.push([p.description, cardName(p.credit_card_id), r.installment_number, r.total_installments, br(r.amount), dmy(r.due_date), r.status]);
+          });
+        });
+      } else if (kind === 'budget') {
+        rows.push(['mes', 'categoria', 'orcamento', 'gasto', 'restante', 'percentual', 'status']);
+        var m = from;
+        while (m <= to) {
+          DB.budgetSummary(userId, m).items.forEach(function (it) {
+            rows.push([m.slice(5, 7) + '/' + m.slice(0, 4), it.icon + ' ' + it.name, br(it.limit), br(it.spent), br(it.remaining), String(it.pct).replace('.', ',') + '%', it.status.label]);
+          });
+          if (m === to) break;
+          m = shiftMonth(m, 1);
+        }
+      } else if (kind === 'settlements') {
+        rows.push(['data', 'de', 'para', 'valor', 'observacao']);
+        DB.listSettlements(userId).filter(function (s) { return s.date.slice(0, 7) >= from && s.date.slice(0, 7) <= to; }).forEach(function (s) {
+          rows.push([dmy(s.date), userName(s.from_user_id), userName(s.to_user_id), br(s.amount), s.notes || '']);
+        });
+      } else {
+        rows.push(['erro']); rows.push(['tipo inválido']);
+      }
+      function escCell(x) {
+        var s = String(x == null ? '' : x);
+        return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }
+      return { filename: 'juntos-' + kind + '-' + (from || 'geral') + '-' + (to || 'geral') + '.csv', csv: '﻿' + rows.map(function (r) { return r.map(escCell).join(';'); }).join('\n') };
+    },
+    calculateSettlementBalance: function (userId) { return DB.settle(userId); },
+    settle: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return { people: [], debt: null, sharedCount: 0, sharedTotal: 0, settledTotal: 0 };
+      var ids = orderedMemberIds(db, cid);
+      var paid = {}, owed = {};
+      ids.forEach(function (u) { paid[u] = 0; owed[u] = 0; });
+      var txs = db.transactions.filter(function (t) { return t.couple_id === cid && !t.deleted_at && t.type === 'expense' && t.is_shared; });
+      var total = 0;
+      txs.forEach(function (t) {
+        total += toCents(t.amount);
+        paid[t.payer_user_id] = (paid[t.payer_user_id] || 0) + toCents(t.amount);
+        var ss = db.splits.filter(function (s) { return s.transaction_id === t.id; });
+        if (!ss.length) { // fallback determinístico p/ legado sem splits
+          var each = Math.floor(toCents(t.amount) / ids.length), acc = 0;
+          ids.forEach(function (u, i) { var sh = (i === ids.length - 1) ? toCents(t.amount) - acc : each; acc += sh; owed[u] = (owed[u] || 0) + sh; });
+        } else {
+          ss.forEach(function (s) { owed[s.user_id] = (owed[s.user_id] || 0) + toCents(s.calculated_amount); });
+        }
+      });
+      var netC = {};
+      ids.forEach(function (u) { netC[u] = (paid[u] || 0) - (owed[u] || 0); });
+      var settled = 0;
+      db.settlements.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        settled += toCents(s.amount);
+        netC[s.from_user_id] = (netC[s.from_user_id] || 0) + toCents(s.amount);
+        netC[s.to_user_id] = (netC[s.to_user_id] || 0) - toCents(s.amount);
+      });
+      var people = ids.map(function (u) {
+        return { user_id: u, paid: fromCents(paid[u] || 0), owed: fromCents(owed[u] || 0), net: fromCents(netC[u] || 0) };
+      });
+      var debt = null;
+      if (people.length === 2) {
+        var net0 = toCents(people[0].net);
+        if (net0 > 0) debt = { from: people[1].user_id, to: people[0].user_id, amount: fromCents(net0) };
+        else if (net0 < 0) debt = { from: people[0].user_id, to: people[1].user_id, amount: fromCents(-net0) };
+      }
+      return { people: people, debt: debt, sharedCount: txs.length, sharedTotal: fromCents(total), settledTotal: fromCents(settled) };
+    },
+    listSettlements: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.settlements.filter(function (s) { return s.couple_id === cid; })
+        .sort(function (a, b) { return (b.date + b.created_at).localeCompare(a.date + a.created_at); });
+    },
+    createSettlement: function (userId, data) {
+      DB.requireAuthz(userId, 'create_settlement', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var eng = DB.settle(userId);
+      if (!eng.debt) throw new Error('Não há acerto pendente no momento.');
+      var amount = parseAmount(data.amount);
+      if (amount > eng.debt.amount) throw new Error('O valor do acerto não pode ser maior que o valor pendente (' + money(eng.debt.amount) + ').');
+      var date = data.date ? cleanDate(data.date) : now().slice(0, 10);
+      var s = { id: id('st'), couple_id: cid, from_user_id: eng.debt.from, to_user_id: eng.debt.to, amount: amount, date: date, notes: String((data && data.notes) || '').slice(0, 300), created_by: userId, created_at: now() };
+      db.settlements.push(s); logAudit(db, cid, userId, 'settlement', s.id, 'create', { amount: s.amount }); DB.pushEventInDb(db, cid, userId, 'settlement.created', 'settlement', s.id, { amount: s.amount }); write(db); return s;
+    },
+    deleteSettlement: function (userId, settlementId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.settlements.findIndex(function (x) { return x.id === settlementId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Acerto não encontrado.');
+      db.settlements.splice(i, 1); logAudit(db, cid, userId, 'settlement', settlementId, 'delete', {}); DB.pushEventInDb(db, cid, userId, 'settlement.deleted', 'settlement', settlementId, {}); write(db);
+    },
+    /* ============ ETAPA 5: ORÇAMENTO ============
+       Gasto = soma dos VALORES TOTAIS das despesas (compartilhada conta 1x).
+       Unicidade lógica: couple_id + category_id + month + year. */
+    budgetStatus: function (pct) {
+      if (pct >= 100) return { key: 'over', label: 'Orçamento excedido', icon: '🚨' };
+      if (pct >= 80) return { key: 'warn', label: 'Próximo do limite', icon: '⚠️' };
+      return { key: 'ok', label: 'Dentro do orçamento', icon: '✅' };
+    },
+    /* Gasto do orçamento: categoria principal soma as filhas; subcategoria
+       soma só a si. Cada lançamento conta 1x (tem exatamente 1 category_id). */
+    budgetSpent: function (userId, category_id, ym) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 0;
+      var cat = db.categories.find(function (c) { return c.id === category_id && c.couple_id === cid; });
+      var kids = cat && !cat.parent_category_id
+        ? db.categories.filter(function (c) { return (c.parent_category_id || null) === cat.id; }).map(function (c) { return c.id; })
+        : [];
+      var s = 0;
+      db.transactions.forEach(function (t) {
+        if (t.couple_id === cid && !t.deleted_at && t.type === 'expense' && t.date.slice(0, 7) === ym && (t.category_id === category_id || kids.indexOf(t.category_id) >= 0)) s += t.amount;
+      });
+      return Math.round(s * 100) / 100;
+    },
+    listBudgets: function (userId, ym) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10);
+      return db.budgets.filter(function (b) { return b.couple_id === cid && b.year === y && b.month === m; })
+        .sort(function (a, b) { return b.amount - a.amount; });
+    },
+    budgetSummary: function (userId, ym) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { total: 0, spent: 0, remaining: 0, pct: null, items: [], unbudgeted: [] };
+      if (!cid) return out;
+      var rows = DB.listBudgets(userId, ym);
+      var budgetedExact = {};
+      rows.forEach(function (b) {
+        budgetedExact[b.category_id] = true;
+        var cat = db.categories.find(function (c) { return c.id === b.category_id; }) || { name: 'Categoria', icon: '🏷️' };
+        var parent = (cat && cat.parent_category_id) ? (db.categories.find(function (c) { return c.id === cat.parent_category_id; }) || null) : null;
+        var spent = DB.budgetSpent(userId, b.category_id, ym);
+        var pct = b.amount ? Math.round(spent / b.amount * 1000) / 10 : 0;
+        out.items.push({ id: b.id, category_id: b.category_id, name: cat.name, icon: cat.icon, limit: b.amount, spent: spent, remaining: Math.round((b.amount - spent) * 100) / 100, pct: pct, status: DB.budgetStatus(pct), parent_id: parent ? parent.id : null, parent_name: parent ? parent.name : null, is_subcategory: !!parent });
+        /* Total sem dupla contagem: só orçamentos de categoria principal. */
+        if (!parent) { out.total += b.amount; out.spent += spent; }
+      });
+      out.total = Math.round(out.total * 100) / 100;
+      out.spent = Math.round(out.spent * 100) / 100;
+      out.remaining = Math.round((out.total - out.spent) * 100) / 100;
+      out.pct = out.total ? Math.round(out.spent / out.total * 1000) / 10 : null;
+      var perCat = {};
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense' || t.date.slice(0, 7) !== ym) return;
+        if (budgetedExact[t.category_id]) return;
+        var tc = db.categories.find(function (c) { return c.id === t.category_id; });
+        if (tc && tc.parent_category_id && budgetedExact[tc.parent_category_id]) return;
+        perCat[t.category_id] = (perCat[t.category_id] || 0) + t.amount;
+      });
+      out.unbudgeted = Object.keys(perCat).map(function (k) {
+        var cat = db.categories.find(function (c) { return c.id === k; }) || { name: 'Categoria', icon: '🏷️' };
+        return { category_id: k, name: cat.name, icon: cat.icon, spent: Math.round(perCat[k] * 100) / 100 };
+      }).sort(function (a, b) { return b.spent - a.spent; });
+      /* Itens aninhados p/ exibição: principais primeiro, filhas após o pai. */
+      out.items.sort(function (a, b) {
+        var ka = a.parent_id || a.category_id, kb = b.parent_id || b.category_id;
+        if (ka !== kb) return b.spent - a.spent;
+        if (!!a.parent_id !== !!b.parent_id) return a.parent_id ? 1 : -1;
+        return b.spent - a.spent;
+      });
+      return out;
+    },
+    createBudget: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var cat = db.categories.find(function (c) { return c.id === data.category_id && c.couple_id === cid && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type === 'income') throw new Error('Orçamento é para categorias de despesa.');
+      var amount = parseAmount(data.amount);
+      var month = parseInt(data.month, 10), year = parseInt(data.year, 10);
+      if (!(month >= 1 && month <= 12)) throw new Error('Mês inválido.');
+      if (!(year >= 2000 && year <= 2100)) throw new Error('Ano inválido.');
+      if (db.budgets.some(function (b) { return b.couple_id === cid && b.category_id === cat.id && b.month === month && b.year === year; })) throw new Error('Já existe orçamento para essa categoria neste mês.');
+      var b = { id: id('bg'), couple_id: cid, category_id: cat.id, month: month, year: year, amount: amount, created_at: now(), updated_at: now() };
+      db.budgets.push(b); logAudit(db, cid, userId, 'budget', b.id, 'create', { amount: b.amount }); write(db); return b;
+    },
+    updateBudget: function (userId, budgetId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.budgets.find(function (x) { return x.id === budgetId && x.couple_id === cid; });
+      if (!b) throw new Error('Orçamento não encontrado.');
+      var amount = parseAmount(data.amount);
+      var month = data.month == null ? b.month : parseInt(data.month, 10);
+      var year = data.year == null ? b.year : parseInt(data.year, 10);
+      if (!(month >= 1 && month <= 12)) throw new Error('Mês inválido.');
+      if (!(year >= 2000 && year <= 2100)) throw new Error('Ano inválido.');
+      if (db.budgets.some(function (x) { return x.id !== budgetId && x.couple_id === cid && x.category_id === b.category_id && x.month === month && x.year === year; })) throw new Error('Já existe orçamento para essa categoria neste mês.');
+      b.amount = amount; b.month = month; b.year = year; b.updated_at = now();
+      logAudit(db, cid, userId, 'budget', budgetId, 'update', { amount: amount });
+      write(db); return b;
+    },
+    deleteBudget: function (userId, budgetId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.budgets.findIndex(function (x) { return x.id === budgetId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Orçamento não encontrado.');
+      db.budgets.splice(i, 1); logAudit(db, cid, userId, 'budget', budgetId, 'delete', {}); write(db); // remove só o limite; categoria e lançamentos intactos
+    },
+
+    /* ============ ETAPA 5: METAS ============
+       MVP: acompanhamento de progresso (current_amount). Aportes NÃO criam
+       movimentações financeiras nem alteram o saldo — arquitetura pronta para
+       vincular a movimentações reais no futuro (goal_events). */
+    listGoals: function (userId, includeArchived) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rank = { active: 0, completed: 1, archived: 2 };
+      return db.goals.filter(function (g) { return g.couple_id === cid && (includeArchived || g.status !== 'archived'); })
+        .sort(function (a, b) {
+          var r = (rank[a.status] - rank[b.status]);
+          if (r) return r;
+          if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
+          if (a.deadline) return -1;
+          if (b.deadline) return 1;
+          return b.created_at.localeCompare(a.created_at);
+        });
+    },
+    getGoal: function (userId, goalId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var g = db.goals.find(function (x) { return x.id === goalId && x.couple_id === cid; });
+      if (!g) throw new Error('Meta não encontrada.');
+      return g;
+    },
+    goalProgress: function (g) {
+      var pct = g.target_amount ? Math.min(100, Math.round(g.current_amount / g.target_amount * 1000) / 10) : 0;
+      return { pct: pct, remaining: Math.round((g.target_amount - g.current_amount) * 100) / 100 };
+    },
+    createGoal: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para a meta.');
+      var target = parseAmount(data.target_amount);
+      var current = parseZeroPlus(data.current_amount, 'O valor atual');
+      if (current > target) throw new Error('O valor atual não pode ser maior que o objetivo.');
+      var deadline = String((data && data.deadline) || '').slice(0, 10);
+      if (deadline) cleanDate(deadline); else deadline = '';
+      var g = { id: id('gl'), couple_id: cid, name: name.slice(0, 80), description: String((data && data.description) || '').slice(0, 500), target_amount: target, current_amount: current, deadline: deadline, status: current >= target ? 'completed' : 'active', created_at: now(), updated_at: now() };
+      db.goals.push(g); logAudit(db, cid, userId, 'goal', g.id, 'create', { target: target }); write(db); return g;
+    },
+    updateGoal: function (userId, goalId, data) {
+      var db = read();
+      var g = DB.getGoal(userId, goalId);
+      var full = read(); var row = full.goals.find(function (x) { return x.id === goalId; });
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para a meta.');
+      var target = parseAmount(data.target_amount);
+      var current = parseZeroPlus(data.current_amount, 'O valor atual');
+      if (current > target) throw new Error('O valor atual não pode ser maior que o objetivo.');
+      var deadline = String((data && data.deadline) || '').slice(0, 10);
+      if (deadline) cleanDate(deadline); else deadline = '';
+      row.name = name.slice(0, 80); row.description = String((data && data.description) || '').slice(0, 500);
+      row.target_amount = target; row.current_amount = current; row.deadline = deadline;
+      if (row.status !== 'archived') row.status = current >= target ? 'completed' : 'active';
+      row.updated_at = now();
+      logAudit(full, row.couple_id, userId, 'goal', goalId, 'update', { target: target, current: current });
+      write(full); return row;
+    },
+    addToGoal: function (userId, goalId, data) {
+      var db = read();
+      var g = DB.getGoal(userId, goalId);
+      var full = read(); var row = full.goals.find(function (x) { return x.id === goalId; });
+      if (row.status === 'archived') throw new Error('Meta arquivada. Reative para continuar registrando.');
+      var amount = parseAmount(data.amount);
+      var date = data.date ? cleanDate(data.date) : now().slice(0, 10);
+      var future = Math.round((row.current_amount + amount) * 100) / 100;
+      if (future > row.target_amount) throw new Error('Faltam apenas ' + money(row.target_amount - row.current_amount) + ' para concluir a meta.');
+      full.goal_events.push({ id: id('ge'), goal_id: goalId, couple_id: row.couple_id, amount: amount, date: date, note: String((data && data.note) || '').slice(0, 300), created_at: now() });
+      row.current_amount = future;
+      if (row.status !== 'archived' && future >= row.target_amount) row.status = 'completed';
+      row.updated_at = now();
+      logAudit(full, row.couple_id, userId, 'goal', goalId, 'contribute', { amount: amount });
+      write(full); return row;
+    },
+    archiveGoal: function (userId, goalId) {
+      var db = read(); DB.getGoal(userId, goalId);
+      var full = read(); full.goals.find(function (x) { return x.id === goalId; }).status = 'archived';
+      full.goals.find(function (x) { return x.id === goalId; }).updated_at = now();
+      logAudit(full, full.goals.find(function (x) { return x.id === goalId; }).couple_id, userId, 'goal', goalId, 'archive', {});
+      write(full);
+    },
+    reactivateGoal: function (userId, goalId) {
+      var full = read(); DB.getGoal(userId, goalId);
+      var row = full.goals.find(function (x) { return x.id === goalId; });
+      row.status = row.current_amount >= row.target_amount ? 'completed' : 'active';
+      row.updated_at = now(); write(full); return row;
+    },
+    listGoalEvents: function (userId, goalId) {
+      var db = read();
+      DB.getGoal(userId, goalId);
+      return db.goal_events.filter(function (e) { return e.goal_id === goalId; })
+        .sort(function (a, b) { return (b.date + b.created_at).localeCompare(a.date + a.created_at); });
+    },
+    /* ============ ETAPA 6: CONTAS RECORRENTES ============
+       Transação = aconteceu. Recorrente = repete. Ocorrência = vencimento futuro.
+       Nunca se cria transação real só por existir a recorrente: só via pagamento
+       explícito da ocorrência. Splits reutilizam buildSplits (sem 2ª implementação). */
+    validateRecurring: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var type = data.type;
+      if (type !== 'income' && type !== 'expense') throw new Error('Escolha receita ou despesa.');
+      var description = String(data.description || '').trim();
+      if (!description) throw new Error('Descreva a conta (ex: Aluguel).');
+      if (description.length > 120) throw new Error('Descrição muito longa (máx 120 caracteres).');
+      var amount = parseAmount(data.amount);
+      var cat = db.categories.find(function (c) { return c.id === data.category_id && c.couple_id === cid && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type !== 'both' && cat.type !== type) throw new Error('Essa categoria é de ' + (cat.type === 'income' ? 'receita' : 'despesa') + '.');
+      var freq = data.frequency;
+      if (freq !== 'monthly' && freq !== 'yearly') throw new Error('Frequência inválida.');
+      var day = parseInt(data.day_of_month, 10);
+      if (!(day >= 1 && day <= 31)) throw new Error('Dia precisa estar entre 1 e 31.');
+      var start = cleanDate(data.start_date);
+      var end = String(data.end_date || '').slice(0, 10);
+      if (end) { cleanDate(end); if (end < start) throw new Error('A data final não pode ser anterior à inicial.'); }
+      var payer = String(data.payer_user_id || '');
+      if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === payer; })) throw new Error('Escolha o responsável.');
+      var shared = !!data.is_shared;
+      var split = null;
+      if (shared && type === 'expense') {
+        var mode = (data.split && data.split.mode) || '5050';
+        split = { mode: mode, entries: (data.split && data.split.entries) || [] };
+        DB.buildSplits(userId, amount, split); // valida agora (membros, 100%, total)
+      }
+      return { couple_id: cid, type: type, description: description, amount: amount, category_id: cat.id, frequency: freq, day_of_month: day, start_date: start, end_date: end, is_shared: shared, payer_user_id: payer, split_mode: split ? split.mode : '5050', split_entries: split ? split.entries : [], notes: String(data.notes || '').slice(0, 500) };
+    },
+    createRecurring: function (userId, data) {
+      var v = DB.validateRecurring(userId, data);
+      var db = read();
+      var r = { id: id('rc'), couple_id: v.couple_id, created_by: userId, description: v.description, type: v.type, amount: v.amount, category_id: v.category_id, frequency: v.frequency, day_of_month: v.day_of_month, start_date: v.start_date, end_date: v.end_date, is_shared: v.is_shared, payer_user_id: v.payer_user_id, split_mode: v.split_mode, split_entries: v.split_entries, active: true, notes: v.notes, created_at: now(), updated_at: now() };
+      db.recurring_transactions.push(r); logAudit(db, v.couple_id, userId, 'recurring', r.id, 'create', { amount: r.amount });
+      var evR = DB.pushEventInDb(db, v.couple_id, userId, 'recurring_event', 'recurring', r.id, {});
+      write(db);
+      DB.processRulesForEvent(userId, evR);
+      return r;
+    },
+    getRecurring: function (userId, recId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.recurring_transactions.find(function (x) { return x.id === recId && x.couple_id === cid; });
+      if (!r) throw new Error('Conta recorrente não encontrada.');
+      return r;
+    },
+    listRecurring: function (userId, onlyActive) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.recurring_transactions.filter(function (r) { return r.couple_id === cid && (!onlyActive || r.active); })
+        .sort(function (a, b) { return a.description.localeCompare(b.description, 'pt-BR'); });
+    },
+    updateRecurring: function (userId, recId, data) {
+      // "somente próximos lançamentos": histórico (txs pagas) intacto; pendentes futuros regeneram.
+      var v = DB.validateRecurring(userId, data);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.recurring_transactions.find(function (x) { return x.id === recId && x.couple_id === cid; });
+      if (!r) throw new Error('Conta recorrente não encontrada.');
+      ['description', 'type', 'amount', 'category_id', 'frequency', 'day_of_month', 'start_date', 'end_date', 'is_shared', 'payer_user_id', 'split_mode', 'split_entries', 'notes'].forEach(function (k) { r[k] = v[k]; });
+      r.updated_at = now();
+      var today = now().slice(0, 10);
+      db.recurring_occurrences = db.recurring_occurrences.filter(function (o) { return !(o.recurring_transaction_id === recId && o.status === 'pending' && o.due_date >= today); });
+      logAudit(db, cid, userId, 'recurring', recId, 'update', {});
+      write(db); return r;
+    },
+    setRecurringActive: function (userId, recId, active) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.recurring_transactions.find(function (x) { return x.id === recId && x.couple_id === cid; });
+      if (!r) throw new Error('Conta recorrente não encontrada.');
+      r.active = !!active; r.updated_at = now(); logAudit(db, cid, userId, 'recurring', recId, active ? 'activate' : 'deactivate', {}); write(db); return r;
+    },
+    nextDueFor: function (rec, refISO) {
+      refISO = (refISO || now().slice(0, 10)).slice(0, 10);
+      function okDate(d) { return d >= rec.start_date && (!rec.end_date || d <= rec.end_date) && d >= refISO; }
+      if (rec.frequency === 'yearly') {
+        var sm = parseInt(rec.start_date.slice(5, 7), 10);
+        for (var y = parseInt(refISO.slice(0, 4), 10); y < parseInt(refISO.slice(0, 4), 10) + 6; y++) {
+          var d = dstr(y, sm, Math.min(rec.day_of_month, dim(y, sm)));
+          if (okDate(d)) return d;
+        }
+        return null;
+      }
+      var ym = refISO.slice(0, 7);
+      for (var i = 0; i < 25; i++) {
+        var yy = parseInt(ym.slice(0, 4), 10), mm = parseInt(ym.slice(5, 7), 10);
+        var dd = dstr(yy, mm, Math.min(rec.day_of_month, dim(yy, mm)));
+        if (okDate(dd)) return dd;
+        ym = ymAdd(ym, 1);
+      }
+      return null;
+    },
+    /* Gera ocorrências SOB DEMANDA na janela [fromYm..toYm] (padrão: mês atual +2).
+       Nunca gera anos antecipados; inativas não geram; sem duplicar. */
+    ensureOccurrences: function (userId, fromYm, toYm) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 0;
+      if (!fromYm) { var cur = now().slice(0, 7); fromYm = cur; toYm = toYm || ymAdd(cur, 2); }
+      if (!toYm) toYm = fromYm;
+      var n = 0;
+      db.recurring_transactions.forEach(function (r) {
+        if (r.couple_id !== cid || !r.active) return;
+        if (r.frequency === 'yearly') {
+          var sm = parseInt(r.start_date.slice(5, 7), 10);
+          monthsBetween(fromYm, toYm).forEach(function (ym) {
+            if (parseInt(ym.slice(5, 7), 10) !== sm) return;
+            tryDate(r, parseInt(ym.slice(0, 4), 10), sm);
+          });
+        } else {
+          monthsBetween(fromYm, toYm).forEach(function (ym) {
+            if (ym < r.start_date.slice(0, 7)) return;
+            tryDate(r, parseInt(ym.slice(0, 4), 10), parseInt(ym.slice(5, 7), 10));
+          });
+        }
+      });
+      function tryDate(r, y, m) {
+        var d = dstr(y, m, Math.min(r.day_of_month, dim(y, m)));
+        if (d < r.start_date || (r.end_date && d > r.end_date)) return;
+        var exists = db.recurring_occurrences.some(function (o) { return o.recurring_transaction_id === r.id && o.due_date === d; });
+        if (exists) return;
+        db.recurring_occurrences.push({ id: id('ro'), recurring_transaction_id: r.id, couple_id: cid, due_date: d, amount: r.amount, status: 'pending', transaction_id: null, created_at: now(), updated_at: now() });
+        n++;
+      }
+      if (n) write(db);
+      return n;
+    },
+    getOccurrence: function (userId, occId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var o = db.recurring_occurrences.find(function (x) { return x.id === occId && x.couple_id === cid; });
+      if (!o) throw new Error('Compromisso não encontrado.');
+      var r = db.recurring_transactions.find(function (x) { return x.id === o.recurring_transaction_id; });
+      o.rec = r || null;
+      return o;
+    },
+    listOccurrences: function (userId, fromISO, toISO, onlyPending) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var recMap = {};
+      db.recurring_transactions.forEach(function (r) { if (r.couple_id === cid) recMap[r.id] = r; });
+      return db.recurring_occurrences.filter(function (o) {
+        return o.couple_id === cid && (!fromISO || o.due_date >= fromISO) && (!toISO || o.due_date <= toISO) && (!onlyPending || o.status === 'pending');
+      }).map(function (o) { o.rec = recMap[o.recurring_transaction_id] || null; return o; })
+        .sort(function (a, b) { return (a.due_date + a.created_at).localeCompare(b.due_date + b.created_at); });
+    },
+    upcoming: function (userId, limit, refISO) {
+      var ref = (refISO || now().slice(0, 10)).slice(0, 10);
+      DB.ensureOccurrences(userId);
+      return DB.listOccurrences(userId, ref, null, true).slice(0, limit || 5);
+    },
+    monthCommitments: function (userId, ym) {
+      DB.ensureOccurrences(userId, ym, ym);
+      var rows = DB.listOccurrences(userId, ym + '-01', ym + '-31', true);
+      var exp = 0, inc = 0;
+      rows.forEach(function (o) { if (o.rec) { o.rec.type === 'income' ? inc += o.amount : exp += o.amount; } });
+      return { expense: Math.round(exp * 100) / 100, income: Math.round(inc * 100) / 100, count: rows.length, items: rows };
+    },
+    /* Saldo projetado = realizado (tudo, sem deleted) + futuras do mês. Separado do real. */
+    calculateProjectedBalance: function (userId, ym) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var realized = 0;
+      if (cid) db.transactions.forEach(function (t) {
+        if (t.couple_id === cid && !t.deleted_at) realized += (t.type === 'income' ? t.amount : -t.amount);
+      });
+      realized = Math.round(realized * 100) / 100;
+      var mc = DB.monthCommitments(userId, ym || now().slice(0, 7));
+      var projected = Math.round((realized + mc.income - mc.expense) * 100) / 100;
+      return { realized: realized, futIncome: mc.income, futExpense: mc.expense, pendingCount: mc.count, projected: projected };
+    },
+    payOccurrence: function (userId, occId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var o = db.recurring_occurrences.find(function (x) { return x.id === occId && x.couple_id === cid; });
+      if (!o) throw new Error('Compromisso não encontrado.');
+      if (o.status === 'paid') throw new Error('Esta conta já foi registrada como paga.');
+      if (o.status !== 'pending') throw new Error('Somente compromissos pendentes podem ser pagos.');
+      var r = db.recurring_transactions.find(function (x) { return x.id === o.recurring_transaction_id; });
+      if (!r) throw new Error('Conta recorrente não encontrada.');
+      var amount = parseAmount(data.amount);
+      var t = DB.createTx(userId, {
+        type: r.type, description: r.description, amount: amount, date: o.due_date,
+        category_id: r.category_id, payer_user_id: r.payer_user_id, is_shared: r.is_shared,
+        notes: 'Conta recorrente • vencimento ' + o.due_date.split('-').reverse().join('/'),
+        split: (r.is_shared && r.type === 'expense') ? { mode: r.split_mode, entries: r.split_entries } : undefined
+      });
+      try {
+        var full = read();
+        var row = full.recurring_occurrences.find(function (x) { return x.id === occId; });
+        if (!row) throw new Error('Compromisso não encontrado.');
+        row.status = 'paid'; row.transaction_id = t.id; row.amount = amount; row.updated_at = now();
+        logAudit(full, cid, userId, 'occurrence', occId, 'pay', { amount: amount, tx: t.id });
+        write(full);
+      } catch (e2) {
+        try { DB.deleteTx(userId, t.id); } catch (e3) { /* mantém tx órfã sinalizada no diagnóstico */ }
+        throw e2;
+      }
+      return t;
+    },
+    setOccurrenceStatus: function (userId, occId, status) {
+      if (['skipped', 'cancelled', 'pending'].indexOf(status) < 0) throw new Error('Status inválido.');
+      var db = read(), cid = DB.myCoupleId(userId);
+      var o = db.recurring_occurrences.find(function (x) { return x.id === occId && x.couple_id === cid; });
+      if (!o) throw new Error('Compromisso não encontrado.');
+      if (o.status === 'paid') throw new Error('Compromissos pagos não podem ser alterados (a transação registrada permanece no histórico).');
+      o.status = status; o.updated_at = now(); logAudit(db, cid, userId, 'occurrence', occId, status, {}); write(db); return o;
+    },
+    /* Rastreabilidade: transação -> ocorrência -> recorrente (sem alterar a tabela). */
+    txOrigin: function (userId, txId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      try { DB.getTx(userId, txId); } catch (e) { return null; }
+      var o = db.recurring_occurrences.find(function (x) { return x.couple_id === cid && x.transaction_id === txId; });
+      if (!o) return null;
+      var r = db.recurring_transactions.find(function (x) { return x.id === o.recurring_transaction_id; });
+      return r ? { occurrence: o, recurring: r } : null;
+    },
+    /* ============ PROMPT 8 (V2): CONTAS ============
+       Conta = onde o dinheiro está. Transação = o que aconteceu. Split = quem deve assumir.
+       Saldo sempre derivado de regra central (inicial + entradas − saídas), em centavos.
+       Sem transferências nesta etapa (arquitetura pronta para adicioná-las). */
+    accountTypes: function () {
+      return [
+        { id: 'checking', label: 'Conta corrente', icon: '🏦' },
+        { id: 'savings', label: 'Poupança', icon: '🐷' },
+        { id: 'cash', label: 'Dinheiro em espécie', icon: '💵' },
+        { id: 'investment', label: 'Investimentos', icon: '📈' },
+        { id: 'other', label: 'Outra', icon: '💼' }
+      ];
+    },
+    accountTypeLabel: function (id) {
+      var t = DB.accountTypes().find(function (x) { return x.id === id; });
+      return t ? t.label : 'Conta';
+    },
+    validateAccount: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para a conta (ex: Nubank).');
+      var type = data.type;
+      if (!DB.accountTypes().some(function (t) { return t.id === type; })) throw new Error('Escolha o tipo da conta.');
+      var ownerType = data.owner_type;
+      var ownerId = null;
+      if (ownerType === 'individual') {
+        ownerId = String(data.owner_user_id || '');
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === ownerId; })) throw new Error('Escolha a quem a conta pertence.');
+      } else if (ownerType === 'joint') {
+        ownerId = null;
+      } else {
+        throw new Error('Escolha a quem a conta pertence (pessoa ou casal).');
+      }
+      return { couple_id: cid, name: name.slice(0, 60), type: type, owner_type: ownerType, owner_user_id: ownerId, initial_balance: parseBalance(data.initial_balance), notes: String((data && data.notes) || '').slice(0, 500) };
+    },
+    createAccount: function (userId, data) {
+      var v = DB.validateAccount(userId, data);
+      var db = read();
+      var a = { id: id('ac'), couple_id: v.couple_id, name: v.name, type: v.type, owner_type: v.owner_type, owner_user_id: v.owner_user_id, initial_balance: v.initial_balance, active: true, notes: v.notes, created_by: userId, created_at: now(), updated_at: now() };
+      db.accounts.push(a); logAudit(db, v.couple_id, userId, 'account', a.id, 'create', { name: a.name }); write(db); return a;
+    },
+    getAccount: function (userId, accountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var a = db.accounts.find(function (x) { return x.id === accountId && x.couple_id === cid; });
+      if (!a) throw new Error('Conta não encontrada.');
+      return a;
+    },
+    listAccounts: function (userId, status) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.accounts.filter(function (a) {
+        return a.couple_id === cid && (!status || status === 'all' || (status === 'active' ? a.active : !a.active));
+      }).sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+    },
+    accountHasTx: function (userId, accountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.transactions.some(function (t) { return t.couple_id === cid && !t.deleted_at && (t.account_id || null) === accountId; });
+    },
+    updateAccount: function (userId, accountId, data) {
+      var v = DB.validateAccount(userId, data);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var a = db.accounts.find(function (x) { return x.id === accountId && x.couple_id === cid; });
+      if (!a) throw new Error('Conta não encontrada.');
+      if (DB.accountHasTx(userId, accountId) && v.initial_balance !== a.initial_balance) {
+        throw new Error('Esta conta já possui movimentações. O saldo inicial não pode ser alterado para preservar o histórico.');
+      }
+      a.name = v.name; a.type = v.type; a.owner_type = v.owner_type; a.owner_user_id = v.owner_user_id;
+      a.initial_balance = v.initial_balance; a.notes = v.notes; a.updated_at = now();
+      logAudit(db, cid, userId, 'account', accountId, 'update', { name: a.name });
+      write(db); return a;
+    },
+    setAccountActive: function (userId, accountId, active) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var a = db.accounts.find(function (x) { return x.id === accountId && x.couple_id === cid; });
+      if (!a) throw new Error('Conta não encontrada.');
+      a.active = !!active; a.updated_at = now(); logAudit(db, cid, userId, 'account', accountId, active ? 'activate' : 'deactivate', {}); write(db); return a;
+    },
+    deleteAccount: function (userId, accountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.accounts.findIndex(function (x) { return x.id === accountId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Conta não encontrada.');
+      if (DB.accountHasTx(userId, accountId)) throw new Error('Esta conta possui transações. Desative-a em vez de excluir, para preservar o histórico.');
+      db.accounts.splice(i, 1); logAudit(db, cid, userId, 'account', accountId, 'delete', {}); write(db);
+    },
+    /* Saldo = inicial + receitas − despesas − enviadas + recebidas − faturas pagas.
+       Pagamento nunca vira despesa: só abate aqui. */
+    calculateAccountBalance: function (userId, accountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var a = db.accounts.find(function (x) { return x.id === accountId && x.couple_id === cid; });
+      if (!a) throw new Error('Conta não encontrada.');
+      var c = toCents(a.initial_balance);
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || (t.account_id || null) !== accountId) return;
+        c += (t.type === 'income' ? toCents(t.amount) : -toCents(t.amount));
+      });
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.from_account_id === accountId) c -= toCents(t.amount);
+        if (t.to_account_id === accountId) c += toCents(t.amount);
+      });
+      db.invoice_payments.forEach(function (p) {
+        if (p.couple_id !== cid || p.deleted_at || p.payment_account_id !== accountId) return;
+        c -= toCents(p.amount);
+      });
+      return fromCents(c);
+    },
+    calculateAccountsSummary: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { totalBalance: 0, individual: {}, jointBalance: 0, activeAccounts: 0, accounts: [] };
+      if (!cid) return out;
+      var ids = orderedMemberIds(db, cid);
+      ids.forEach(function (u) { out.individual[u] = 0; });
+      DB.listAccounts(userId, 'active').forEach(function (a) {
+        var bal = DB.calculateAccountBalance(userId, a.id);
+        out.accounts.push({ id: a.id, name: a.name, type: a.type, owner_type: a.owner_type, owner_user_id: a.owner_user_id, balance: bal });
+        out.totalBalance = fromCents(toCents(out.totalBalance) + toCents(bal));
+        if (a.owner_type === 'joint') {
+          out.jointBalance = fromCents(toCents(out.jointBalance) + toCents(bal));
+        } else if (out.individual[a.owner_user_id] !== undefined) {
+          out.individual[a.owner_user_id] = fromCents(toCents(out.individual[a.owner_user_id]) + toCents(bal));
+        }
+      });
+      out.activeAccounts = out.accounts.length;
+      return out;
+    },
+    /* ============ PROMPT 9 (V2): TRANSFERÊNCIAS ============
+       Move dinheiro entre contas sem criar nem destruir: from −amount, to +amount.
+       NUNCA modelada como despesa+receita (não entra em receitas, despesas,
+       orçamento, relatórios, acertos). Operação atômica em escrita única. */
+    calculateTransferImpact: function (transfer) {
+      var a = toCents(transfer.amount);
+      return { fromAccount: fromCents(-a), toAccount: fromCents(a) };
+    },
+    validateTransfer: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var from = db.accounts.find(function (a) { return a.id === data.from_account_id && a.couple_id === cid; });
+      var to = db.accounts.find(function (a) { return a.id === data.to_account_id && a.couple_id === cid; });
+      if (!from || !to) throw new Error('As contas precisam pertencer ao seu casal.');
+      if (from.id === to.id) throw new Error('A conta de origem e a conta de destino precisam ser diferentes.');
+      if (!from.active || !to.active) throw new Error('Transferências só entre contas ativas.');
+      var amount = parseAmount(data.amount);
+      var date = cleanDate(data.date);
+      return { couple_id: cid, from_account_id: from.id, to_account_id: to.id, amount: amount, date: date, description: String((data && data.description) || '').slice(0, 120) };
+    },
+    createTransfer: function (userId, data) {
+      DB.requireAuthz(userId, 'create_transfer', null);
+      var v = DB.validateTransfer(userId, data);
+      var db = read();
+      var t = { id: id('tr'), couple_id: v.couple_id, from_account_id: v.from_account_id, to_account_id: v.to_account_id, amount: v.amount, date: v.date, description: v.description, created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      db.transfers.push(t); logAudit(db, v.couple_id, userId, 'transfer', t.id, 'create', { amount: t.amount }); var evT = DB.pushEventInDb(db, v.couple_id, userId, 'transfer.created', 'transfer', t.id, {}); write(db); DB.processRulesForEvent(userId, evT); return t;
+    },
+    getTransfer: function (userId, transferId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transfers.find(function (x) { return x.id === transferId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transferência não encontrada.');
+      return t;
+    },
+    listTransfers: function (userId, accountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.transfers.filter(function (t) {
+        return t.couple_id === cid && !t.deleted_at && (!accountId || t.from_account_id === accountId || t.to_account_id === accountId);
+      }).sort(function (a, b) { return (b.date + b.created_at).localeCompare(a.date + a.created_at); });
+    },
+    updateTransfer: function (userId, transferId, data) {
+      // saldos são derivados: editar só troca os termos, sem acumular nem duplicar.
+      var v = DB.validateTransfer(userId, data);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transfers.find(function (x) { return x.id === transferId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transferência não encontrada.');
+      t.from_account_id = v.from_account_id; t.to_account_id = v.to_account_id;
+      t.amount = v.amount; t.date = v.date; t.description = v.description; t.updated_at = now();
+      logAudit(db, cid, userId, 'transfer', transferId, 'update', { amount: v.amount });
+      DB.pushEventInDb(db, cid, userId, 'transfer.updated', 'transfer', transferId, {});
+      write(db); return t;
+    },
+    deleteTransfer: function (userId, transferId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.transfers.find(function (x) { return x.id === transferId && x.couple_id === cid && !x.deleted_at; });
+      if (!t) throw new Error('Transferência não encontrada.');
+      t.deleted_at = now(); t.updated_at = now();
+      logAudit(db, cid, userId, 'transfer', transferId, 'delete', { amount: t.amount });
+      DB.pushEventInDb(db, cid, userId, 'transfer.deleted', 'transfer', transferId, {});
+      write(db);
+    },
+    /* ============ PROMPT 10 (V2): CARTÕES DE CRÉDITO ============
+       Cartão = instrumento de pagamento, NÃO conta. Compra no cartão compromete
+       limite; conta bancária só mexe no pagamento da fatura (Prompt 12).
+       Limite nunca é dinheiro nem receita. Cálculos em centavos. */
+    cardBrands: function () { return ['Visa', 'Mastercard', 'Elo', 'Hipercard', 'American Express', 'Outra']; },
+    validateCard: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para o cartão (ex: Nubank).');
+      var brand = String((data && data.brand) || 'Outra');
+      if (!DB.cardBrands().includes(brand)) throw new Error('Escolha a bandeira.');
+      var last4 = String((data && data.last_four_digits) || '').replace(/\D/g, '').slice(0, 4);
+      if (String((data && data.last_four_digits) || '').trim() !== '' && last4.length !== 4) throw new Error('Os últimos 4 dígitos precisam ter exatamente 4 números.');
+      var ownerType = data.owner_type, ownerId = null;
+      if (ownerType === 'individual') {
+        ownerId = String(data.owner_user_id || '');
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === ownerId; })) throw new Error('Escolha a quem o cartão pertence.');
+      } else if (ownerType === 'joint') {
+        ownerId = null;
+      } else {
+        throw new Error('Escolha a quem o cartão pertence (pessoa ou casal).');
+      }
+      var limit = parseZeroPlus(data.credit_limit, 'O limite');
+      var closing = parseInt(data.closing_day, 10), due = parseInt(data.due_day, 10);
+      if (!(closing >= 1 && closing <= 31)) throw new Error('Dia de fechamento precisa estar entre 1 e 31.');
+      if (!(due >= 1 && due <= 31)) throw new Error('Dia de vencimento precisa estar entre 1 e 31.');
+      var payAcc = String(data.payment_account_id || '') || null;
+      if (payAcc) {
+        var pa = db.accounts.find(function (a) { return a.id === payAcc && a.couple_id === cid; });
+        if (!pa) throw new Error('Conta de pagamento inválida para este casal.');
+        if (!pa.active) throw new Error('A conta de pagamento está desativada.');
+      }
+      return { couple_id: cid, name: name.slice(0, 60), brand: brand, last_four_digits: last4, owner_type: ownerType, owner_user_id: ownerId, credit_limit: limit, closing_day: closing, due_day: due, payment_account_id: payAcc, notes: String((data && data.notes) || '').slice(0, 500) };
+    },
+    createCard: function (userId, data) {
+      var v = DB.validateCard(userId, data);
+      var db = read();
+      var c = { id: id('cc'), couple_id: v.couple_id, name: v.name, brand: v.brand, last_four_digits: v.last_four_digits, owner_type: v.owner_type, owner_user_id: v.owner_user_id, credit_limit: v.credit_limit, closing_day: v.closing_day, due_day: v.due_day, payment_account_id: v.payment_account_id, active: true, notes: v.notes, created_by: userId, created_at: now(), updated_at: now() };
+      db.credit_cards.push(c); logAudit(db, v.couple_id, userId, 'card', c.id, 'create', { name: c.name }); write(db); return c;
+    },
+    getCard: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (!c) throw new Error('Cartão não encontrado.');
+      return c;
+    },
+    listCards: function (userId, status) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.credit_cards.filter(function (c) {
+        return c.couple_id === cid && (!status || status === 'all' || (status === 'active' ? c.active : !c.active));
+      }).sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+    },
+    cardHasTx: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.transactions.some(function (t) { return t.couple_id === cid && !t.deleted_at && (t.credit_card_id || null) === cardId; });
+    },
+    updateCard: function (userId, cardId, data) {
+      var v = DB.validateCard(userId, data);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (!c) throw new Error('Cartão não encontrado.');
+      ['name', 'brand', 'last_four_digits', 'owner_type', 'owner_user_id', 'credit_limit', 'closing_day', 'due_day', 'payment_account_id', 'notes'].forEach(function (k) { c[k] = v[k]; });
+      c.updated_at = now(); logAudit(db, cid, userId, 'card', cardId, 'update', {}); write(db); return c;
+    },
+    setCardActive: function (userId, cardId, active) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (!c) throw new Error('Cartão não encontrado.');
+      c.active = !!active; c.updated_at = now(); logAudit(db, cid, userId, 'card', cardId, active ? 'activate' : 'deactivate', {}); write(db); return c;
+    },
+    deleteCard: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.credit_cards.findIndex(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Cartão não encontrado.');
+      if (DB.cardHasTx(userId, cardId) || DB.cardHasPurchases(userId, cardId)) throw new Error('Este cartão possui histórico. Desative-o em vez de excluir, para preservar o histórico.');
+      if (db.invoices.some(function (x) { return x.credit_card_id === cardId && x.couple_id === cid; })) throw new Error('Este cartão possui faturas. Desative-o em vez de excluir.');
+      db.credit_cards.splice(i, 1); logAudit(db, cid, userId, 'card', cardId, 'delete', {}); write(db);
+    },
+    /* Utilizado = compromisso real (à vista não quitadas + parcelas pendentes). */
+    calculateCardUsedLimit: function (userId, cardId) {
+      return DB.calculateCardOutstandingCommitment(userId, cardId);
+    },
+    /* Disponível nunca negativo: excedido mostra R$ 0 + aviso. */
+    calculateCardAvailableLimit: function (userId, cardId) {
+      var c = DB.getCard(userId, cardId);
+      var used = toCents(DB.calculateCardUsedLimit(userId, cardId));
+      var lim = toCents(c.credit_limit);
+      return { used: fromCents(used), limit: c.credit_limit, available: fromCents(Math.max(0, lim - used)), exceeded: used > lim };
+    },
+    cardsSummary: function (userId) {
+      var out = { totalLimit: 0, totalUsed: 0, totalAvailable: 0, anyExceeded: false, activeCards: 0 };
+      DB.listCards(userId, 'active').forEach(function (c) {
+        var u = DB.calculateCardAvailableLimit(userId, c.id);
+        out.totalLimit = fromCents(toCents(out.totalLimit) + toCents(u.limit));
+        out.totalUsed = fromCents(toCents(out.totalUsed) + toCents(u.used));
+        if (u.exceeded) out.anyExceeded = true;
+      });
+      out.totalAvailable = fromCents(Math.max(0, toCents(out.totalLimit) - toCents(out.totalUsed)));
+      out.activeCards = DB.listCards(userId, 'active').length;
+      return out;
+    },
+    /* ============ PROMPT 11 (V2): COMPRAS PARCELADAS ============
+       1 compra → N parcelas (registros próprios, nunca N transações).
+       Total compromete o limite; conta só mexe na fatura (Prompt 12).
+       Centavos exatos: soma das parcelas == total; residual determinístico na última.
+       Datas: dia fixo com clamp (31/01→28/02→31/03...). Atômico: valida tudo, escreve 1x. */
+    calculateInstallmentDates: function (firstISO, count) {
+      var d = cleanDate(firstISO);
+      var n = parseInt(count, 10);
+      if (!(n >= 1 && n <= 60)) throw new Error('Parcelas precisam estar entre 1 e 60.');
+      var y = parseInt(d.slice(0, 4), 10), m = parseInt(d.slice(5, 7), 10), day = parseInt(d.slice(8, 10), 10);
+      var out = [];
+      for (var i = 0; i < n; i++) {
+        var yy = y, mm = m + i;
+        yy += Math.floor((mm - 1) / 12); mm = ((mm - 1) % 12) + 1;
+        out.push(dstr(yy, mm, Math.min(day, dim(yy, mm))));
+      }
+      return out;
+    },
+    buildInstallmentAmounts: function (total, count) {
+      var tot = toCents(parseAmount(total));
+      var n = parseInt(count, 10);
+      if (!(n >= 1 && n <= 60)) throw new Error('Parcelas precisam estar entre 1 e 60.');
+      var base = Math.floor(tot / n), acc = 0, out = [];
+      for (var i = 0; i < n; i++) {
+        var v = (i === n - 1) ? tot - acc : base;
+        acc += v; out.push(fromCents(v));
+      }
+      return out;
+    },
+    validateInstallmentPurchase: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var card = db.credit_cards.find(function (c) { return c.id === data.credit_card_id && c.couple_id === cid; });
+      if (!card) throw new Error('Cartão inválido para este casal.');
+      if (!card.active) throw new Error('Este cartão está desativado.');
+      var description = String(data.description || '').trim();
+      if (!description) throw new Error('Descreva a compra (ex: Notebook).');
+      if (description.length > 120) throw new Error('Descrição muito longa (máx 120 caracteres).');
+      var total = parseAmount(data.total_amount);
+      var count = parseInt(data.count, 10);
+      if (!(count >= 1 && count <= 60)) throw new Error('Parcelas precisam estar entre 1 e 60.');
+      var first = cleanDate(data.first_installment_date);
+      var cat = db.categories.find(function (c) { return c.id === data.category_id && c.couple_id === cid && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type === 'income') throw new Error('Compra parcelada usa categoria de despesa.');
+      var payer = String(data.payer_user_id || '');
+      if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === payer; })) throw new Error('Escolha o responsável.');
+      var shared = !!data.is_shared;
+      var split = null;
+      if (shared) {
+        var mode = (data.split && data.split.mode) || '5050';
+        split = { mode: mode, entries: (data.split && data.split.entries) || [] };
+        DB.buildSplits(userId, total, split); // valida 100% / somas sobre o total
+      }
+      var dates = DB.calculateInstallmentDates(first, count);
+      var amounts = DB.buildInstallmentAmounts(total, count);
+      return { couple_id: cid, credit_card_id: card.id, description: description, total_amount: total, installment_count: count, category_id: cat.id, is_shared: shared, payer_user_id: payer, split_mode: split ? split.mode : '5050', split_entries: split ? split.entries : [], notes: String(data.notes || '').slice(0, 500), dates: dates, amounts: amounts };
+    },
+    createInstallmentPurchase: function (userId, data) {
+      var v = DB.validateInstallmentPurchase(userId, data);
+      var db = read();
+      var p = { id: id('ip'), couple_id: v.couple_id, created_by: userId, credit_card_id: v.credit_card_id, description: v.description, total_amount: v.total_amount, installment_count: v.installment_count, installment_amount: v.amounts[0], first_installment_date: v.dates[0], category_id: v.category_id, is_shared: v.is_shared, payer_user_id: v.payer_user_id, split_mode: v.split_mode, split_entries: v.split_entries, notes: v.notes, status: 'active', created_at: now(), updated_at: now(), deleted_at: null };
+      db.installment_purchases.push(p);
+      v.dates.forEach(function (d, i) {
+        var row = { id: id('in'), couple_id: v.couple_id, installment_purchase_id: p.id, installment_number: i + 1, total_installments: v.installment_count, amount: v.amounts[i], due_date: d, status: 'pending', credit_card_id: v.credit_card_id, invoice_id: null, transaction_id: null, created_at: now(), updated_at: now(), deleted_at: null };
+        var iv = findOrCreateInvoiceInDb(db, v.couple_id, v.credit_card_id, d);
+        if (invoiceIsOpen(iv)) row.invoice_id = iv.id;
+        db.installments.push(row);
+      });
+      logAudit(db, v.couple_id, userId, 'installment_purchase', p.id, 'create', { total: v.total_amount, n: v.installment_count });
+      var evIPs = db.installments.filter(function (r) { return r.installment_purchase_id === p.id; }).map(function (r) {
+        return DB.pushEventInDb(db, v.couple_id, userId, 'installment_event', 'installment', r.id, { n: r.installment_number });
+      });
+      write(db);
+      evIPs.forEach(function (ev) { DB.processRulesForEvent(userId, ev); });
+      return p;
+    },
+    getInstallmentPurchase: function (userId, purchaseId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.installment_purchases.find(function (x) { return x.id === purchaseId && x.couple_id === cid && !x.deleted_at; });
+      if (!p) throw new Error('Compra parcelada não encontrada.');
+      return p;
+    },
+    getInstallment: function (userId, installmentId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.installments.find(function (x) { return x.id === installmentId && x.couple_id === cid && !x.deleted_at; });
+      if (!r) throw new Error('Parcela não encontrada.');
+      return r;
+    },
+    purchaseInstallments: function (userId, purchaseId) {
+      var p = DB.getInstallmentPurchase(userId, purchaseId);
+      var db = read();
+      return db.installments.filter(function (i) { return i.installment_purchase_id === p.id && !i.deleted_at; })
+        .sort(function (a, b) { return a.installment_number - b.installment_number; });
+    },
+    listInstallmentPurchases: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.installment_purchases.filter(function (p) {
+        return p.couple_id === cid && !p.deleted_at &&
+          (!f.card_id || p.credit_card_id === f.card_id) &&
+          (!f.status || p.status === f.status) &&
+          (!f.category_id || DB.catInFilter(db, cid, p.category_id, f.category_id));
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+    },
+    /* Responsabilidade por parcela: exata na parcela (residual determinístico).
+       5050/percentual aplicam o percentual ao valor da parcela; fixo distribui
+       proporcionalmente com resto determinístico. */
+    installmentResponsibility: function (userId, purchase, installmentCents) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ids = orderedMemberIds(db, cid);
+      var mode = purchase.split_mode || '5050';
+      var entries = purchase.split_entries || [];
+      function pctOf(u) {
+        var e = entries.find(function (x) { return x.user_id === u; });
+        return e ? parsePct(e.pct) : 0;
+      }
+      var out = [], acc = 0;
+      ids.forEach(function (u, idx) {
+        var share;
+        if (idx === ids.length - 1) {
+          share = installmentCents - acc;
+        } else if (mode === 'fixed') {
+          var e = entries.find(function (x) { return x.user_id === u; });
+          var Ft = toCents(purchase.total_amount);
+          var Fi = e ? toCents(parseAmount(e.amount)) : 0;
+          share = Ft ? Math.floor(Fi * installmentCents / Ft) : Math.floor(installmentCents / ids.length);
+        } else if (mode === 'percent') {
+          share = Math.round(installmentCents * pctOf(u) / 100);
+        } else {
+          share = Math.floor(installmentCents / ids.length);
+        }
+        acc += share;
+        out.push({ user_id: u, amount: fromCents(share) });
+      });
+      return out;
+    },
+    purchaseSummary: function (userId, purchaseId) {
+      var p = DB.getInstallmentPurchase(userId, purchaseId);
+      var rows = DB.purchaseInstallments(userId, purchaseId);
+      var paid = 0, paidN = 0, pend = 0, pendN = 0, next = null;
+      rows.forEach(function (r) {
+        if (r.status === 'paid') { paid += toCents(r.amount); paidN++; }
+        else if (r.status === 'pending') { pend += toCents(r.amount); pendN++; if (!next || r.due_date < next) next = r.due_date; }
+      });
+      return { totalAmount: p.total_amount, installmentCount: p.installment_count, paidInstallments: paidN, pendingInstallments: pendN, paidAmount: fromCents(paid), pendingAmount: fromCents(pend), nextDueDate: next };
+    },
+    updateInstallmentPurchase: function (userId, purchaseId, data) {
+      // só não-estruturais; total/parcelas/cartão/data inicial exigem recriar.
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.installment_purchases.find(function (x) { return x.id === purchaseId && x.couple_id === cid && !x.deleted_at; });
+      if (!p) throw new Error('Compra parcelada não encontrada.');
+      if (p.status === 'cancelled') throw new Error('Compra cancelada não pode ser editada.');
+      var description = String((data && data.description) || '').trim();
+      if (!description) throw new Error('Descreva a compra.');
+      var cat = db.categories.find(function (c) { return c.id === data.category_id && c.couple_id === cid && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type === 'income') throw new Error('Compra parcelada usa categoria de despesa.');
+      var payer = String(data.payer_user_id || '');
+      if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === payer; })) throw new Error('Escolha o responsável.');
+      var shared = !!data.is_shared, split = null;
+      if (shared) {
+        var mode = (data.split && data.split.mode) || '5050';
+        split = { mode: mode, entries: (data.split && data.split.entries) || [] };
+        DB.buildSplits(userId, p.total_amount, split);
+      }
+      p.description = description.slice(0, 120); p.category_id = cat.id; p.payer_user_id = payer;
+      p.is_shared = shared; p.split_mode = split ? split.mode : '5050'; p.split_entries = split ? split.entries : [];
+      p.notes = String((data && data.notes) || '').slice(0, 500); p.updated_at = now();
+      logAudit(db, cid, userId, 'installment_purchase', purchaseId, 'update', {});
+      write(db); return p;
+    },
+    cancelInstallmentPurchase: function (userId, purchaseId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.installment_purchases.find(function (x) { return x.id === purchaseId && x.couple_id === cid && !x.deleted_at; });
+      if (!p) throw new Error('Compra parcelada não encontrada.');
+      if (p.status === 'cancelled') throw new Error('Compra já cancelada.');
+      p.status = 'cancelled'; p.updated_at = now();
+      db.installments.forEach(function (r) {
+        if (r.installment_purchase_id === purchaseId && r.status === 'pending' && !r.deleted_at) { r.status = 'cancelled'; r.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'installment_purchase', purchaseId, 'cancel', {});
+      write(db); return p;
+    },
+    calculateCardInstallmentCommitment: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (!c) throw new Error('Cartão não encontrado.');
+      var actIds = {};
+      db.installment_purchases.forEach(function (p) { if (p.couple_id === cid && !p.deleted_at && p.status === 'active') actIds[p.id] = true; });
+      var s = 0;
+      db.installments.forEach(function (r) {
+        if (r.couple_id === cid && r.credit_card_id === cardId && !r.deleted_at && r.status === 'pending' && actIds[r.installment_purchase_id]) s += toCents(r.amount);
+      });
+      return fromCents(s);
+    },
+    cardHasPurchases: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.installment_purchases.some(function (p) { return p.credit_card_id === cardId && p.couple_id === cid && !p.deleted_at; });
+    },
+    cardName: function (userId, cardId) {
+      if (!cardId) return null;
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      return c ? c.name : 'Cartão removido';
+    },
+    /* ============ PROMPT 12 (V2): FATURAS E PAGAMENTO ============
+       Compra → fatura (aberta) → fechamento → pagamento → conta −, limite +.
+       Pagamento NUNCA é despesa (só invoice_payments) e nunca settlement.
+       Totais derivados; IDs nunca confiados do frontend (tudo via myCoupleId).
+       Centavos inteiros em todo cálculo. */
+    dateAddDays: function (iso, n) {
+      var p = String(iso).slice(0, 10).split('-');
+      var t = Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)) + n * 864e5;
+      var d = new Date(t);
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+    },
+    /* Ciclo do cartão para uma data: compras até o fechamento (inclusive) entram.
+       Retorna período, fechamento, vencimento e mês de referência (mês do fechamento). */
+    calculateInvoicePeriod: function (cardOrId, refISO, userId) {
+      var db = read();
+      var card = typeof cardOrId === 'string' ? db.credit_cards.find(function (c) { return c.id === cardOrId; }) : cardOrId;
+      if (!card) throw new Error('Cartão não encontrado.');
+      return invoicePeriodFor(card, refISO || now().slice(0, 10));
+    },
+    /* Idempotente: localiza a fatura do cartão+período ou cria (aberta). */
+    getOrCreateInvoiceForCardCharge: function (userId, cardId, dateISO) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var card = db.credit_cards.find(function (c) { return c.id === cardId && c.couple_id === cid; });
+      if (!card) throw new Error('Cartão inválido para este casal.');
+      var per = DB.calculateInvoicePeriod(card, dateISO);
+      var inv = db.invoices.find(function (i) { return i.couple_id === cid && i.credit_card_id === cardId && i.reference_month === per.refMonth && i.reference_year === per.refYear; });
+      if (inv) return inv;
+      inv = { id: id('iv'), couple_id: cid, credit_card_id: cardId, reference_month: per.refMonth, reference_year: per.refYear, billing_period_start: per.start, billing_period_end: per.end, closing_date: per.closing, due_date: per.due, total_amount: 0, paid_amount: 0, status: 'open', payment_account_id: null, paid_at: null, created_at: now(), updated_at: now(), cancelled_at: null };
+      db.invoices.push(inv); write(db); return inv;
+    },
+    calculateInvoiceTotal: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      var s = 0;
+      db.transactions.forEach(function (t) {
+        if (t.couple_id === cid && !t.deleted_at && t.type === 'expense' && (t.invoice_id || null) === invoiceId) s += toCents(t.amount);
+      });
+      db.installments.forEach(function (r) {
+        if (r.couple_id === cid && !r.deleted_at && (r.invoice_id || null) === invoiceId && (r.status === 'pending' || r.status === 'paid')) s += toCents(r.amount);
+      });
+      return fromCents(s);
+    },
+    calculateInvoiceOutstanding: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      return fromCents(Math.max(0, toCents(DB.calculateInvoiceTotal(userId, invoiceId)) - toCents(inv.paid_amount)));
+    },
+    calculateInvoiceStatus: function (userId, invoiceId, todayISO) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      if (inv.status === 'cancelled') return 'cancelled';
+      var total = toCents(DB.calculateInvoiceTotal(userId, invoiceId));
+      if (total > 0 && toCents(inv.paid_amount) >= total) return 'paid';
+      var today = (todayISO || now().slice(0, 10)).slice(0, 10);
+      if (today > inv.closing_date) {
+        if (today > inv.due_date && (total - toCents(inv.paid_amount)) > 0) return 'overdue';
+        return 'closed';
+      }
+      return 'open';
+    },
+    refreshInvoice: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      if (inv.status === 'cancelled') return inv;
+      var st = DB.calculateInvoiceStatus(userId, invoiceId);
+      if (inv.status === 'open') inv.total_amount = DB.calculateInvoiceTotal(userId, invoiceId);
+      if (st !== inv.status) { inv.status = st; inv.updated_at = now(); write(db); }
+      else if (inv.status === 'open') { write(db); }
+      return DB.getInvoiceRaw(userId, invoiceId);
+    },
+    getInvoiceRaw: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      return inv;
+    },
+    getInvoice: function (userId, invoiceId) { return DB.refreshInvoice(userId, invoiceId); },
+    listInvoices: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.invoices.filter(function (i) {
+        return i.couple_id === cid &&
+          (!f.card_id || i.credit_card_id === f.card_id) &&
+          (!f.month || i.reference_month === parseInt(f.month, 10)) &&
+          (!f.year || i.reference_year === parseInt(f.year, 10));
+      });
+      rows.forEach(function (i) {
+        if (i.status !== 'cancelled') {
+          var st = DB.calculateInvoiceStatus(userId, i.id);
+          if (i.status === 'open') i.total_amount = DB.calculateInvoiceTotal(userId, i.id);
+          if (st !== i.status) { i.status = st; i.updated_at = now(); }
+        }
+      });
+      write(db);
+      var out = rows;
+      if (f.status) out = out.filter(function (i) { return i.status === f.status; });
+      out.sort(function (a, b) { return (b.due_date + b.created_at).localeCompare(a.due_date + a.created_at); });
+      return out;
+    },
+    invoiceItems: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.getInvoiceRaw(userId, invoiceId);
+      var txs = db.transactions.filter(function (t) { return t.couple_id === cid && !t.deleted_at && (t.invoice_id || null) === invoiceId; })
+        .sort(function (a, b) { return a.date.localeCompare(b.date); });
+      var inst = db.installments.filter(function (r) { return r.couple_id === cid && !r.deleted_at && (r.invoice_id || null) === invoiceId && r.status !== 'cancelled'; })
+        .sort(function (a, b) { return a.due_date.localeCompare(b.due_date); });
+      return { txs: txs, installments: inst };
+    },
+    closeInvoice: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      if (inv.status === 'cancelled') throw new Error('Fatura cancelada não pode ser fechada.');
+      if (inv.status === 'paid') throw new Error('Fatura já paga.');
+      var dyn = DB.calculateInvoiceStatus(userId, invoiceId);
+      if (dyn === 'open') {
+        inv.total_amount = DB.calculateInvoiceTotal(userId, invoiceId);
+        inv.status = 'closed'; inv.updated_at = now();
+        logAudit(db, cid, userId, 'invoice', invoiceId, 'close', { total: inv.total_amount });
+        write(db);
+        DB.processRulesForEvent(userId, DB.emitEvent(userId, { event_type: 'invoice_event', entity_type: 'invoice', entity_id: invoiceId, metadata: { action: 'closed' } }).event);
+      } else if (dyn !== inv.status) {
+        inv.status = dyn; inv.updated_at = now(); write(db);
+      }
+      return DB.getInvoiceRaw(userId, invoiceId);
+    },
+    cancelInvoice: function (userId, invoiceId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      if (inv.status === 'paid') throw new Error('Fatura paga não pode ser cancelada.');
+      if (inv.status === 'cancelled') throw new Error('Fatura já cancelada.');
+      inv.status = 'cancelled'; inv.cancelled_at = now(); inv.updated_at = now();
+      logAudit(db, cid, userId, 'invoice', invoiceId, 'cancel', {});
+      write(db);
+      DB.processRulesForEvent(userId, DB.emitEvent(userId, { event_type: 'invoice_event', entity_type: 'invoice', entity_id: invoiceId, metadata: { action: 'cancelled' } }).event);
+      return inv;
+    },
+    /* Pagamento integral e atômico: 1 escrita (pagamento + fatura + parcelas).
+       Nunca cria despesa, transferência ou settlement. */
+    payInvoice: function (userId, invoiceId, data) {
+      DB.requireAuthz(userId, 'pay_invoice', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      if (inv.status === 'cancelled') throw new Error('Fatura cancelada não pode ser paga.');
+      if (inv.status === 'paid') throw new Error('Esta fatura já foi paga.');
+      var total = toCents(DB.calculateInvoiceTotal(userId, invoiceId));
+      var paid = toCents(inv.paid_amount);
+      var outstanding = total - paid;
+      if (outstanding <= 0) throw new Error('Não há valor pendente nesta fatura.');
+      var acc = db.accounts.find(function (a) { return a.id === data.payment_account_id && a.couple_id === cid; });
+      if (!acc) throw new Error('Conta inválida para este casal.');
+      if (!acc.active) throw new Error('Conta desativada não pode pagar fatura.');
+      var amount = toCents(parseAmount(data.amount));
+      if (amount !== outstanding) throw new Error('Pagamento integral de ' + money(fromCents(outstanding)) + '.');
+      var date = data.payment_date ? cleanDate(data.payment_date) : now().slice(0, 10);
+      var pay = { id: id('ip2'), couple_id: cid, invoice_id: invoiceId, payment_account_id: acc.id, amount: fromCents(amount), payment_date: date, notes: String((data && data.notes) || '').slice(0, 300), created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      db.invoice_payments.push(pay);
+      inv.paid_amount = fromCents(paid + amount);
+      inv.status = 'paid'; inv.paid_at = now(); inv.payment_account_id = acc.id; inv.updated_at = now();
+      db.installments.forEach(function (r) {
+        if (r.couple_id === cid && !r.deleted_at && (r.invoice_id || null) === invoiceId && r.status === 'pending') { r.status = 'paid'; r.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'invoice', invoiceId, 'pay', { amount: fromCents(amount), account: acc.id });
+      write(db);
+      DB.processRulesForEvent(userId, DB.emitEvent(userId, { event_type: 'invoice_event', entity_type: 'invoice', entity_id: invoiceId, metadata: { action: 'paid' } }).event);
+      return pay;
+    },
+    listInvoicePayments: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.invoice_payments.filter(function (p) {
+        return p.couple_id === cid && !p.deleted_at &&
+          (!f.invoice_id || p.invoice_id === f.invoice_id) &&
+          (!f.account_id || p.payment_account_id === f.account_id);
+      }).sort(function (a, b) { return (b.payment_date + b.created_at).localeCompare(a.payment_date + a.created_at); });
+    },
+    /* Compromisso real: compras à vista não quitadas + parcelas pendentes. Sem dupla. */
+    calculateCardOutstandingCommitment: function (userId, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.credit_cards.find(function (x) { return x.id === cardId && x.couple_id === cid; });
+      if (!c) throw new Error('Cartão não encontrado.');
+      var paidInv = {};
+      db.invoices.forEach(function (i) { if (i.couple_id === cid && i.status === 'paid') paidInv[i.id] = true; });
+      var s = 0;
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense' || (t.credit_card_id || null) !== cardId) return;
+        if (t.invoice_id && paidInv[t.invoice_id]) return;
+        s += toCents(t.amount);
+      });
+      var actIds = {};
+      db.installment_purchases.forEach(function (p) { if (p.couple_id === cid && !p.deleted_at && p.status === 'active') actIds[p.id] = true; });
+      db.installments.forEach(function (r) {
+        if (r.couple_id === cid && r.credit_card_id === cardId && !r.deleted_at && r.status === 'pending' && actIds[r.installment_purchase_id]) s += toCents(r.amount);
+      });
+      return fromCents(s);
+    },
+    /* ============ PROMPT 13: VISÕES E COMPROMISSOS (central, sem fórmula na UI) ============
+       EU = só contas/cartões individuais do usuário (+ linha informativa da conjunta);
+       PARCEIRO = espelho; CASAL = tudo. Orçamento/metas/faturas seguem do casal. */
+    visionAccounts: function (userId, vision) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { list: [], total: 0, note: '' };
+      if (!cid) return out;
+      var all = DB.listAccounts(userId, 'active');
+      var ids = orderedMemberIds(db, cid);
+      var focus = vision === 'me' ? userId : (vision === 'partner' ? ids.find(function (x) { return x !== userId; }) : null);
+      var joint = 0, jointN = 0;
+      all.forEach(function (a) {
+        var bal = DB.calculateAccountBalance(userId, a.id);
+        if (!vision || vision === 'couple') { out.list.push({ account: a, balance: bal }); out.total = fromCents(toCents(out.total) + toCents(bal)); }
+        else if (a.owner_type === 'individual' && a.owner_user_id === focus) { out.list.push({ account: a, balance: bal }); out.total = fromCents(toCents(out.total) + toCents(bal)); }
+        else if (a.owner_type === 'joint') { joint = fromCents(toCents(joint) + toCents(bal)); jointN++; }
+      });
+      if (vision && vision !== 'couple') out.note = jointN ? 'Conjuntas: ' + money(joint) + ' (visão do casal)' : '';
+      return out;
+    },
+    visionCards: function (userId, vision) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { list: [], totalLimit: 0, totalUsed: 0, totalAvailable: 0, anyExceeded: false, note: '' };
+      if (!cid) return out;
+      var ids = orderedMemberIds(db, cid);
+      var focus = vision === 'me' ? userId : (vision === 'partner' ? ids.find(function (x) { return x !== userId; }) : null);
+      DB.listCards(userId, 'active').forEach(function (c) {
+        if (vision && vision !== 'couple') {
+          if (c.owner_type === 'individual' && c.owner_user_id !== focus) return;
+          if (c.owner_type === 'joint') { out.note = 'Inclui cartões conjuntos (visão do casal mostra todos)'; }
+        }
+        var u = DB.calculateCardAvailableLimit(userId, c.id);
+        out.list.push({ card: c, used: u.used, available: u.available, exceeded: u.exceeded });
+        out.totalLimit = fromCents(toCents(out.totalLimit) + toCents(u.limit));
+        out.totalUsed = fromCents(toCents(out.totalUsed) + toCents(u.used));
+        if (u.exceeded) out.anyExceeded = true;
+      });
+      out.totalAvailable = fromCents(Math.max(0, toCents(out.totalLimit) - toCents(out.totalUsed)));
+      return out;
+    },
+    /* Parcelas pendentes com vencimento na janela (para compromissos unificados). */
+    upcomingInstallments: function (userId, fromISO, toISO) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var actIds = {};
+      db.installment_purchases.forEach(function (p) { if (p.couple_id === cid && !p.deleted_at && p.status === 'active') actIds[p.id] = true; });
+      var names = {};
+      db.installment_purchases.forEach(function (p) { names[p.id] = p.description; });
+      return db.installments.filter(function (r) {
+        return r.couple_id === cid && !r.deleted_at && r.status === 'pending' && actIds[r.installment_purchase_id] && r.due_date >= fromISO && r.due_date <= toISO;
+      }).map(function (r) { r.purchase_name = names[r.installment_purchase_id] || 'Parcelada'; return r; })
+        .sort(function (a, b) { return a.due_date.localeCompare(b.due_date); });
+    },
+    accountName: function (userId, accountId) {
+      if (!accountId) return 'Sem conta';
+      var db = read(), cid = DB.myCoupleId(userId);
+      var a = db.accounts.find(function (x) { return x.id === accountId && x.couple_id === cid; });
+      return a ? a.name : 'Conta removida';
+    },
+    catName: function (userId, catId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.categories.find(function (x) { return x.id === catId && x.couple_id === cid; });
+      if (!c) return 'Categoria';
+      if (!c.parent_category_id) return c.icon + ' ' + c.name;
+      var p = db.categories.find(function (x) { return x.id === c.parent_category_id && x.couple_id === cid; });
+      return c.icon + ' ' + c.name + (p ? ' · ' + p.name : '');
+    },
+    userName: function (userId, targetId) {
+      var db = read();
+      var u = db.users.find(function (x) { return x.id === targetId; });
+      if (!u) return '—';
+      return u.id === userId ? u.nome.split(' ')[0] + ' (você)' : u.nome.split(' ')[0];
+    },
+    /* Aliases oficiais da auditoria (§40/45): nomes canônicos, mesma implementação. */
+    calculateMonthlySummary: function (userId, opt) { return DB.dashboardCalc(userId, opt || {}); },
+    calculateCategoryExpenses: function (userId, opt) {
+      var d = DB.dashboardCalc(userId, opt || {});
+      return { byCat: d.byCat, incomeByCat: d.incomeByCat, expense: d.expense, income: d.income };
+    },
+    calculateBudgetStatus: function (pct) { return DB.budgetStatus(pct); },
+    calculateGoalProgress: function (userId, goalId) {
+      var g = typeof goalId === 'string' ? DB.getGoal(userId, goalId) : goalId;
+      return DB.goalProgress(g);
+    },
+    calculateInstallmentPurchaseSummary: function (userId, purchaseId) { return DB.purchaseSummary(userId, purchaseId); },
+    /* Trilha de auditoria: leitura do próprio casal (sem UI pública). */
+    listAuditLogs: function (userId, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.audit_logs.filter(function (l) { return l.couple_id === cid; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, limit || 100);
+    },
+    /* Diagnóstico interno de consistência (somente leitura). Retorna achados
+       {code, entity, id, detail}. Vazio = consistente. */
+    diagnose: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = [];
+      if (!cid) return out;
+      function flag(code, entity, id, detail) { out.push({ code: code, entity: entity, id: id, detail: detail }); }
+      var memberIds = {};
+      db.members.forEach(function (m) { if (m.couple_id === cid) memberIds[m.user_id] = true; });
+      var nMembers = Object.keys(memberIds).length;
+      if (nMembers > 2) flag('couple_too_big', 'couple', cid, 'Casal com ' + nMembers + ' membros');
+      var catIds = {}, accIds = {}, cardIds = {}, invIds = {};
+      db.categories.forEach(function (c) { if (c.couple_id === cid) catIds[c.id] = c; });
+      Object.keys(catIds).forEach(function (id) {
+        var c = catIds[id];
+        if (c.parent_category_id) {
+          if (c.parent_category_id === c.id) flag('cat_self_parent', 'categories', c.id, 'Aponta para si mesma');
+          var p = catIds[c.parent_category_id];
+          if (!p) flag('cat_orphan_parent', 'categories', c.id, 'Principal ausente/outro casal');
+          else {
+            if (p.parent_category_id) flag('cat_too_deep', 'categories', c.id, 'Mais de 2 níveis');
+            if (p.type !== c.type) flag('cat_type_mismatch', 'categories', c.id, 'Tipo difere da principal');
+          }
+        }
+      });
+      db.accounts.forEach(function (a) { if (a.couple_id === cid) accIds[a.id] = a; });
+      db.credit_cards.forEach(function (c) { if (c.couple_id === cid) cardIds[c.id] = c; });
+      db.invoices.forEach(function (i) { if (i.couple_id === cid) invIds[i.id] = i; });
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.amount <= 0) flag('tx_bad_amount', 'transaction', t.id, 'Valor não positivo');
+        if (!catIds[t.category_id]) flag('tx_bad_category', 'transaction', t.id, 'Categoria inválida/excluída');
+        if (!memberIds[t.payer_user_id]) flag('tx_bad_payer', 'transaction', t.id, 'Pagador fora do casal');
+        if (t.account_id && !accIds[t.account_id]) flag('tx_bad_account', 'transaction', t.id, 'Conta de outro casal');
+        if (t.credit_card_id && !cardIds[t.credit_card_id]) flag('tx_bad_card', 'transaction', t.id, 'Cartão de outro casal');
+        if (t.account_id && t.credit_card_id) flag('tx_dual_origin', 'transaction', t.id, 'Conta + cartão simultâneos');
+        if (t.invoice_id && !invIds[t.invoice_id]) flag('tx_bad_invoice', 'transaction', t.id, 'Fatura de outro casal');
+        if (t.is_shared) {
+          var ss = db.splits.filter(function (s) { return s.transaction_id === t.id; });
+          if (!ss.length) { flag('tx_no_splits', 'transaction', t.id, 'Compartilhada sem splits'); }
+          else {
+            var sum = ss.reduce(function (a, s) { return a + toCents(s.calculated_amount); }, 0);
+            if (sum !== toCents(t.amount)) flag('tx_split_mismatch', 'transaction', t.id, 'Splits somam ' + fromCents(sum));
+          }
+        }
+      });
+      var seenOcc = {};
+      db.recurring_occurrences.forEach(function (o) {
+        if (o.couple_id !== cid) return;
+        var k = o.recurring_transaction_id + '|' + o.due_date;
+        if (seenOcc[k]) flag('occurrence_dup', 'recurring_occurrences', o.id, 'Ocorrência duplicada');
+        seenOcc[k] = true;
+        if (o.status === 'paid') {
+          var tx = db.transactions.find(function (t) { return t.id === o.transaction_id && !t.deleted_at; });
+          if (!tx) flag('occurrence_orphan_paid', 'recurring_occurrences', o.id, 'Paga sem transação válida');
+        }
+      });
+      db.installment_purchases.forEach(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return;
+        if (!cardIds[p.credit_card_id]) flag('purchase_bad_card', 'installment_purchases', p.id, 'Cartão inválido');
+        var rows = db.installments.filter(function (r) { return r.installment_purchase_id === p.id && !r.deleted_at; });
+        if (rows.length !== p.installment_count) flag('purchase_count', 'installment_purchases', p.id, rows.length + '/' + p.installment_count + ' parcelas');
+        var sum = rows.reduce(function (a, r) { return a + toCents(r.amount); }, 0);
+        if (sum !== toCents(p.total_amount)) flag('purchase_sum', 'installment_purchases', p.id, 'Parcelas somam ' + fromCents(sum));
+      });
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid) return;
+        if (!cardIds[i.credit_card_id]) flag('invoice_no_card', 'invoices', i.id, 'Fatura sem cartão');
+        if (i.paid_amount < 0 || i.total_amount < 0) flag('invoice_negative', 'invoices', i.id, 'Valor negativo');
+        var _t = DB.calculateInvoiceTotal(userId, i.id);
+        if (_t > 0 && toCents(i.paid_amount) > toCents(_t)) flag('invoice_overpaid', 'invoices', i.id, 'Pago além do total');
+      });
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (!accIds[t.from_account_id] || !accIds[t.to_account_id]) flag('transfer_cross', 'transfers', t.id, 'Conta fora do casal');
+        if (t.from_account_id === t.to_account_id) flag('transfer_same', 'transfers', t.id, 'Origem = destino');
+        if (t.amount <= 0) flag('transfer_bad_amount', 'transfers', t.id, 'Valor inválido');
+      });
+      db.settlements.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        if (!memberIds[s.from_user_id] || !memberIds[s.to_user_id]) flag('settlement_cross', 'settlements', s.id, 'Pessoa fora do casal');
+        if (s.amount <= 0) flag('settlement_bad_amount', 'settlements', s.id, 'Valor inválido');
+      });
+      var seenBudget = {};
+      db.budgets.forEach(function (b) {
+        if (b.couple_id !== cid) return;
+        var k = b.category_id + '|' + b.month + '|' + b.year;
+        if (seenBudget[k]) flag('budget_dup', 'budgets', b.id, 'Orçamento duplicado');
+        seenBudget[k] = true;
+        if (!catIds[b.category_id]) flag('budget_bad_cat', 'budgets', b.id, 'Categoria inválida');
+      });
+      db.goals.forEach(function (g) {
+        if (g.couple_id !== cid) return;
+        if (toCents(g.current_amount) > toCents(g.target_amount)) flag('goal_over', 'goals', g.id, 'Atual além do objetivo');
+      });
+      var planIds = {};
+      db.financial_plans.forEach(function (p) {
+        if (p.couple_id !== cid) return;
+        planIds[p.id] = p;
+        if (DB.PLAN_STATUSES.indexOf(p.status) < 0) flag('plan_bad_status', 'financial_plans', p.id, 'Status inválido');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(p.period_start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(p.period_end || '')) flag('plan_bad_period', 'financial_plans', p.id, 'Período inválido');
+        else if (p.period_start > p.period_end) flag('plan_bad_period', 'financial_plans', p.id, 'Início após o fim');
+      });
+      var scenIds = {};
+      db.financial_plan_scenarios.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        scenIds[s.id] = s;
+        if (!planIds[s.plan_id]) flag('plan_scen_orphan', 'financial_plan_scenarios', s.id, 'Sem plano válido');
+        if (DB.PLAN_SCENARIO_TYPES.indexOf(s.scenario_type) < 0) flag('plan_scen_bad_type', 'financial_plan_scenarios', s.id, 'Tipo inválido');
+        if (DB.PLAN_SCENARIO_STATUS.indexOf(s.status) < 0) flag('plan_scen_bad_status', 'financial_plan_scenarios', s.id, 'Status inválido');
+      });
+      var baseCount = {};
+      db.financial_plan_scenarios.forEach(function (s) {
+        if (s.couple_id !== cid || s.status === 'archived' || s.scenario_type !== 'baseline') return;
+        baseCount[s.plan_id] = (baseCount[s.plan_id] || 0) + 1;
+      });
+      Object.keys(baseCount).forEach(function (pid) {
+        if (baseCount[pid] > 1) flag('plan_dup_baseline', 'financial_plans', pid, 'Mais de um cenário base ativo');
+      });
+      db.financial_plan_items.forEach(function (i) {
+        if (i.couple_id !== cid || i.deleted_at) return;
+        if (!planIds[i.plan_id]) { flag('plan_item_orphan', 'financial_plan_items', i.id, 'Sem plano válido'); return; }
+        if (DB.PLAN_ITEM_TYPES.indexOf(i.item_type) < 0) flag('plan_item_bad_type', 'financial_plan_items', i.id, 'Tipo inválido');
+        if (DB.PLAN_ITEM_SOURCES.indexOf(i.source_type) < 0) flag('plan_item_bad_source', 'financial_plan_items', i.id, 'Origem inválida');
+        if (DB.PLAN_ITEM_FREQUENCIES.indexOf(i.frequency) < 0) flag('plan_item_bad_freq', 'financial_plan_items', i.id, 'Frequência inválida');
+        if (!(i.amount > 0) && !(i.item_type === 'adjustment' && i.amount !== 0)) flag('plan_item_bad_amount', 'financial_plan_items', i.id, 'Valor inválido');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(i.planned_date || '')) flag('plan_item_bad_date', 'financial_plan_items', i.id, 'Data inválida');
+        else if ((i.start_date || i.planned_date) > (i.end_date || i.planned_date)) flag('plan_item_bad_range', 'financial_plan_items', i.id, 'Início após o fim');
+        if (i.category_id && !catIds[i.category_id]) flag('plan_item_bad_cat', 'financial_plan_items', i.id, 'Categoria de outro casal');
+        if (i.account_id && !accIds[i.account_id]) flag('plan_item_bad_acc', 'financial_plan_items', i.id, 'Conta de outro casal');
+        if (i.user_id && !memberIds[i.user_id]) flag('plan_item_bad_user', 'financial_plan_items', i.id, 'Pessoa fora do casal');
+      });
+      db.financial_plan_scenario_items.forEach(function (x) {
+        if (x.couple_id !== cid) return;
+        var s = scenIds[x.scenario_id];
+        if (!s) { flag('plan_scen_item_orphan', 'financial_plan_scenario_items', x.id, 'Sem cenário válido'); return; }
+        if (DB.PLAN_ADJUST_TYPES.indexOf(x.adjustment_type) < 0) flag('plan_scen_item_bad_adj', 'financial_plan_scenario_items', x.id, 'Ajuste inválido');
+        if (x.adjustment_type === 'fixed' && !(x.adjustment_value >= 0)) flag('plan_scen_item_bad_val', 'financial_plan_scenario_items', x.id, 'Valor fixo inválido');
+        if (x.adjustment_type === 'percentage' && (!isFinite(x.adjustment_value) || x.adjustment_value < -100 || x.adjustment_value > 1000)) flag('plan_scen_item_bad_val', 'financial_plan_scenario_items', x.id, 'Percentual inválido');
+        if (x.source_plan_item_id) {
+          var src = db.financial_plan_items.find(function (r) { return r.id === x.source_plan_item_id; });
+          if (!src || src.deleted_at) flag('plan_scen_item_orphan_src', 'financial_plan_scenario_items', x.id, 'Item base ausente');
+          else if (src.couple_id !== cid || src.plan_id !== s.plan_id) flag('plan_scen_item_cross', 'financial_plan_scenario_items', x.id, 'Item base de outro plano/casal');
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(x.planned_date || '')) flag('plan_scen_item_bad_date', 'financial_plan_scenario_items', x.id, 'Data inválida');
+      });
+      db.category_suggestions.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        var tx = db.transactions.find(function (t) { return t.id === s.transaction_id; });
+        if (!tx || tx.deleted_at) { if (s.status === 'pending') flag('suggestion_orphan', 'category_suggestions', s.id, 'Sem transação válida'); return; }
+        if (tx.couple_id !== cid) flag('suggestion_cross', 'category_suggestions', s.id, 'Transação de outro casal');
+        if (!db.categories.some(function (c) { return c.id === s.suggested_category_id && c.couple_id === cid; })) flag('suggestion_bad_cat', 'category_suggestions', s.id, 'Categoria sugerida inválida');
+      });
+      db.import_batches.forEach(function (b) {
+        if (b.couple_id !== cid) return;
+        if ((b.import_source_type || 'bank_statement') === 'credit_card_statement') {
+          var cc = db.credit_cards.find(function (c) { return c.id === b.credit_card_id; });
+          if (!cc || cc.couple_id !== cid) flag('batch_bad_card', 'import_batches', b.id, 'Cartão inválido');
+          if (b.invoice_id) {
+            var bi = db.invoices.find(function (i) { return i.id === b.invoice_id; });
+            if (!bi || bi.couple_id !== cid) flag('batch_bad_invoice', 'import_batches', b.id, 'Fatura inválida');
+            else if (bi.credit_card_id !== b.credit_card_id) flag('batch_invoice_card', 'import_batches', b.id, 'Fatura de outro cartão');
+          }
+        } else {
+          var acc = db.accounts.find(function (a) { return a.id === b.account_id; });
+          if (!acc || acc.couple_id !== cid) flag('batch_bad_account', 'import_batches', b.id, 'Conta inválida');
+        }
+      });
+      db.imported_transactions.forEach(function (r) {
+        if (r.couple_id !== cid) return;
+        var b = db.import_batches.find(function (x) { return x.id === r.import_batch_id; });
+        if (!b || b.couple_id !== cid) { flag('importrow_orphan', 'imported_transactions', r.id, 'Sem lote válido'); return; }
+        if (r.created_transaction_id) {
+          var tx = db.transactions.find(function (t) { return t.id === r.created_transaction_id; });
+          if (!tx || tx.deleted_at) flag('importrow_orphan_tx', 'imported_transactions', r.id, 'Transação criada ausente');
+          else if (tx.couple_id !== cid) flag('importrow_cross', 'imported_transactions', r.id, 'Transação de outro casal');
+        }
+        if (r.matched_installment_id) {
+          var mi = db.installments.find(function (t) { return t.id === r.matched_installment_id; });
+          if (!mi || mi.deleted_at) flag('importrow_orphan_ins', 'imported_transactions', r.id, 'Parcela conciliada ausente');
+          else if (mi.couple_id !== cid) flag('importrow_ins_cross', 'imported_transactions', r.id, 'Parcela de outro casal');
+        }
+      });
+      db.financial_insights.forEach(function (r) {
+        if (r.couple_id !== cid) return;
+        if (DB.INSIGHT_TYPES.indexOf(r.insight_type) < 0) flag('insight_bad_type', 'financial_insights', r.id, 'Tipo fora do catálogo');
+        if (r.user_id) {
+          var mu = db.members.find(function (x) { return x.couple_id === cid && x.user_id === r.user_id; });
+          if (!mu) flag('insight_bad_user', 'financial_insights', r.id, 'Usuário fora do casal');
+        }
+        if (!r.fingerprint) flag('insight_no_fp', 'financial_insights', r.id, 'Sem fingerprint');
+      });
+      db.whatsapp_connections.forEach(function (c) {
+        if (c.couple_id !== cid) return;
+        if (c.user_id && !db.members.some(function (m) { return m.couple_id === cid && m.user_id === c.user_id; })) flag('wa_conn_user', 'whatsapp_connections', c.id, 'Usuário fora do casal');
+        if (['pending', 'active', 'revoked', 'blocked'].indexOf(c.status) < 0) flag('wa_conn_status', 'whatsapp_connections', c.id, 'Status inválido');
+      });
+      db.ai_actions.forEach(function (a) {
+        if (a.couple_id !== cid) return;
+        if (['pending_confirmation', 'confirmed', 'executing', 'completed', 'failed', 'cancelled', 'expired'].indexOf(a.status) < 0) flag('ai_action_status', 'ai_actions', a.id, 'Status inválido');
+      });
+      return out;
+    },
+    /* ============ PROMPT 16 (V2→V3): AUTOMAÇÃO FINANCEIRA ============
+       EVENTO → ENGINE → JOB → EXECUÇÃO (+ auditoria). Sem lógica financeira
+       própria: tudo via centrais (payOccurrence, refresh, budgetSummary,
+       goalProgress, diagnose, ensureOccurrences). Sem notificações/IA.
+       Executa só quando invocado (testes, diagnóstico, ação explícita);
+       NADA roda sozinho no carregamento das páginas. */
+    AUTOMATION_JOB_TYPES: ['recurring_processing', 'occurrence_processing', 'invoice_status_update', 'overdue_detection', 'budget_check', 'goal_check', 'financial_consistency_check', 'notification_preparation', 'custom', 'evaluate_intelligent_notifications', 'generate_notification_digest', 'expire_intelligent_notifications', 'calculate_planning_projection', 'calculate_plan_variance', 'refresh_active_plans', 'detect_planning_variance', 'expire_old_plans', 'openfinance_sync'],
+    /* Trilha de eventos (dedupe por chave). Mutations emitem trilha auditável;
+       scans emitem + roteiam. */
+    emitEvent: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var ev = DB.pushEventInDb(db, cid, userId, data.event_type, data.entity_type, data.entity_id, data.metadata);
+      var jobs = DB.routeEventInDb(db, cid, userId, ev, 'event');
+      write(db);
+      return { event: ev, jobs: jobs };
+    },
+    pushEventInDb: function (db, cid, userId, type, entityType, entityId, metadata) {
+      var key = ['EV', cid, String(type), String(entityType || ''), String(entityId || '')].join('|');
+      var ruleOrigin = false;
+      try { var rc0 = (typeof window !== 'undefined' && window.Juntos && window.Juntos.__ruleCtx) || null; ruleOrigin = !!(rc0 && rc0.rule_id); } catch (e0) { ruleOrigin = false; }
+      /* Mutação causada por regra gera evento próprio (nunca reutiliza o evento
+         que a disparou): sem isso, o processamento aninhado registraria
+         'skipped' com a mesma chave e apagaria o 'executed' real. */
+      if (!ruleOrigin) {
+        var ex = db.financial_events.find(function (e) { return e.idempotency_key === key; });
+        if (ex) return ex;
+      }
+      var safe = {};
+      if (metadata) Object.keys(metadata).forEach(function (k) {
+        var v = metadata[k];
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') safe[k] = v;
+      });
+      /* Carimbo anti-loop: mutação causada por regra carrega origem+profundidade. */
+      try {
+        var rc = (typeof window !== 'undefined' && window.Juntos && window.Juntos.__ruleCtx) || null;
+        if (rc && rc.rule_id) { safe.origin = 'rule'; safe.rule_id = String(rc.rule_id); safe.depth = rc.depth || 1; }
+      } catch (e) { /* sem contexto */ }
+      var ev = { id: id('fe'), couple_id: cid, user_id: userId || null, event_type: String(type), entity_type: String(entityType || ''), entity_id: String(entityId || ''), occurred_at: now(), metadata: safe, idempotency_key: key, created_at: now() };
+      db.financial_events.push(ev);
+      return ev;
+    },
+    /* Roteamento: só occurrence.due gera job de ação; demais eventos são trilha
+       para IA/notificações futuras (sem job = encerra, sem erro). */
+    routeEventInDb: function (db, cid, userId, ev, trigger) {
+      if (ev.event_type === 'occurrence.due' && ev.entity_id) {
+        var j = DB.createJobInDb(db, cid, userId, { job_type: 'occurrence_processing', payload: { occurrence_id: ev.entity_id } });
+        return j.duplicate ? [] : [j.job];
+      }
+      return [];
+    },
+    jobKey: function (cid, type, payload) {
+      function stable(o) {
+        if (!o || typeof o !== 'object') return String(o);
+        return '{' + Object.keys(o).sort().map(function (k) { return k + ':' + stable(o[k]); }).join(',') + '}';
+      }
+      return ['AJ', cid, type, stable(payload || {})].join('|');
+    },
+    createJobInDb: function (db, cid, userId, data) {
+      if (DB.AUTOMATION_JOB_TYPES.indexOf(data.job_type) < 0) throw new Error('Tipo de job inválido.');
+      var key = DB.jobKey(cid, data.job_type, data.payload);
+      var ex = db.automation_jobs.find(function (j) { return j.idempotency_key === key && j.status !== 'cancelled'; });
+      if (ex) return { job: ex, duplicate: true };
+      var job = { id: id('aj'), couple_id: cid, job_type: data.job_type, status: 'pending', scheduled_for: data.scheduled_for || now(), started_at: null, completed_at: null, attempt_count: 0, max_attempts: data.max_attempts && data.max_attempts >= 1 && data.max_attempts <= 10 ? data.max_attempts : 3, last_error: null, idempotency_key: key, payload: data.payload || {}, result: null, created_by: userId || null, created_at: now(), updated_at: now() };
+      db.automation_jobs.push(job);
+      return { job: job, duplicate: false };
+    },
+    createJob: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var r = DB.createJobInDb(db, cid, userId, data);
+      write(db);
+      return r;
+    },
+    cancelJob: function (userId, jobId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var j = db.automation_jobs.find(function (x) { return x.id === jobId && x.couple_id === cid; });
+      if (!j) throw new Error('Job não encontrado.');
+      if (j.status !== 'pending' && j.status !== 'failed') throw new Error('Só jobs pendentes ou com erro podem ser cancelados.');
+      j.status = 'cancelled'; j.updated_at = now(); write(db);
+      return j;
+    },
+    listJobs: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.automation_jobs.filter(function (j) {
+        return j.couple_id === cid && (!f.status || j.status === f.status) && (!f.type || j.job_type === f.type);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 50);
+    },
+    listExecutions: function (userId, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.automation_executions.filter(function (e) { return e.couple_id === cid; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, limit || 20);
+    },
+    automationStatus: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return { pending: 0, failed: 0, recent: [], lastRun: null };
+      var jobs = db.automation_jobs.filter(function (j) { return j.couple_id === cid; });
+      var recent = DB.listExecutions(userId, 10);
+      var done = recent.filter(function (e) { return e.status === 'success' || e.status === 'failed'; });
+      return {
+        pending: jobs.filter(function (j) { return j.status === 'pending'; }).length,
+        failed: jobs.filter(function (j) { return j.status === 'failed'; }).length,
+        recent: recent,
+        lastRun: done.length ? done[0].completed_at : null
+      };
+    },
+    /* Execução: valida elegibilidade, roda handler, registra execution sempre.
+       Falha volta a pending (retry) até max_attempts, depois failed. */
+    runJob: function (userId, jobId, trigger) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var j = db.automation_jobs.find(function (x) { return x.id === jobId && x.couple_id === cid; });
+      if (!j) throw new Error('Job não encontrado.');
+      function finish(status, error, result) {
+        var ex = { id: id('ae'), couple_id: cid, job_id: j.id, automation_type: j.job_type, trigger_source: trigger || 'manual', status: status, started_at: j.started_at || now(), completed_at: now(), error_message: error || null, metadata: result && typeof result === 'object' ? result : {}, created_at: now() };
+        db.automation_executions.push(ex);
+        j.updated_at = now();
+        logAudit(db, cid, userId, 'automation', j.id, status === 'success' ? 'run_ok' : status === 'skipped' ? 'run_skip' : 'run_fail', { type: j.job_type });
+        write(db);
+        return { job: j, execution: ex };
+      }
+      if (j.status === 'completed') return finish('skipped', null, { reason: 'already_completed' });
+      if (j.status === 'cancelled') return finish('skipped', null, { reason: 'cancelled' });
+      if (j.status === 'running') {
+        var stale = false;
+        try { stale = (Date.now() - new Date(j.started_at).getTime()) > 10 * 60e3; } catch (e) { stale = true; }
+        if (!stale) return finish('skipped', null, { reason: 'already_running' });
+        j.status = 'pending';
+      }
+      if (j.status === 'failed' && j.attempt_count >= j.max_attempts) return finish('skipped', null, { reason: 'max_attempts' });
+      if (j.scheduled_for && j.scheduled_for.slice(0, 16) > now().slice(0, 16)) return finish('skipped', null, { reason: 'not_due' });
+      if (j.status !== 'pending' && j.status !== 'failed') return finish('skipped', null, { reason: 'not_pending' });
+      j.status = 'running'; j.started_at = now(); j.attempt_count += 1; j.updated_at = now();
+      write(db);
+      try {
+        var out = DB.runJobHandler(userId, j);
+        if (out && out.skipped) {
+          var db2 = read();
+          var jj = db2.automation_jobs.find(function (x) { return x.id === jobId; });
+          jj.status = 'completed'; jj.completed_at = now(); jj.result = { skipped: true, reason: out.reason }; jj.updated_at = now();
+          write(db2);
+          var db3 = read();
+          return DB.finishExecution(db3, cid, userId, jj, trigger, 'skipped', null, { reason: out.reason });
+        }
+        var db4 = read();
+        var j4 = db4.automation_jobs.find(function (x) { return x.id === jobId; });
+        j4.status = 'completed'; j4.completed_at = now(); j4.result = out || {}; j4.updated_at = now();
+        write(db4);
+        return DB.finishExecution(read(), cid, userId, j4, trigger, 'success', null, out || {});
+      } catch (e) {
+        var db5 = read();
+        var j5 = db5.automation_jobs.find(function (x) { return x.id === jobId; });
+        j5.last_error = String((e && e.message) || e).slice(0, 300);
+        j5.updated_at = now();
+        if (j5.attempt_count >= j5.max_attempts) { j5.status = 'failed'; }
+        else { j5.status = 'pending'; }
+        write(db5);
+        return DB.finishExecution(read(), cid, userId, j5, trigger, 'failed', j5.last_error, {});
+      }
+    },
+    finishExecution: function (db, cid, userId, j, trigger, status, error, result) {
+      var ex = { id: id('ae'), couple_id: cid, job_id: j.id, automation_type: j.job_type, trigger_source: trigger || 'manual', status: status, started_at: j.started_at || now(), completed_at: now(), error_message: error || null, metadata: result && typeof result === 'object' ? result : {}, created_at: now() };
+      db.automation_executions.push(ex);
+      logAudit(db, cid, userId, 'automation', j.id, status === 'success' ? 'run_ok' : status === 'skipped' ? 'run_skip' : 'run_fail', { type: j.job_type });
+      write(db);
+      return { job: j, execution: ex };
+    },
+    runPendingJobs: function (userId, opt) {
+      opt = opt || {};
+      var limit = opt.limit && opt.limit > 0 ? opt.limit : 20;
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var nowS = now().slice(0, 16);
+      var due = db.automation_jobs.filter(function (j) {
+        return j.couple_id === cid && j.status === 'pending' && (!j.scheduled_for || j.scheduled_for.slice(0, 16) <= nowS);
+      }).sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); })
+        .slice(0, limit);
+      return due.map(function (j) { return DB.runJob(userId, j.id, opt.trigger || 'scan').execution; });
+    },
+    retryFailedJobs: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 0;
+      var n = 0;
+      db.automation_jobs.forEach(function (j) {
+        if (j.couple_id === cid && j.status === 'failed' && j.attempt_count < j.max_attempts) { j.status = 'pending'; j.updated_at = now(); n++; }
+      });
+      if (n) write(db);
+      return n;
+    },
+    /* Handlers: cada um usa SOMENTE centrais existentes. */
+    runJobHandler: function (userId, job) {
+      var p = job.payload || {};
+      var today = now().slice(0, 10);
+      switch (job.job_type) {
+        case 'occurrence_processing': {
+          var o = DB.getOccurrence(userId, p.occurrence_id);
+          if (o.status !== 'pending') return { skipped: true, reason: 'status_' + o.status };
+          if (o.transaction_id) return { skipped: true, reason: 'already_paid' };
+          if (o.due_date > today) return { skipped: true, reason: 'not_due' };
+          var t = DB.payOccurrence(userId, p.occurrence_id, { amount: o.amount });
+          return { transaction_id: t.id, amount: t.amount };
+        }
+        case 'recurring_processing': {
+          var n = DB.ensureOccurrences(userId, p.fromYm, p.toYm);
+          return { generated: n };
+        }
+        case 'invoice_status_update':
+        case 'overdue_detection': {
+          var rows = DB.listInvoices(userId, {});
+          var over = 0;
+          rows.forEach(function (i) {
+            if (i.status === 'overdue') {
+              over++;
+              DB.emitEvent(userId, { event_type: 'invoice.overdue', entity_type: 'invoice', entity_id: i.id, metadata: { due: i.due_date } });
+            }
+          });
+          return { invoices: rows.length, overdue: over };
+        }
+        case 'budget_check': {
+          var ym = p.ym || today.slice(0, 7);
+          var bs = DB.budgetSummary(userId, ym);
+          var hits = [];
+          bs.items.forEach(function (it) {
+            if (it.status.key === 'warn' || it.status.key === 'over') {
+              var ev = DB.emitEvent(userId, { event_type: 'budget.threshold_reached', entity_type: 'budget', entity_id: it.id + ':' + it.status.key, metadata: { month: ym, pct: it.pct } });
+              hits.push(ev.event.id);
+            }
+          });
+          return { month: ym, hits: hits.length };
+        }
+        case 'goal_check': {
+          var out = [];
+          DB.listGoals(userId, false).forEach(function (g) {
+            if (g.status !== 'active') return;
+            var pr = DB.goalProgress(g);
+            if (pr.pct >= 100) {
+              var ev = DB.emitEvent(userId, { event_type: 'goal.completed', entity_type: 'goal', entity_id: g.id, metadata: {} });
+              out.push(ev.event.id);
+            } else if (pr.pct >= 80) {
+              var ev2 = DB.emitEvent(userId, { event_type: 'goal.near', entity_type: 'goal', entity_id: g.id, metadata: { pct: pr.pct } });
+              out.push(ev2.event.id);
+            }
+          });
+          return { events: out.length };
+        }
+        case 'financial_consistency_check': {
+          var flags = DB.diagnose(userId);
+          return { issues: flags.length, codes: flags.map(function (f) { return f.code; }).slice(0, 20) };
+        }
+        case 'notification_preparation': {          var t0 = today, t7 = DB.dateAddDays(t0, 7);
+          var pend = DB.listOccurrences(userId, t0, t7, true).length;
+          var invs = DB.listInvoices(userId, {}).filter(function (i) { return i.status === 'overdue'; }).length;
+          var bsc = DB.budgetSummary(userId, t0.slice(0, 7));
+          var warn = bsc.items.filter(function (it) { return it.status.key !== 'ok'; }).length;
+          return { upcoming_7d: pend, overdue_invoices: invs, budgets_off: warn, prepared_at: now() };
+        }
+        case 'evaluate_intelligent_notifications': {
+          return { decisions: DB.intelEvaluateAll(userId, {}), evaluated_at: now() };
+        }
+        case 'generate_notification_digest': {
+          var kind = (job.payload && job.payload.kind) || 'daily';
+          return DB.intelDigest(userId, kind, {});
+        }
+        case 'expire_intelligent_notifications': {
+          return { expired: DB.intelExpireResolved(userId, {}), expired_at: now() };
+        }
+        case 'openfinance_sync': {
+          if (!DB.ofIsEnabled()) return { skipped: true, reason: 'feature_disabled' };
+          if (!p.connection_id) throw new Error('Conexão não informada.');
+          return DB.ofSyncNow(userId, p.connection_id, { sync_type: 'scheduled', fixture: p.fixture });
+        }
+        case 'calculate_planning_projection': {
+          var pp = (p.plan_id ? [DB.getPlan(userId, p.plan_id)] : DB.listPlans(userId, { status: 'active' }));
+          var outs = pp.map(function (pl) {
+            var c = DB.calculatePlan(userId, pl.id, { scenarioId: p.scenario_id });
+            DB.emitEvent(userId, { event_type: 'plan.projection_updated', entity_type: 'plan', entity_id: pl.id, metadata: { ending: c.totals.ending } });
+            return { plan: pl.id, ending: c.totals.ending };
+          });
+          return { plans: outs.length, ending: outs.map(function (o) { return o.ending; }) };
+        }
+        case 'calculate_plan_variance': {
+          var pv = (p.plan_id ? [DB.getPlan(userId, p.plan_id)] : DB.listPlans(userId, { status: 'active' }));
+          var det = [];
+          pv.forEach(function (pl) {
+            var v = DB.calculatePlanVariance(userId, pl.id, {});
+            var big = v.months.filter(function (m) { return (m.expense.planned > 0 && Math.abs(m.expense.variance) >= 100 && m.expense.pct != null && Math.abs(m.expense.pct) >= 10) || (m.income.planned > 0 && Math.abs(m.income.variance) >= 100 && m.income.pct != null && Math.abs(m.income.pct) >= 10); });
+            if (big.length) {
+              DB.emitEvent(userId, { event_type: 'plan.variance_detected', entity_type: 'plan', entity_id: pl.id, metadata: { months: big.length } });
+              det.push({ plan: pl.id, months: big.length });
+            }
+          });
+          return { plans: pv.length, withVariance: det.length };
+        }
+        case 'refresh_active_plans': {
+          var dbR = read(), cidR = DB.myCoupleId(userId);
+          var n = 0;
+          dbR.financial_plans.forEach(function (pl) {
+            if (pl.couple_id !== cidR || pl.status !== 'active') return;
+            try { DB.calculatePlan(userId, pl.id, {}); } catch (e) { return; }
+            pl.updated_at = now(); n++;
+            logAudit(dbR, cidR, userId, 'plan', pl.id, 'refresh', {});
+          });
+          if (n) write(dbR);
+          return { refreshed: n };
+        }
+        case 'detect_planning_variance': {
+          return { notified: DB.planScan(userId, p.plan_id ? { planId: p.plan_id } : {}).length };
+        }
+        case 'expire_old_plans': {
+          var dbE = read(), cidE = DB.myCoupleId(userId);
+          var cutoff = DB.dateAddDays(now().slice(0, 10), -30);
+          var n2 = 0;
+          dbE.financial_plans.forEach(function (pl) {
+            if (pl.couple_id !== cidE || pl.status !== 'active') return;
+            if (pl.period_end < cutoff) {
+              pl.status = 'archived'; pl.archived_at = now(); pl.updated_at = now(); n2++;
+              logAudit(dbE, cidE, userId, 'plan', pl.id, 'auto_archive', { period_end: pl.period_end });
+              DB.emitEvent(userId, { event_type: 'plan.auto_archived', entity_type: 'plan', entity_id: pl.id, metadata: {} });
+            }
+          });
+          if (n2) write(dbE);
+          return { archived: n2 };
+        }
+        default:
+          throw new Error('Job sem handler (custom ainda não configurado).');
+      }
+    },
+    /* Varredura programada: garante ocorrências, detecta faturas/orçamentos/
+       metas e enfileira o que for acionável. Não envia nada a ninguém. */
+    runScheduledScan: function (userId, opt) {
+      opt = opt || {};
+      var today = (opt.today || now().slice(0, 10)).slice(0, 10);
+      var ym = today.slice(0, 7);
+      var summary = { events: 0, jobs: 0, ran: 0 };
+      DB.ensureOccurrences(userId, ym, DB.shiftMonth(ym, 2));
+      DB.listOccurrences(userId, '2000-01-01', today, true).forEach(function (o) {
+        var r = DB.emitEvent(userId, { event_type: 'occurrence.due', entity_type: 'occurrence', entity_id: o.id, metadata: { due: o.due_date } });
+        summary.events++;
+        summary.jobs += r.jobs.length;
+      });
+      DB.listInvoices(userId, {}).forEach(function (i) {
+        if (i.status === 'overdue') {
+          DB.emitEvent(userId, { event_type: 'invoice.overdue', entity_type: 'invoice', entity_id: i.id, metadata: { due: i.due_date } });
+          summary.events++;
+        } else if (i.status !== 'cancelled' && i.status !== 'paid' && i.due_date >= today && i.due_date <= DB.dateAddDays(today, 7)) {
+          DB.emitEvent(userId, { event_type: 'invoice.due', entity_type: 'invoice', entity_id: i.id, metadata: { due: i.due_date } });
+          summary.events++;
+        }
+      });
+      DB.budgetSummary(userId, ym).items.forEach(function (it) {
+        if (it.status.key === 'warn' || it.status.key === 'over') {
+          DB.emitEvent(userId, { event_type: 'budget.threshold_reached', entity_type: 'budget', entity_id: it.id + ':' + it.status.key, metadata: { month: ym, pct: it.pct } });
+          summary.events++;
+        }
+      });
+      DB.listGoals(userId, false).forEach(function (g) {
+        if (g.status !== 'active') return;
+        var pr = DB.goalProgress(g);
+        if (pr.pct >= 100) { DB.emitEvent(userId, { event_type: 'goal.completed', entity_type: 'goal', entity_id: g.id, metadata: {} }); summary.events++; }
+        else if (pr.pct >= 80) { DB.emitEvent(userId, { event_type: 'goal.near', entity_type: 'goal', entity_id: g.id, metadata: { pct: pr.pct } }); summary.events++; }
+      });
+      var ran = DB.runPendingJobs(userId, { limit: opt.limit || 50, trigger: 'scan' });
+      summary.ran = ran.length;
+      return summary;
+    },
+    /* ============ PROMPT 17 (V3): REGRAS AUTOMÁTICAS ============
+       EVENTO → REGRA → CONDIÇÕES → AÇÃO → EXECUÇÃO (+ histórico).
+       Camada de configuração sobre o Automation Engine; sem lógica financeira
+       própria (ações usam centrais, ex: updateTx). Sem IA/notificações. */
+    RULE_TRIGGERS: ['transaction_created', 'transaction_updated', 'transaction_deleted', 'transfer_created', 'invoice_event', 'installment_event', 'recurring_event', 'budget_event', 'goal_event', 'scheduled', 'manual'],
+    RULE_OPERATORS: ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'in', 'not_in', 'is_empty', 'is_not_empty'],
+    RULE_ACTIONS: ['set_category', 'set_description', 'add_note', 'create_alert_event', 'mark_for_review', 'enable_rule', 'disable_rule'],
+    RULE_FUTURE_ACTIONS: ['create_transaction', 'create_recurring', 'create_goal', 'send_notification', 'whatsapp_message', 'ai_action'],
+    /* Campos confiáveis por entidade de trigger. */
+    RULE_FIELDS: {
+      transaction: ['description', 'type', 'amount', 'category_id', 'category_name', 'created_by', 'payer_user_id', 'is_shared', 'account_id', 'credit_card_id', 'date'],
+      transfer: ['amount', 'from_account_id', 'to_account_id', 'description', 'date'],
+      invoice: ['credit_card_id', 'total_amount', 'status', 'due_date'],
+      installment: ['credit_card_id', 'amount', 'installment_number', 'status', 'due_date'],
+      recurring: ['description', 'type', 'amount', 'category_id', 'frequency', 'status'],
+      budget: ['category_id', 'pct', 'spent', 'remaining'],
+      goal: ['progress', 'current', 'target', 'status']
+    },
+    RULE_TRIGGER_ENTITY: { transaction_created: 'transaction', transaction_updated: 'transaction', transaction_deleted: 'transaction', transfer_created: 'transfer', invoice_event: 'invoice', installment_event: 'installment', recurring_event: 'recurring', budget_event: 'budget', goal_event: 'goal', scheduled: '', manual: '' },
+    /* Eventos (ponto) → triggers (underscore). Scans emitem tipos concretos. */
+    EVENT_TO_TRIGGERS: {
+      'transaction.created': ['transaction_created'], 'transaction.updated': ['transaction_updated'], 'transaction.deleted': ['transaction_deleted'],
+      'transfer.created': ['transfer_created'],
+      'invoice_event': ['invoice_event'], 'invoice.due': ['invoice_event'], 'invoice.overdue': ['invoice_event'],
+      'installment_event': ['installment_event'],
+      'recurring_event': ['recurring_event'], 'recurring.due': ['recurring_event'], 'occurrence.due': ['recurring_event'],
+      'budget_event': ['budget_event'], 'budget.threshold_reached': ['budget_event'],
+      'goal_event': ['goal_event'], 'goal.completed': ['goal_event'], 'goal.near': ['goal_event'],
+      'transaction_created': ['transaction_created'], 'transaction_updated': ['transaction_updated'], 'transaction_deleted': ['transaction_deleted'],
+      'transfer_created': ['transfer_created'], 'scheduled': ['scheduled'], 'manual': ['manual']
+    },
+    validateRule: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para a regra.');
+      var trigger = data.trigger_type;
+      if (DB.RULE_TRIGGERS.indexOf(trigger) < 0) throw new Error('Escolha quando a regra vale.');
+      var entity = DB.RULE_TRIGGER_ENTITY[trigger];
+      var op = (data && data.condition_operator) || 'AND';
+      if (op !== 'AND' && op !== 'OR') throw new Error('Condições: escolha TODAS ou QUALQUER.');
+      var conds = (data && data.conditions) || [];
+      if (!conds.length) throw new Error('Adicione ao menos uma condição.');
+      var fields = DB.RULE_FIELDS[entity] || [];
+      conds.forEach(function (c, i) {
+        if (fields.indexOf(c.field) < 0) throw new Error('Condição ' + (i + 1) + ': campo inválido.');
+        if (DB.RULE_OPERATORS.indexOf(c.operator) < 0) throw new Error('Condição ' + (i + 1) + ': operador inválido.');
+        if (['is_empty', 'is_not_empty'].indexOf(c.operator) < 0 && (c.value === undefined || c.value === null || String(c.value) === '')) throw new Error('Condição ' + (i + 1) + ': informe o valor.');
+        if (c.operator === 'between' && String(c.value).split(',').length !== 2) throw new Error('Condição ' + (i + 1) + ': use "min,max".');
+      });
+      var acts = (data && data.actions) || [];
+      if (!acts.length) throw new Error('Adicione ao menos uma ação.');
+      acts.forEach(function (a, i) {
+        if (DB.RULE_FUTURE_ACTIONS.indexOf(a.type) >= 0) throw new Error('Ação "' + a.type + '" indisponível neste momento.');
+        if (DB.RULE_ACTIONS.indexOf(a.type) < 0) throw new Error('Ação ' + (i + 1) + ': tipo inválido.');
+        if (a.type === 'set_category') {
+          var cat = db.categories.find(function (c) { return c.id === a.category_id && c.couple_id === cid && c.active; });
+          if (!cat) throw new Error('Ação ' + (i + 1) + ': categoria inválida.');
+        }
+        if ((a.type === 'set_description' || a.type === 'add_note') && !String(a.text || '').trim()) throw new Error('Ação ' + (i + 1) + ': informe o texto.');
+      });
+      var prio = parseInt(data.priority, 10);
+      if (!(prio >= 1 && prio <= 100)) throw new Error('Prioridade precisa estar entre 1 e 100 (1 = máxima).');
+      return { couple_id: cid, name: name.slice(0, 80), description: String((data && data.description) || '').slice(0, 300), active: data.active !== false, priority: prio, trigger_type: trigger, condition_operator: op, conditions: conds, actions: acts };
+    },
+    createRule: function (userId, data) {
+      var v = DB.validateRule(userId, data);
+      var db = read();
+      var r = { id: id('ar'), couple_id: v.couple_id, name: v.name, description: v.description, active: v.active, priority: v.priority, trigger_type: v.trigger_type, condition_operator: v.condition_operator, conditions: v.conditions, actions: v.actions, created_by: userId, created_at: now(), updated_at: now(), last_executed_at: null };
+      db.automation_rules.push(r);
+      logAudit(db, v.couple_id, userId, 'rule', r.id, 'create', { name: r.name });
+      write(db);
+      return r;
+    },
+    getRule: function (userId, ruleId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.automation_rules.find(function (x) { return x.id === ruleId && x.couple_id === cid; });
+      if (!r) throw new Error('Regra não encontrada.');
+      return r;
+    },
+    listRuleExecutions: function (userId, ruleId, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      try { DB.getRule(userId, ruleId); } catch (e) { return []; }
+      return db.automation_rule_executions.filter(function (x) { return x.couple_id === cid && x.rule_id === ruleId; })
+        .sort(function (a, b) { return (b.executed_at + b.id).localeCompare(a.executed_at + a.id); })
+        .slice(0, limit || 20);
+    },
+    listRules: function (userId, includeInactive) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.automation_rules.filter(function (r) { return r.couple_id === cid && (includeInactive || r.active); })
+        .sort(function (a, b) { return (a.priority - b.priority) || a.created_at.localeCompare(b.created_at); });
+    },
+    updateRule: function (userId, ruleId, data) {
+      var v = DB.validateRule(userId, data);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.automation_rules.find(function (x) { return x.id === ruleId && x.couple_id === cid; });
+      if (!r) throw new Error('Regra não encontrada.');
+      ['name', 'description', 'active', 'priority', 'trigger_type', 'condition_operator', 'conditions', 'actions'].forEach(function (k) { r[k] = v[k]; });
+      r.updated_at = now();
+      logAudit(db, cid, userId, 'rule', ruleId, 'update', { name: r.name });
+      write(db);
+      return r;
+    },
+    deleteRule: function (userId, ruleId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.automation_rules.findIndex(function (x) { return x.id === ruleId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Regra não encontrada.');
+      db.automation_rules.splice(i, 1);
+      logAudit(db, cid, userId, 'rule', ruleId, 'delete', {});
+      write(db);
+    },
+    enableRule: function (userId, ruleId, active) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.automation_rules.find(function (x) { return x.id === ruleId && x.couple_id === cid; });
+      if (!r) throw new Error('Regra não encontrada.');
+      r.active = active !== false; r.updated_at = now();
+      logAudit(db, cid, userId, 'rule', ruleId, r.active ? 'enable' : 'disable', {});
+      write(db);
+      return r;
+    },
+    duplicateRule: function (userId, ruleId) {
+      var src = DB.getRule(userId, ruleId);
+      return DB.createRule(userId, { name: (src.name + ' (cópia)').slice(0, 80), description: src.description, active: false, priority: src.priority, trigger_type: src.trigger_type, condition_operator: src.condition_operator, conditions: JSON.parse(JSON.stringify(src.conditions)), actions: JSON.parse(JSON.stringify(src.actions)) });
+    },
+    seedSuggestedRules: function (userId) {
+      var existing = {};
+      DB.listRules(userId, true).forEach(function (r) { existing[r.name] = true; });
+      var sug = [
+        { name: 'Uber → Transporte', trigger_type: 'transaction_created', conditions: [{ field: 'description', operator: 'contains', value: 'Uber' }, { field: 'type', operator: 'equals', value: 'expense' }], actions: [{ type: 'set_category_by_name', category_name: 'Transporte' }] },
+        { name: 'Netflix → Assinaturas', trigger_type: 'transaction_created', conditions: [{ field: 'description', operator: 'contains', value: 'Netflix' }], actions: [{ type: 'set_category_by_name', category_name: 'Assinaturas' }] },
+        { name: 'Spotify → Assinaturas', trigger_type: 'transaction_created', conditions: [{ field: 'description', operator: 'contains', value: 'Spotify' }], actions: [{ type: 'set_category_by_name', category_name: 'Assinaturas' }] },
+        { name: 'Posto → Transporte', trigger_type: 'transaction_created', conditions: [{ field: 'description', operator: 'contains', value: 'Posto' }], actions: [{ type: 'set_category_by_name', category_name: 'Transporte' }] },
+        { name: 'Supermercado → Alimentação', trigger_type: 'transaction_created', conditions: [{ field: 'description', operator: 'contains', value: 'Supermercado' }], actions: [{ type: 'set_category_by_name', category_name: 'Alimentação' }] }
+      ];
+      var made = [];
+      var db = read(), cid = DB.myCoupleId(userId);
+      sug.forEach(function (s) {
+        if (existing[s.name]) return;
+        var cat = db.categories.find(function (c) { return c.couple_id === cid && c.active && c.name === s.actions[0].category_name; });
+        if (!cat) return;
+        made.push(DB.createRule(userId, { name: s.name, description: 'Sugestão inativa — ative se fizer sentido.', active: false, priority: 10, trigger_type: s.trigger_type, condition_operator: 'AND', conditions: s.conditions, actions: [{ type: 'set_category', category_id: cat.id }] }));
+      });
+      return made;
+    },
+    /* RuleConditionEvaluator: puro (sem I/O). Desconhecido = falso (fail-closed).
+       Textos: case-insensitive. Números: comparação numérica. */
+    evalRuleCondition: function (cond, ctx) {
+      var v = ctx ? ctx[cond.field] : undefined;
+      var op = cond.operator, raw = cond.value;
+      function str(x) { return String(x == null ? '' : x).toLowerCase(); }
+      function num(x) { var n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; }
+      switch (op) {
+        case 'equals': return typeof v === 'number' ? v === Number(raw) : str(v) === str(raw);
+        case 'not_equals': return typeof v === 'number' ? v !== Number(raw) : str(v) !== str(raw);
+        case 'contains': return str(v).indexOf(str(raw)) >= 0 && str(raw) !== '';
+        case 'not_contains': return str(raw) === '' || str(v).indexOf(str(raw)) < 0;
+        case 'starts_with': return str(raw) !== '' && str(v).indexOf(str(raw)) === 0;
+        case 'ends_with': return str(raw) !== '' && str(v).slice(-String(raw).length).toLowerCase() === str(raw);
+        case 'greater_than': return num(v) !== null && num(raw) !== null && num(v) > num(raw);
+        case 'greater_than_or_equal': return num(v) !== null && num(raw) !== null && num(v) >= num(raw);
+        case 'less_than': return num(v) !== null && num(raw) !== null && num(v) < num(raw);
+        case 'less_than_or_equal': return num(v) !== null && num(raw) !== null && num(v) <= num(raw);
+        case 'between': {
+          var p = String(raw).split(',');
+          if (p.length !== 2 || num(v) === null) return false;
+          var a = num(p[0]), b = num(p[1]);
+          return a !== null && b !== null && num(v) >= Math.min(a, b) && num(v) <= Math.max(a, b);
+        }
+        case 'in': return String(raw).split(',').map(function (x) { return x.trim().toLowerCase(); }).indexOf(str(v)) >= 0;
+        case 'not_in': return String(raw).split(',').map(function (x) { return x.trim().toLowerCase(); }).indexOf(str(v)) < 0;
+        case 'is_empty': return v === undefined || v === null || String(v) === '';
+        case 'is_not_empty': return !(v === undefined || v === null || String(v) === '');
+        default: return false;
+      }
+    },
+    evaluateRule: function (userId, ruleOrId, ctx) {
+      var rule = typeof ruleOrId === 'string' ? DB.getRule(userId, ruleOrId) : ruleOrId;
+      if (!rule.active) return { matched: false, reason: 'inactive', details: [] };
+      var details = (rule.conditions || []).map(function (c) {
+        var ok = DB.evalRuleCondition(c, ctx);
+        return { field: c.field, operator: c.operator, value: c.value, matched: ok };
+      });
+      var matched = rule.condition_operator === 'OR' ? details.some(function (d) { return d.matched; }) : details.every(function (d) { return d.matched; });
+      return { matched: matched, reason: matched ? 'matched' : 'conditions', details: details };
+    },
+    /* Contexto confiável a partir da entidade (sempre com checagem de casal). */
+    ruleContextFor: function (userId, entityType, entityId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      function catName(id) {
+        var c = db.categories.find(function (x) { return x.id === id && x.couple_id === cid; });
+        return c ? c.name : '';
+      }
+      if (entityType === 'transaction') {
+        var t = db.transactions.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!t) throw new Error('Transação não encontrada.');
+        return { description: t.description, type: t.type, amount: t.amount, category_id: t.category_id, category_name: catName(t.category_id), created_by: t.created_by, payer_user_id: t.payer_user_id, is_shared: !!t.is_shared, account_id: t.account_id || '', credit_card_id: t.credit_card_id || '', date: t.date };
+      }
+      if (entityType === 'transfer') {
+        var tr = db.transfers.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!tr) throw new Error('Transferência não encontrada.');
+        return { amount: tr.amount, from_account_id: tr.from_account_id, to_account_id: tr.to_account_id, description: tr.description || '', date: tr.date };
+      }
+      if (entityType === 'invoice') {
+        var iv = db.invoices.find(function (x) { return x.id === entityId && x.couple_id === cid; });
+        if (!iv) throw new Error('Fatura não encontrada.');
+        return { credit_card_id: iv.credit_card_id, total_amount: DB.calculateInvoiceTotal(userId, iv.id), status: iv.status, due_date: iv.due_date };
+      }
+      if (entityType === 'installment') {
+        var r = db.installments.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!r) throw new Error('Parcela não encontrada.');
+        return { credit_card_id: r.credit_card_id, amount: r.amount, installment_number: r.installment_number, status: r.status, due_date: r.due_date };
+      }
+      if (entityType === 'recurring') {
+        var rc = db.recurring_transactions.find(function (x) { return x.id === entityId && x.couple_id === cid; });
+        if (!rc) throw new Error('Recorrência não encontrada.');
+        return { description: rc.description, type: rc.type, amount: rc.amount, category_id: rc.category_id, frequency: rc.frequency, status: rc.active ? 'active' : 'inactive' };
+      }
+      if (entityType === 'budget') {
+        var b = db.budgets.find(function (x) { return x.id === entityId && x.couple_id === cid; });
+        if (!b) throw new Error('Orçamento não encontrado.');
+        var spent = DB.budgetSpent(userId, b.category_id, b.year + '-' + ('0' + b.month).slice(-2));
+        var pct = b.amount ? Math.round(spent / b.amount * 1000) / 10 : 0;
+        return { category_id: b.category_id, pct: pct, spent: spent, remaining: Math.round((b.amount - spent) * 100) / 100 };
+      }
+      if (entityType === 'goal') {
+        var g = db.goals.find(function (x) { return x.id === entityId && x.couple_id === cid; });
+        if (!g) throw new Error('Meta não encontrada.');
+        var pr = DB.goalProgress(g);
+        return { progress: pr.pct, current: g.current_amount, target: g.target_amount, status: g.status };
+      }
+      throw new Error('Entidade inválida para regras.');
+    },
+    /* RuleActionExecutor: só ações safe deste prompt. Mutação via centrais.
+       Retorna {field?, before, after} para histórico/conflito. */
+    executeRuleAction: function (userId, rule, action, entityType, entityId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (DB.RULE_FUTURE_ACTIONS.indexOf(action.type) >= 0) throw new Error('Ação indisponível neste momento.');
+      if (action.type === 'create_alert_event') {
+        var ev = DB.emitEvent(userId, { event_type: 'rule.alert', entity_type: entityType, entity_id: entityId, metadata: { rule: rule.name } });
+        return { field: null, before: null, after: null, alert: ev.event.id };
+      }
+      if (action.type === 'enable_rule' || action.type === 'disable_rule') {
+        DB.enableRule(userId, rule.id, action.type === 'enable_rule');
+        return { field: null, before: null, after: null };
+      }
+      if (action.type === 'mark_for_review') {
+        if (entityType !== 'transaction') return { skipped: true, reason: 'mark_for_review só em transações' };
+        var db2 = read();
+        var t0 = db2.transactions.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!t0) return { skipped: true, reason: 'entidade ausente' };
+        t0.needs_review = true; t0.updated_at = now();
+        logAudit(db2, cid, userId, 'transaction', entityId, 'mark_review', { rule: rule.id });
+        write(db2);
+        return { field: 'needs_review', before: false, after: true };
+      }
+      if (entityType !== 'transaction') return { skipped: true, reason: 'ação só em transações' };
+      var cur = DB.getTx(userId, entityId);
+      if (action.type === 'set_category') {
+        var cat = db.categories.find(function (c) { return c.id === action.category_id && c.couple_id === cid && c.active; });
+        if (!cat) throw new Error('Categoria da regra inválida.');
+        if (cat.type !== 'both' && cat.type !== cur.type) throw new Error('Categoria incompatível com o tipo.');
+        if (cur.category_id === cat.id) return { skipped: true, reason: 'já está' };
+        var before = cur.category_id;
+        DB.updateTx(userId, entityId, { type: cur.type, description: cur.description, amount: String(cur.amount).replace('.', ','), date: cur.date, category_id: cat.id, payer_user_id: cur.payer_user_id, account_id: cur.account_id || '', credit_card_id: cur.credit_card_id || '', is_shared: cur.is_shared, notes: cur.notes || '' });
+        return { field: 'category_id', before: before, after: cat.id };
+      }
+      if (action.type === 'set_description') {
+        var nd = String(action.text || '').trim().slice(0, 120);
+        if (!nd) throw new Error('Texto vazio.');
+        if (cur.description === nd) return { skipped: true, reason: 'já está' };
+        var bd = cur.description;
+        DB.updateTx(userId, entityId, { type: cur.type, description: nd, amount: String(cur.amount).replace('.', ','), date: cur.date, category_id: cur.category_id, payer_user_id: cur.payer_user_id, account_id: cur.account_id || '', credit_card_id: cur.credit_card_id || '', is_shared: cur.is_shared, notes: cur.notes || '' });
+        return { field: 'description', before: bd, after: nd };
+      }
+      if (action.type === 'add_note') {
+        var nt = String(action.text || '').trim().slice(0, 300);
+        if (!nt) throw new Error('Texto vazio.');
+        var bn = cur.notes || '';
+        DB.updateTx(userId, entityId, { type: cur.type, description: cur.description, amount: String(cur.amount).replace('.', ','), date: cur.date, category_id: cur.category_id, payer_user_id: cur.payer_user_id, account_id: cur.account_id || '', credit_card_id: cur.credit_card_id || '', is_shared: cur.is_shared, notes: (bn ? bn + ' | ' : '') + nt });
+        return { field: 'notes', before: bn, after: cur.notes };
+      }
+      throw new Error('Ação inválida.');
+    },
+    /* Núcleo: avalia regras do trigger em prioridade, executa com trava de
+       conflito (mesmo campo/entidade/evento), idempotência (regra+evento) e
+       trava anti-loop (origem + profundidade). Roda no db já aberto? Não:
+       lê/escreve por operação via centrais (cada ação é atômica). */
+    processRulesForEvent: function (userId, ev) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var out = [];
+      var triggers = DB.EVENT_TO_TRIGGERS[ev.event_type] || [];
+      var rules = db.automation_rules.filter(function (r) { return r.couple_id === cid && r.active && triggers.indexOf(r.trigger_type) >= 0; })
+        .sort(function (a, b) { return (a.priority - b.priority) || a.created_at.localeCompare(b.created_at); });
+      if (!rules.length) return out;
+      var altered = {};
+      rules.forEach(function (rule) {
+        var key = ['RE', cid, rule.id, ev.id].join('|');
+        function alreadyDone(actionType) {
+          var k = key + (actionType ? '|' + actionType : '');
+          var fresh = read();
+          return !!fresh.automation_rule_executions.find(function (x) { return x.idempotency_key === k && (x.status === 'executed' || x.status === 'skipped'); });
+        }
+        function record(status, opts) {
+          opts = opts || {};
+          var row = { id: id('rx'), couple_id: cid, rule_id: rule.id, event_id: ev.id, job_id: null, status: status, matched: !!opts.matched, action: opts.action || null, entity_type: ev.entity_type, entity_id: ev.entity_id, before_data: opts.before !== undefined ? opts.before : null, after_data: opts.after !== undefined ? opts.after : null, error_message: opts.error || null, reason: opts.reason || null, executed_at: now() };
+          row.idempotency_key = key + (opts.action ? '|' + opts.action : '');
+          var fresh = read();
+          var dupe = fresh.automation_rule_executions.find(function (x) { return x.idempotency_key === row.idempotency_key && (x.status === 'executed' || x.status === 'skipped'); });
+          if (dupe) { out.push({ rule: rule.id, status: 'skipped', reason: 'duplicate' }); return; }
+          fresh.automation_rule_executions.push(row);
+          var rr = fresh.automation_rules.find(function (x) { return x.id === rule.id; });
+          if (rr) rr.last_executed_at = now();
+          logAudit(fresh, cid, userId, 'rule', rule.id, status === 'executed' ? 'rule_run' : 'rule_skip', { event: ev.event_type });
+          write(fresh);
+          out.push({ rule: rule.id, status: status, reason: opts.reason || null });
+        }
+        if (alreadyDone(null)) { out.push({ rule: rule.id, status: 'skipped', reason: 'duplicate' }); return; }
+        var meta = (ev.metadata) || {};
+        if (meta.origin === 'rule' && String(meta.rule_id) === rule.id) { record('skipped', { reason: 'loop' }); return; }
+        /* Evento causado por outra regra: sem novas mutações de campo (encerra
+           cadeias e impede ping-pong entre regras); só alertas passam. */
+        var chained = meta.origin === 'rule';
+        var entity = DB.RULE_TRIGGER_ENTITY[rule.trigger_type] || ev.entity_type;
+        var ctx;
+        try { ctx = DB.ruleContextFor(userId, entity, ev.entity_id); }
+        catch (e) { record('skipped', { reason: 'gone' }); return; }
+        var res = DB.evaluateRule(userId, rule, ctx);
+        if (!res.matched) { record('skipped', { reason: 'no_match' }); return; }
+        var fieldMutating = (meta.depth || 0) >= 2;
+        rule.actions.forEach(function (a) {
+          var needsField = ['set_category', 'set_description', 'add_note', 'mark_for_review'].indexOf(a.type) >= 0;
+          if (alreadyDone(a.type)) { record('skipped', { action: a.type, reason: 'duplicate' }); return; }
+          if (needsField && chained) { record('skipped', { action: a.type, reason: 'chained' }); return; }
+          if (needsField && fieldMutating) { record('skipped', { action: a.type, reason: 'max_depth' }); return; }
+          var fkey = entity + '|' + ev.entity_id + '|' + a.type;
+          if (needsField && altered[fkey]) { record('skipped', { action: a.type, reason: 'conflict' }); return; }
+          J.__ruleCtx = { rule_id: rule.id, depth: (meta.depth || 0) + 1 };
+          try {
+            var r2 = DB.executeRuleAction(userId, rule, a, entity, ev.entity_id);
+            J.__ruleCtx = null;
+            if (r2 && r2.skipped) { record('skipped', { action: a.type, reason: r2.reason }); return; }
+            if (needsField && r2 && r2.field) altered[entity + '|' + ev.entity_id + '|' + a.type] = true;
+            record('executed', { matched: true, action: a.type, before: r2 ? r2.before : null, after: r2 ? r2.after : null });
+            var rr2 = read();
+            var rl2 = rr2.automation_rules.find(function (x) { return x.id === rule.id; });
+            if (rl2) { rl2.last_executed_at = now(); write(rr2); }
+          } catch (e2) {
+            J.__ruleCtx = null;
+            record('failed', { matched: true, action: a.type, error: String((e2 && e2.message) || e2).slice(0, 200) });
+          }
+        });
+      });
+      return out;
+    },
+    /* Simulação: encontra compatíveis sem escrever nada. */
+    testRule: function (userId, ruleData) {
+      var tmp = Object.assign({ id: 'preview', active: true }, ruleData);
+      var entity = DB.RULE_TRIGGER_ENTITY[tmp.trigger_type];
+      if (!entity) throw new Error('Trigger inválido para teste.');
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var pool = [];
+      function take(arr, n) { return arr.filter(function (x) { return x.couple_id === cid && !x.deleted_at; }).slice(-n); }
+      if (entity === 'transaction') pool = take(db.transactions, 50);
+      else if (entity === 'transfer') pool = take(db.transfers, 50);
+      else if (entity === 'invoice') pool = db.invoices.filter(function (x) { return x.couple_id === cid; }).slice(-20);
+      else if (entity === 'installment') pool = take(db.installments, 50);
+      else if (entity === 'recurring') pool = db.recurring_transactions.filter(function (x) { return x.couple_id === cid; }).slice(-20);
+      else if (entity === 'budget') pool = db.budgets.filter(function (x) { return x.couple_id === cid; }).slice(-20);
+      else if (entity === 'goal') pool = db.goals.filter(function (x) { return x.couple_id === cid; }).slice(-20);
+      var matched = [];
+      pool.forEach(function (e) {
+        try {
+          var ctx = DB.ruleContextFor(userId, entity, e.id);
+          var res = DB.evaluateRule(userId, tmp, ctx);
+          if (res.matched) matched.push({ id: e.id, label: e.description || e.name || e.id });
+        } catch (e2) { /* ignora entidade inválida */ }
+      });
+      return { total: pool.length, matched: matched.length, sample: matched.slice(0, 5), actions: (tmp.actions || []).map(function (a) { return a.type; }) };
+    },
+    ruleTriggerLabel: function (t) {
+      var m = { transaction_created: 'Nova transação', transaction_updated: 'Transação editada', transaction_deleted: 'Transação excluída', transfer_created: 'Nova transferência', invoice_event: 'Evento de fatura', installment_event: 'Evento de parcela', recurring_event: 'Evento de recorrência', budget_event: 'Evento de orçamento', goal_event: 'Evento de meta', scheduled: 'Agendada', manual: 'Manual' };
+      return m[t] || t;
+    },
+    ruleActionLabel: function (a) {
+      var m = { set_category: 'Definir categoria', set_description: 'Definir descrição', add_note: 'Adicionar nota', create_alert_event: 'Criar alerta interno', mark_for_review: 'Marcar para revisão', enable_rule: 'Ativar regra', disable_rule: 'Desativar regra' };
+      return m[a] || a;
+    },
+    /* ============ PROMPT 18 (V3): CATEGORIZAÇÃO INTELIGENTE ============
+       SUGESTÃO, nunca alteração silenciosa. Determinístico, só dados do casal.
+       Hierarquia: regra explícita > histórico exato > padrão (merchant) >
+       similaridade > heurística. Feedback alimenta o aprendizado. */
+    suggestionThreshold: function () { return 0.70; },
+    normalizeDescription: function (s) {
+      s = String(s || '').toLowerCase();
+      try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+      return s.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    },
+    extractMerchant: function (norm) {
+      var toks = String(norm || '').split(' ').filter(function (t) { return t.length >= 2; });
+      return toks[0] || '';
+    },
+    txTokens: function (norm) {
+      return String(norm || '').split(' ').filter(function (t) { return t.length >= 2; });
+    },
+    tokenSimilarity: function (a, b) {
+      var A = {}, inter = 0, union = 0, i;
+      var ta = DB.txTokens(a), tb = DB.txTokens(b);
+      for (i = 0; i < ta.length; i++) A[ta[i]] = true;
+      for (i = 0; i < tb.length; i++) { if (A[tb[i]]) inter++; }
+      union = ta.length + tb.length - inter;
+      return union ? inter / union : 0;
+    },
+    catDisplayName: function (userId, catId) {
+      var db = read();
+      var c = db.categories.find(function (x) { return x.id === catId; });
+      if (!c) return 'Categoria';
+      if (!c.parent_category_id) return ((c.icon ? c.icon + ' ' : '') + c.name);
+      var p = db.categories.find(function (x) { return x.id === c.parent_category_id; });
+      return p ? (p.name + ' → ' + c.name) : c.name;
+    },
+    /* Coração: sugestão pura (sem escrita). Retorna null ou
+       {category_id, confidence, source, reason, rule_id?}. */
+    suggestCategory: function (userId, draft) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      draft = draft || {};
+      var norm = DB.normalizeDescription(draft.description);
+      if (!norm) return null;
+      var merchant = DB.extractMerchant(norm);
+      function catOk(id) {
+        var c = db.categories.find(function (x) { return x.id === id && x.couple_id === cid; });
+        return c || null;
+      }
+      function catName(id) {
+        var c = db.categories.find(function (x) { return x.id === id; });
+        return c ? c.name : 'Categoria';
+      }
+      /* 1. regra explícita tem prioridade (reutiliza o avaliador do Prompt 17). */
+      var rules = db.automation_rules.filter(function (r) { return r.couple_id === cid && r.active && r.trigger_type === 'transaction_created'; })
+        .sort(function (a, b) { return (a.priority - b.priority) || a.created_at.localeCompare(b.created_at); });
+      var draftCtx = { description: String(draft.description || ''), type: draft.type || 'expense', amount: draft.amount || 0, category_id: draft.category_id || '', category_name: draft.category_id ? catName(draft.category_id) : '', created_by: userId, payer_user_id: draft.payer_user_id || userId, is_shared: !!draft.is_shared, account_id: draft.account_id || '', credit_card_id: draft.credit_card_id || '', date: draft.date || '' };
+      for (var ri = 0; ri < rules.length; ri++) {
+        var rr = DB.evaluateRule(userId, rules[ri], draftCtx);
+        if (!rr.matched) continue;
+        var sc = rules[ri].actions.find(function (a) { return a.type === 'set_category'; });
+        if (sc) {
+          var rc = db.categories.find(function (c) { return c.id === sc.category_id && c.couple_id === cid && c.active; });
+          if (rc) return { category_id: rc.id, confidence: 1, source: 'rule', reason: 'Regra automática existente: "' + rules[ri].name + '".', rule_id: rules[ri].id };
+        }
+      }
+      /* 2-4. evidência do histórico do casal (com recência). */
+      var today = now().slice(0, 10), recentCut = DB.dateAddDays(today, -90);
+      var pool = db.transactions.filter(function (t) {
+        return t.couple_id === cid && !t.deleted_at && (!draft.excludeTxId || t.id !== draft.excludeTxId);
+      });
+      function tw(t) { return t.date >= recentCut ? 1.5 : 1; }
+      var gE = [], gM = [], gS = [], wE = 0, wM = 0, wS = 0, i, t;
+      for (i = 0; i < pool.length && i < 500; i++) {
+        t = pool[i];
+        var n2 = DB.normalizeDescription(t.description);
+        if (n2 === norm) { gE.push(t); wE += tw(t); continue; }
+        if (merchant && DB.extractMerchant(n2) === merchant) { gM.push(t); wM += tw(t); continue; }
+        if (DB.tokenSimilarity(n2, norm) >= 0.5) { gS.push(t); wS += tw(t); }
+      }
+      var tier = null, rows = [];
+      if (wE >= 3) { tier = 'history'; rows = gE; }
+      else if (wM >= 2) { tier = 'pattern'; rows = gM; }
+      else if (wS >= 1) { tier = 'similarity'; rows = gS; }
+      else {
+        /* 5. heurística mínima e honesta: salário. */
+        if ((draft.type || 'expense') !== 'expense' && /salari|salario|pagamento|ordenado|holerite/.test(norm)) {
+          var sal = db.categories.find(function (c) { return c.couple_id === cid && c.active && (c.type === 'income' || c.type === 'both') && DB.normalizeDescription(c.name).indexOf('salari') === 0; });
+          if (sal) return { category_id: sal.id, confidence: 0.75, source: 'heuristic', reason: 'Receita com nome de salário.' };
+        }
+        return null;
+      }
+      var dist = {}, totW = 0, n = {};
+      rows.forEach(function (t) {
+        var w = tw(t);
+        dist[t.category_id] = (dist[t.category_id] || 0) + w; totW += w;
+        n[t.category_id] = (n[t.category_id] || 0) + 1;
+      });
+      db.category_feedback.forEach(function (f) {
+        if (f.couple_id !== cid) return;
+        if (!(f.norm_desc === norm || (f.merchant && merchant && f.merchant === merchant))) return;
+        if (f.feedback_type === 'accepted' || f.feedback_type === 'corrected') { dist[f.final_category_id] = (dist[f.final_category_id] || 0) + 2; totW += 2; }
+        else if (f.feedback_type === 'rejected') { dist[f.suggested_category_id] = Math.max(0, (dist[f.suggested_category_id] || 0) - 1); }
+        else if (f.feedback_type === 'manually_categorized') { dist[f.final_category_id] = (dist[f.final_category_id] || 0) + 1; totW += 1; }
+      });
+      var top = null, topW = 0;
+      Object.keys(dist).forEach(function (k) {
+        if (dist[k] > topW) { topW = dist[k]; top = k; }
+      });
+      if (!top || !catOk(top)) return null;
+      var p = topW / (totW || 1);
+      /* Conservador por construção: p alto exige dominância real; com
+         threshold 0.70, distribuições divididas (ex: 50/50) nunca passam. */
+      var conf = Math.round(p * Math.min(1, totW / 5) * 100) / 100;
+      if (conf < DB.suggestionThreshold()) return null;
+      var pct = Math.round(topW / (totW || 1) * 100);
+      var reason = tier === 'history'
+        ? (n[top] || 0) + ' de ' + rows.length + ' lançamentos com esta descrição foram ' + catName(top) + '.'
+        : tier === 'pattern'
+        ? (n[top] || 0) + ' de ' + rows.length + ' lançamentos de ' + merchant + ' foram ' + catName(top) + '.'
+        : 'Semelhante a ' + rows.length + ' lançamentos (' + pct + '% ' + catName(top) + ').';
+      return { category_id: top, confidence: conf, source: tier, reason: reason };
+    },
+    /* Padrão consistente → rascunho de regra (criação só com confirmação). */
+    suggestRuleCreation: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var norm = DB.normalizeDescription(data.description);
+      var merchant = DB.extractMerchant(norm);
+      if (!merchant) return null;
+      var rows = db.transactions.filter(function (t) {
+        return t.couple_id === cid && !t.deleted_at && DB.extractMerchant(DB.normalizeDescription(t.description)) === merchant;
+      });
+      if (rows.length < 5) return null;
+      var byCat = {};
+      rows.forEach(function (t) { byCat[t.category_id] = (byCat[t.category_id] || 0) + 1; });
+      var top = null, topN = 0;
+      Object.keys(byCat).forEach(function (k) { if (byCat[k] > topN) { topN = byCat[k]; top = k; } });
+      if (!top || topN / rows.length < 0.8) return null;
+      var cat = db.categories.find(function (c) { return c.id === top && c.couple_id === cid; });
+      if (!cat) return null;
+      var covered = db.automation_rules.some(function (r) {
+        return r.couple_id === cid && r.active && r.trigger_type === 'transaction_created' &&
+          r.actions.some(function (a) { return a.type === 'set_category' && a.category_id === top; }) &&
+          r.conditions.some(function (c) { return c.field === 'description' && (c.operator === 'contains' || c.operator === 'equals') && (norm.indexOf(DB.normalizeDescription(c.value)) >= 0 || DB.normalizeDescription(c.value).indexOf(merchant) >= 0); });
+      });
+      if (covered) return null;
+      function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+      return {
+        message: 'Você costuma classificar \'' + merchant + '\' como ' + DB.catDisplayPath(userId, top) + '. Deseja criar uma regra automática?',
+        draft: { name: cap(merchant) + ' → ' + cat.name, description: 'Sugerida pelo histórico.', active: true, priority: 5, trigger_type: 'transaction_created', condition_operator: 'AND', conditions: [{ field: 'description', operator: 'contains', value: merchant }], actions: [{ type: 'set_category', category_id: top }] }
+      };
+    },
+    listSuggestions: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.category_suggestions.filter(function (s) {
+        return s.couple_id === cid && (!f.status || s.status === f.status) && (!f.transaction_id || s.transaction_id === f.transaction_id);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 50);
+    },
+    getSuggestion: function (userId, suggestionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.category_suggestions.find(function (x) { return x.id === suggestionId && x.couple_id === cid; });
+      if (!s) throw new Error('Sugestão não encontrada.');
+      return s;
+    },
+    recordFeedback: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var tx = db.transactions.find(function (t) { return t.id === data.transaction_id && t.couple_id === cid && !t.deleted_at; });
+      if (!tx) throw new Error('Transação não encontrada.');
+      if (['accepted', 'rejected', 'corrected', 'manually_categorized'].indexOf(data.feedback_type) < 0) throw new Error('Feedback inválido.');
+      var norm = DB.normalizeDescription(tx.description);
+      var fb = { id: id('cf'), couple_id: cid, transaction_id: tx.id, suggestion_id: data.suggestion_id || null, suggested_category_id: data.suggested_category_id || null, final_category_id: data.final_category_id, feedback_type: data.feedback_type, norm_desc: norm, merchant: DB.extractMerchant(norm), user_id: userId, created_at: now() };
+      db.category_feedback.push(fb);
+      logAudit(db, cid, userId, 'suggestion', data.suggestion_id || tx.id, 'feedback_' + data.feedback_type, {});
+      write(db);
+      return fb;
+    },
+    /* Aceitar/rejeitar/corrigir: validam, aplicam via updateTx (auto-feedback
+       interno resolve a sugestão) e confirmam a resolução. Sem duplicar. */
+    acceptSuggestion: function (userId, suggestionId) {
+      var s = DB.getSuggestion(userId, suggestionId);
+      if (s.status !== 'pending') throw new Error('Sugestão já resolvida.');
+      var tx = DB.getTx(userId, s.transaction_id);
+      var cat = (function () {
+        var db = read();
+        return db.categories.find(function (c) { return c.id === s.suggested_category_id && c.couple_id === tx.couple_id && c.active; });
+      })();
+      if (!cat) throw new Error('Categoria sugerida inválida.');
+      if (cat.type !== 'both' && cat.type !== tx.type) throw new Error('Categoria incompatível.');
+      DB.updateTx(userId, tx.id, { type: tx.type, description: tx.description, amount: String(tx.amount).replace('.', ','), date: tx.date, category_id: cat.id, payer_user_id: tx.payer_user_id, account_id: tx.account_id || '', credit_card_id: tx.credit_card_id || '', is_shared: tx.is_shared, notes: tx.notes || '' });
+      var db2 = read();
+      var s2 = db2.category_suggestions.find(function (x) { return x.id === suggestionId; });
+      if (s2 && s2.status === 'pending') {
+        s2.status = 'accepted'; s2.resolved_at = now(); s2.resolved_by = userId; s2.updated_at = now();
+        DB.recordFeedback(userId, { suggestion_id: suggestionId, transaction_id: tx.id, suggested_category_id: s.suggested_category_id, final_category_id: cat.id, feedback_type: 'accepted' });
+        return DB.getSuggestion(userId, suggestionId);
+      }
+      return DB.getSuggestion(userId, suggestionId);
+    },
+    rejectSuggestion: function (userId, suggestionId) {
+      var s = DB.getSuggestion(userId, suggestionId);
+      if (s.status !== 'pending') throw new Error('Sugestão já resolvida.');
+      var db = read();
+      var row = db.category_suggestions.find(function (x) { return x.id === suggestionId; });
+      row.status = 'dismissed'; row.resolved_at = now(); row.resolved_by = userId; row.updated_at = now();
+      write(db);
+      DB.recordFeedback(userId, { suggestion_id: suggestionId, transaction_id: s.transaction_id, suggested_category_id: s.suggested_category_id, final_category_id: DB.getTx(userId, s.transaction_id).category_id, feedback_type: 'rejected' });
+      return DB.getSuggestion(userId, suggestionId);
+    },
+    correctSuggestion: function (userId, suggestionId, categoryId) {
+      var s = DB.getSuggestion(userId, suggestionId);
+      if (s.status !== 'pending') throw new Error('Sugestão já resolvida.');
+      var tx = DB.getTx(userId, s.transaction_id);
+      var db = read();
+      var cat = db.categories.find(function (c) { return c.id === categoryId && c.couple_id === tx.couple_id && c.active; });
+      if (!cat) throw new Error('Escolha uma categoria válida.');
+      if (cat.type !== 'both' && cat.type !== tx.type) throw new Error('Categoria incompatível.');
+      DB.updateTx(userId, tx.id, { type: tx.type, description: tx.description, amount: String(tx.amount).replace('.', ','), date: tx.date, category_id: cat.id, payer_user_id: tx.payer_user_id, account_id: tx.account_id || '', credit_card_id: tx.credit_card_id || '', is_shared: tx.is_shared, notes: tx.notes || '' });
+      var db2 = read();
+      var s2 = db2.category_suggestions.find(function (x) { return x.id === suggestionId; });
+      if (s2 && s2.status === 'pending') {
+        s2.status = 'rejected'; s2.resolved_at = now(); s2.resolved_by = userId; s2.updated_at = now();
+        DB.recordFeedback(userId, { suggestion_id: suggestionId, transaction_id: tx.id, suggested_category_id: s.suggested_category_id, final_category_id: cat.id, feedback_type: 'corrected' });
+      }
+      return DB.getSuggestion(userId, suggestionId);
+    },
+    /* Cria linha pendente (expira anteriores do mesmo tx). Chamada interna. */
+    createSuggestionRow: function (userId, txId, hit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var tx = db.transactions.find(function (t) { return t.id === txId && t.couple_id === cid && !t.deleted_at; });
+      if (!tx) return null;
+      var dup = db.category_suggestions.find(function (s) { return s.transaction_id === txId && s.status === 'pending' && s.suggested_category_id === hit.category_id; });
+      if (dup) return dup;
+      db.category_suggestions.forEach(function (s) {
+        if (s.transaction_id === txId && s.status === 'pending') { s.status = 'expired'; s.updated_at = now(); }
+      });
+      var row = { id: id('cs'), couple_id: cid, transaction_id: txId, suggested_category_id: hit.category_id, confidence_score: hit.confidence, suggestion_source: hit.source, reason: hit.reason, status: 'pending', created_at: now(), updated_at: now(), resolved_at: null, resolved_by: null };
+      db.category_suggestions.push(row);
+      logAudit(db, cid, userId, 'suggestion', row.id, 'create', { source: hit.source });
+      write(db);
+      return row;
+    },
+    /* Gatilho "sem categoria": categoria atual é Outros (equivalente honesto e
+       documentado) → sugere sem nunca alterar. Chamado após create/update. */
+    autoSuggestForTx: function (userId, txId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      var tx = db.transactions.find(function (t) { return t.id === txId && t.couple_id === cid && !t.deleted_at; });
+      if (!tx) return null;
+      var cat = db.categories.find(function (c) { return c.id === tx.category_id && c.couple_id === cid; });
+      if (!cat || DB.normalizeDescription(cat.name) !== 'outros') return null;
+      if (db.category_suggestions.some(function (s) { return s.transaction_id === txId && s.status === 'pending'; })) return null;
+      var hit = DB.suggestCategory(userId, { description: tx.description, type: tx.type, amount: tx.amount, category_id: tx.category_id, payer_user_id: tx.payer_user_id, account_id: tx.account_id, credit_card_id: tx.credit_card_id, date: tx.date, excludeTxId: tx.id });
+      if (!hit) return null;
+      return DB.createSuggestionRow(userId, txId, hit);
+    },
+    /* ============ PROMPT 19: IMPORTAÇÃO + CONCILIAÇÃO ============
+       Arquivo (texto) → validação → parsing → normalização → preview →
+       conciliação → confirmação → importação. NUNCA cria transação antes da
+       confirmação. Tudo em centavos; couple_id sempre derivado. */
+    IMPORT_MAX_CHARS: 2000000,
+    IMPORT_MAX_ROWS: 5000,
+    importFileHash: function (text) {
+      var h1 = 0x811c9dc5;
+      var s = String(text || '');
+      for (var i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619); }
+      return ('0000000' + (h1 >>> 0).toString(16)).slice(-8);
+    },
+    detectCsvDelimiter: function (text) {
+      var lines = String(text || '').split(/\r?\n/).filter(function (l) { return l.trim() !== ''; }).slice(0, 5);
+      var cands = [';', ',', '\t'];
+      var best = ';', bestScore = -1;
+      cands.forEach(function (d) {
+        var counts = lines.map(function (l) { return l.split(d).length; });
+        var consistent = counts.every(function (c) { return c === counts[0]; });
+        var score = (consistent ? 10 : 0) + counts[0];
+        if (score > bestScore && counts[0] > 1) { bestScore = score; best = d; }
+      });
+      return best;
+    },
+    parseCsvRows: function (text, delimiter) {
+      var rows = [], cur = '', row = [], inQ = false;
+      var s = String(text || '').replace(/^﻿/, '');
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i];
+        if (inQ) {
+          if (ch === '"') {
+            if (s[i + 1] === '"') { cur += '"'; i++; }
+            else inQ = false;
+          } else cur += ch;
+        } else if (ch === '"') { inQ = true; }
+        else if (ch === delimiter) { row.push(cur); cur = ''; }
+        else if (ch === '\r') { /* ignora */ }
+        else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+        else cur += ch;
+      }
+      row.push(cur); rows.push(row);
+      return rows.filter(function (r) { return !(r.length === 1 && r[0].trim() === ''); });
+    },
+    /* Parser OFX tolerante (arquivos reais nem sempre são XML válido). */
+    parseOfxText: function (text) {
+      var out = { accounts: [], transactions: [], errors: [] };
+      var s = String(text || '');
+      if (!/<OFX/i.test(s)) out.errors.push('Estrutura OFX inválida: cabeçalho ausente.');
+      function tag(block, name) {
+        var m = block.match(new RegExp('<' + name + '>([^<\\r\\n]*)', 'i'));
+        return m ? m[1].trim() : '';
+      }
+      var acctBlocks = s.match(/<STMTTRN>[\s\S]*?(?=<STMTTRN>|<\/BANKTRANLIST)/gi) || [];
+      acctBlocks.forEach(function (b, i) {
+        var dt = tag(b, 'DTPOSTED').slice(0, 8);
+        var amtS = tag(b, 'TRNAMT').replace(',', '.');
+        var amt = Math.round(parseFloat(amtS) * 100);
+        if (!/^\d{8}$/.test(dt)) { out.errors.push('Linha ' + (i + 1) + ': data inválida.'); return; }
+        if (!isFinite(amt)) { out.errors.push('Linha ' + (i + 1) + ': valor inválido.'); return; }
+        out.transactions.push({
+          fitid: tag(b, 'FITID'), line: i + 1, date: dt.slice(0, 4) + '-' + dt.slice(4, 6) + '-' + dt.slice(6, 8),
+          amount: amt, memo: tag(b, 'MEMO') || tag(b, 'NAME'), type: tag(b, 'TRNTYPE'),
+          account: tag(b, 'ACCTID')
+        });
+      });
+      var acctId = tag(s, 'ACCTID');
+      if (acctId) out.accounts.push(acctId);
+      if (!out.transactions.length && !out.errors.length) out.errors.push('Nenhuma transação encontrada no OFX.');
+      return out;
+    },
+    /* Valor monetário flexível → centavos (inteiro). */
+    parseImportAmount: function (raw, decimalSep, thousandSep) {
+      var s = String(raw == null ? '' : raw).trim();
+      if (!s) throw new Error('Valor vazio.');
+      var neg = false;
+      if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+      s = s.replace(/R\$\s?/gi, '').replace(/\s/g, '');
+      if (/^-/.test(s)) { neg = true; s = s.slice(1); }
+      if (decimalSep === ',' || (!decimalSep && /,/.test(s) && !/\.\d{3}/.test(s.replace(/,\d{1,2}$/, '')))) {
+        s = s.replace(/\./g, '').replace(',', '.');
+      } else if (decimalSep === '.') {
+        s = s.replace(/,/g, '');
+      } else if (!decimalSep) {
+        if (/,/.test(s) && /\./.test(s)) {
+          if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+          else s = s.replace(/,/g, '');
+        } else if (/,/.test(s)) { s = s.replace(',', '.'); }
+      }
+      if (thousandSep === '.') s = s.replace(/\./g, '');
+      var v = Math.round(parseFloat(s) * 100);
+      if (!isFinite(v)) throw new Error('Valor inválido: "' + raw + '".');
+      return neg ? -v : v;
+    },
+    /* Data flexível → ISO. Marca ambiguidade em vez de adivinhar calado. */
+    parseImportDate: function (raw, format) {
+      var s = String(raw == null ? '' : raw).trim();
+      var m, d, mo, y, amb = false;
+      if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) { y = m[1]; mo = m[2]; d = m[3]; }
+      else if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/))) {
+        var a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        y = m[3].length === 2 ? '20' + m[3] : m[3];
+        if (format === 'MM/DD/YYYY') { mo = m[1]; d = m[2]; }
+        else if (format === 'DD/MM/YYYY' || format === 'YYYY-MM-DD') { d = m[1]; mo = m[2]; }
+        else if (a > 12) { d = m[1]; mo = m[2]; }
+        else if (b > 12) { mo = m[1]; d = m[2]; }
+        else { d = m[1]; mo = m[2]; amb = true; }
+      } else throw new Error('Data inválida: "' + raw + '".');
+      mo = ('0' + parseInt(mo, 10)).slice(-2); d = ('0' + parseInt(d, 10)).slice(-2);
+      var iso = y + '-' + mo + '-' + d;
+      try { cleanDate(iso); } catch (e) { throw new Error('Data inválida: "' + raw + '".'); }
+      return { iso: iso, ambiguous: amb };
+    },
+    /* Pesos centrais do score (não espalhar pelo frontend). */
+    reconciliationThresholds: function () { return { exact: 0.95, strong: 0.85, probable: 0.70, weak: 0.50 }; },
+    classifyReconciliation: function (score) {
+      var t = DB.reconciliationThresholds();
+      if (score >= t.exact) return 'exact';
+      if (score >= t.strong) return 'strong';
+      if (score >= t.probable) return 'probable';
+      if (score >= t.weak) return 'weak';
+      return null;
+    },
+    /* Score 0..1 determinístico: data 45% + valor 35% + descrição 20%. */
+    calculateReconciliationScore: function (row, cand) {
+      function dayDiff(a, b) {
+        return Math.round((Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10)) - Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10))) / 864e5);
+      }
+      var dd = Math.abs(dayDiff(row.date, cand.date));
+      var dateScore = dd === 0 ? 1 : dd === 1 ? 0.7 : dd === 2 ? 0.4 : 0;
+      var av = Math.abs(row.amountCents - cand.amountCents);
+      var amountScore = av === 0 ? 1 : av <= Math.max(1, Math.round(row.amountCents * 0.01)) ? 0.6 : 0;
+      var descScore = DB.tokenSimilarity(DB.normalizeDescription(row.desc), DB.normalizeDescription(cand.desc));
+      return Math.round((0.45 * dateScore + 0.35 * amountScore + 0.20 * descScore) * 100) / 100;
+    },
+    /* Candidatos ranqueados para conciliação manual (tx/transfer/pagamento/parcela). */
+    findRowCandidates: function (userId, rowId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!row) throw new Error('Registro não encontrado.');
+      var out = [];
+      var rowNorm = { date: row.normalized_date, amountCents: Math.round(row.normalized_amount * 100), desc: row.normalized_description, accountId: row.account_id, dc: row.debit_credit };
+      if (row.credit_card_id) {
+        /* Lote de fatura: parcelas do cartão + lançamentos do cartão. */
+        db.installments.forEach(function (ins) {
+          if (ins.couple_id !== cid || ins.deleted_at) return;
+          if ((ins.credit_card_id || null) !== row.credit_card_id) return;
+          if (toCents(ins.amount) !== Math.round(row.normalized_amount * 100)) return;
+          var pur = db.installments && db.installment_purchases.find(function (p) { return p.id === ins.installment_purchase_id; });
+          var s = DB.calculateReconciliationScore(rowNorm, { date: ins.due_date, amountCents: toCents(ins.amount), desc: pur ? pur.description : '', accountId: null });
+          if (row.installment_number && row.total_installments && ins.installment_number === row.installment_number && ins.total_installments === row.total_installments) s = Math.min(0.95, Math.round((s + 0.15) * 100) / 100);
+          var cls = DB.classifyReconciliation(s);
+          if (cls) out.push({ kind: 'installment', id: ins.id, score: s, cls: cls, label: 'Parcela ' + ins.installment_number + '/' + ins.total_installments + ' • ' + (pur ? pur.description : '') + ' • ' + ins.due_date.split('-').reverse().join('/') + ' • R$ ' + ins.amount.toFixed(2) });
+        });
+        db.transactions.forEach(function (t) {
+          if (t.couple_id !== cid || t.deleted_at) return;
+          if ((t.credit_card_id || null) !== row.credit_card_id) return;
+          var s = DB.calculateReconciliationScore(rowNorm, { date: t.date, amountCents: toCents(t.amount), desc: t.description, accountId: null });
+          var cls = DB.classifyReconciliation(s);
+          if (cls) out.push({ kind: 'transaction', id: t.id, score: s, cls: cls, label: t.description + ' • ' + t.date.split('-').reverse().join('/') + ' • R$ ' + t.amount.toFixed(2) });
+        });
+        out.sort(function (a, b) { return b.score - a.score; });
+        return out.slice(0, 5);
+      }
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.account_id && t.account_id !== row.account_id) return;
+        var s = DB.calculateReconciliationScore(rowNorm, { date: t.date, amountCents: toCents(t.amount), desc: t.description, accountId: t.account_id });
+        var cls = DB.classifyReconciliation(s);
+        if (cls) out.push({ kind: 'transaction', id: t.id, score: s, cls: cls, label: t.description + ' • ' + t.date.split('-').reverse().join('/') + ' • R$ ' + t.amount.toFixed(2) });
+      });
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        var mine = (row.debit_credit === 'debit' && t.from_account_id === row.account_id) || (row.debit_credit === 'credit' && t.to_account_id === row.account_id);
+        if (!mine || toCents(t.amount) !== Math.round(row.normalized_amount * 100)) return;
+        out.push({ kind: 'transfer', id: t.id, score: 0.9, cls: 'strong', label: 'Transferência • ' + t.date.split('-').reverse().join('/') + ' • R$ ' + t.amount.toFixed(2) });
+      });
+      if (row.debit_credit === 'debit') {
+        db.invoice_payments.forEach(function (p) {
+          if (p.couple_id !== cid || p.deleted_at || p.payment_account_id !== row.account_id) return;
+          if (toCents(p.amount) !== Math.round(row.normalized_amount * 100)) return;
+          out.push({ kind: 'invoice_payment', id: p.id, score: 0.8, cls: 'probable', label: 'Pagamento • ' + p.payment_date.split('-').reverse().join('/') + ' • R$ ' + p.amount.toFixed(2) });
+        });
+      }
+      out.sort(function (a, b) { return b.score - a.score; });
+      return out.slice(0, 5);
+    },
+    getImportedRow: function (userId, rowId) {      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!r) throw new Error('Registro importado não encontrado.');
+      return r;
+    },
+    listImportedRows: function (userId, batchId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      return db.imported_transactions.filter(function (r) {
+        return r.import_batch_id === batchId && (!f.status || r.status === f.status) && (!f.match || r.match_status === f.match);
+      }).sort(function (a, b2) { return (a.line_number - b2.line_number) || (a.normalized_date || '').localeCompare(b2.normalized_date || ''); });
+    },
+    rowMatches: function (userId, rowId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.getImportedRow(userId, rowId);
+      return db.reconciliation_matches.filter(function (m) { return m.couple_id === cid && m.imported_transaction_id === rowId; })
+        .sort(function (a, b) { return b.confidence_score - a.confidence_score; });
+    },
+    /* Varre candidatos: txs, transferências, pagamentos e duplicatas externas. */
+    analyzeBatch: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      if (['completed', 'cancelled', 'failed'].indexOf(b.status) >= 0) throw new Error('Lote já encerrado.');
+      if (b.status === 'processing') throw new Error('Lote em processamento.');
+      b.status = 'processing'; write(db);
+      var rows = db.imported_transactions.filter(function (r) { return r.import_batch_id === batchId && r.status === 'valid'; });
+      rows.forEach(function (row) {
+        if (row.status !== 'valid' || row.match_status === 'duplicate') return;
+        DB.analyzeRowInDb(db, cid, userId, row, b);
+      });
+      DB.refreshBatchCountersInDb(db, b);
+      b.status = 'ready'; b.updated_at = now();
+      logAudit(db, cid, userId, 'import', b.id, 'analyze', {});
+      write(db);
+      DB.detectTransferPairs(userId, batchId);
+      return DB.getImportBatch(userId, batchId);
+    },
+    /* Ramo cartão: parcelas existentes, lançamentos do cartão, pagamentos,
+       fatura em aberto. Transferências NUNCA se aplicam a fatura. */
+    analyzeCardRowInDb: function (db, cid, userId, row, batch, rowNorm, consider, dayDiff, setBest, getBest) {
+      var cardId = batch.credit_card_id;
+      var rowCents = Math.round(row.normalized_amount * 100);
+      function best() { return getBest(); }
+      function put(b) { if (!best() || b.score > best().score) setBest(b); }
+      /* Parcelas existentes: mesmo cartão + valor + data próxima (±7d).
+         Bônus quando n/total conferem; teto 0.95 (concilia, não duplica). */
+      db.installments.forEach(function (ins) {
+        if (ins.couple_id !== cid || ins.deleted_at) return;
+        if ((ins.credit_card_id || null) !== cardId) return;
+        if (toCents(ins.amount) !== rowCents) return;
+        if (dayDiff(row.normalized_date, ins.due_date) > 7) return;
+        var pur = db.installment_purchases.find(function (p) { return p.id === ins.installment_purchase_id; });
+        var base = DB.calculateReconciliationScore(rowNorm, { date: ins.due_date, amountCents: toCents(ins.amount), desc: pur ? pur.description : '', accountId: null });
+        var parcelBonus = (row.installment_number && row.total_installments && ins.installment_number === row.installment_number && ins.total_installments === row.total_installments) ? 0.15 : 0;
+        var s = Math.min(0.95, Math.round((base + parcelBonus) * 100) / 100);
+        var cls = DB.classifyReconciliation(s);
+        if (!cls) return;
+        put({ kind: 'installment', id: ins.id, score: s, cls: cls, label: 'parcela ' + ins.installment_number + '/' + ins.total_installments });
+      });
+      /* Lançamentos do cartão (compras avulsas, encargos). */
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if ((t.credit_card_id || null) !== cardId) return;
+        consider('transaction', t.id, { date: t.date, amountCents: toCents(t.amount), desc: t.description, accountId: null }, t.description);
+      });
+      /* Pagamento presente na fatura: tenta invoice_payments, senão a fatura
+         em aberto do próprio cartão (mesmo valor). */
+      if (row.card_item_type === 'card_payment') {
+        db.invoice_payments.forEach(function (p) {
+          if (p.couple_id !== cid || p.deleted_at) return;
+          if (toCents(p.amount) !== rowCents) return;
+          if (dayDiff(row.normalized_date, p.payment_date) > 7) return;
+          put({ kind: 'invoice_payment', id: p.id, score: 0.8, cls: DB.classifyReconciliation(0.8), label: 'pagamento de fatura' });
+        });
+        if (!best() || best().score < 0.8) {
+          var openInv = null;
+          db.invoices.forEach(function (i) {
+            if (i.couple_id !== cid || i.credit_card_id !== cardId) return;
+            if (i.status === 'paid' || i.status === 'cancelled') return;
+            if (toCents(DB.calculateInvoiceOutstanding(userId, i.id)) === rowCents) { if (!openInv) openInv = i; }
+          });
+          if (openInv && (!best() || best().score < 0.8)) {
+            put({ kind: 'invoice', id: openInv.id, score: 0.8, cls: DB.classifyReconciliation(0.8), label: 'fatura em aberto' });
+          }
+        }
+      }
+    },
+    analyzeRowInDb: function (db, cid, userId, row, batch) {
+      batch = batch || db.import_batches.find(function (x) { return x.id === row.import_batch_id; });
+      var isCard = DB.isCardBatch(batch);
+      var rowNorm = { date: row.normalized_date, amountCents: Math.round(row.normalized_amount * 100), desc: row.normalized_description, accountId: row.account_id, dc: row.debit_credit };
+      /* 1. duplicata por identificador externo (mesma conta / mesmo cartão). */
+      if (row.external_transaction_id) {
+        var dup = db.imported_transactions.find(function (x) {
+          if (x.id === row.id || x.couple_id !== cid || x.status === 'invalid') return false;
+          if (!x.external_transaction_id || x.external_transaction_id !== row.external_transaction_id) return false;
+          return isCard ? (x.credit_card_id || null) === (row.credit_card_id || null) : x.account_id === row.account_id;
+        });
+        if (dup) {
+          DB.saveMatchInDb(db, cid, row, 'imported', dup.id, 1.0, 'exact', 'Mesmo identificador externo.', 'duplicate');
+          row.match_status = 'duplicate'; row.confidence_score = 1;
+          row.match_reason = 'Mesmo identificador em outro registro.';
+          row.updated_at = now();
+          return;
+        }
+      }
+      var best = null;
+      function consider(kind, id, cand, label) {
+        var s = DB.calculateReconciliationScore(rowNorm, cand);
+        var cls = DB.classifyReconciliation(s);
+        if (!cls) return;
+        if (!best || s > best.score) best = { kind: kind, id: id, score: s, cls: cls, label: label };
+      }
+      function dayDiff(a, b) {
+        return Math.abs(Math.round((Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10)) - Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10))) / 864e5));
+      }
+      if (isCard) {
+        DB.analyzeCardRowInDb(db, cid, userId, row, batch, rowNorm, consider, dayDiff, function (b2) { best = b2; }, function () { return best; });
+      } else {
+      /* 2. transações (mesma conta ou sem conta = legado). */
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.account_id && t.account_id !== row.account_id) return;
+        consider('transaction', t.id, { date: t.date, amountCents: toCents(t.amount), desc: t.description, accountId: t.account_id }, t.description);
+      });
+      /* 3. transferências existentes (lado correspondente). */
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        var mine = (row.debit_credit === 'debit' && t.from_account_id === row.account_id) || (row.debit_credit === 'credit' && t.to_account_id === row.account_id);
+        if (!mine) return;
+        var dd = Math.abs(Math.round((Date.UTC(+row.normalized_date.slice(0, 4), +row.normalized_date.slice(5, 7) - 1, +row.normalized_date.slice(8, 10)) - Date.UTC(+t.date.slice(0, 4), +t.date.slice(5, 7) - 1, +t.date.slice(8, 10))) / 864e5));
+        if (toCents(t.amount) !== Math.round(row.normalized_amount * 100) || dd > 3) return;
+        var s = dd === 0 ? 0.9 : dd === 1 ? 0.8 : 0.7;
+        if (!best || s > best.score) best = { kind: 'transfer', id: t.id, score: s, cls: DB.classifyReconciliation(s), label: 'transferência' };
+      });
+      /* 4. pagamentos de fatura (saída da mesma conta, valor igual, ±3 dias). */
+      if (row.debit_credit === 'debit') {
+        db.invoice_payments.forEach(function (p) {
+          if (p.couple_id !== cid || p.deleted_at || p.payment_account_id !== row.account_id) return;
+          if (toCents(p.amount) !== Math.round(row.normalized_amount * 100)) return;
+          var dd = Math.abs(Math.round((Date.UTC(+row.normalized_date.slice(0, 4), +row.normalized_date.slice(5, 7) - 1, +row.normalized_date.slice(8, 10)) - Date.UTC(+p.payment_date.slice(0, 4), +p.payment_date.slice(5, 7) - 1, +p.payment_date.slice(8, 10))) / 864e5));
+          if (dd > 3) return;
+          var s = 0.8;
+          if (!best || s > best.score) best = { kind: 'invoice_payment', id: p.id, score: s, cls: DB.classifyReconciliation(s), label: 'pagamento de fatura' };
+        });
+        /* 5. fatura em aberto no mesmo valor (sugestão de pagamento). */
+        if (!best || best.score < 0.85) {
+          var openInv = null;
+          db.invoices.forEach(function (i) {
+            if (i.couple_id !== cid || i.status === 'paid' || i.status === 'cancelled') return;
+            var ddue = Math.abs(Math.round((Date.UTC(+row.normalized_date.slice(0, 4), +row.normalized_date.slice(5, 7) - 1, +row.normalized_date.slice(8, 10)) - Date.UTC(+i.due_date.slice(0, 4), +i.due_date.slice(5, 7) - 1, +i.due_date.slice(8, 10))) / 864e5));
+            if (ddue > 45) return;
+            var oust = toCents(DB.calculateInvoiceOutstanding(userId, i.id));
+            if (oust === Math.round(row.normalized_amount * 100)) {
+              if (!openInv) openInv = i;
+            }
+          });
+          if (openInv && (!best || best.score < 0.8)) {
+            best = { kind: 'invoice', id: openInv.id, score: 0.8, cls: DB.classifyReconciliation(0.8), label: 'fatura em aberto' };
+          }
+        }
+      }
+      } /* fim do ramo bancário */
+      if (!best) { row.match_status = 'new'; row.updated_at = now(); return; }
+      /* Pagamento/estorno da fatura nunca vira "duplicado" automático: são
+         semanticamente distintos da compra original (revisão do usuário). */
+      var noAutoDup = isCard && (row.card_item_type === 'card_payment' || row.card_item_type === 'card_refund');
+      if (best.cls === 'exact' && best.kind === 'transaction' && !noAutoDup) {
+        DB.saveMatchInDb(db, cid, row, 'transaction', best.id, best.score, 'exact', 'Idêntica a lançamento existente.');
+        row.match_status = 'duplicate'; row.confidence_score = best.score;
+        row.match_reason = 'Idêntica a lançamento existente.';
+      } else {
+        DB.saveMatchInDb(db, cid, row, best.kind, best.id, best.score, best.cls, best.kind === 'transaction' ? 'Semelhante a: ' + best.label : 'Possível ' + best.label + '.');
+        row.match_status = 'matched'; row.confidence_score = best.score;
+        row.match_reason = best.kind === 'transaction' ? 'Semelhante a: ' + best.label : 'Possível ' + best.label + '.';
+      }
+      row.updated_at = now();
+    },
+    saveMatchInDb: function (db, cid, row, entityType, entityId, score, matchType, reason) {
+      var ex = db.reconciliation_matches.find(function (m) {
+        return m.imported_transaction_id === row.id && m.entity_type === entityType && m.entity_id === entityId && m.status === 'pending';
+      });
+      if (ex) return ex;
+      var m = { id: id('rm'), couple_id: cid, import_batch_id: row.import_batch_id, imported_transaction_id: row.id, entity_type: entityType, entity_id: entityId, match_type: matchType, confidence_score: score, match_reason: reason, status: 'pending', created_at: now(), updated_at: now(), resolved_at: null, resolved_by: null };
+      db.reconciliation_matches.push(m);
+      return m;
+    },
+    refreshBatchCounters: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      DB.refreshBatchCountersInDb(db, b);
+      write(db);
+      return DB.getImportBatch(userId, batchId);
+    },
+    refreshBatchCountersInDb: function (db, b) {
+      var c = { total: 0, valid: 0, invalid: 0, dup: 0, matched: 0, nw: 0, conf: 0, imp: 0, ign: 0, fail: 0 };
+      db.imported_transactions.forEach(function (r) {
+        if (r.import_batch_id !== b.id) return;
+        c.total++;
+        if (r.status === 'invalid') c.invalid++;
+        else if (r.status === 'valid') c.valid++;
+        else if (r.status === 'confirmed') c.conf++;
+        else if (r.status === 'imported') c.imp++;
+        else if (r.status === 'ignored') c.ign++;
+        else if (r.status === 'failed') c.fail++;
+        if (r.match_status === 'duplicate') c.dup++;
+        else if (r.match_status === 'matched') c.matched++;
+        else if (r.match_status === 'new') c.nw++;
+      });
+      b.total_rows = c.total; b.valid_rows = c.valid; b.invalid_rows = c.invalid;
+      b.duplicate_rows = c.dup; b.matched_rows = c.matched; b.new_rows = c.nw;
+      b.confirmed_rows = c.conf; b.imported_rows = c.imp; b.ignored_rows = c.ign;
+      b.failed_rows = c.fail;
+      b.updated_at = now();
+    },
+    /* Conciliar: vincula sem criar nada e sem alterar valores. */
+    conciliateRow: function (userId, rowId, entityType, entityId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!row) throw new Error('Registro não encontrado.');
+      if (row.status === 'imported') throw new Error('Registro já importado.');
+      if (row.status === 'invalid') throw new Error('Registro inválido.');
+      var ok = false;
+      if (entityType === 'transaction') {
+        var t = db.transactions.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!t) throw new Error('Transação não encontrada.');
+        row.matched_transaction_id = t.id; ok = true;
+      } else if (entityType === 'transfer') {
+        var tr = db.transfers.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!tr) throw new Error('Transferência não encontrada.');
+        row.matched_transfer_id = tr.id; ok = true;
+      } else if (entityType === 'invoice_payment') {
+        var p = db.invoice_payments.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!p) throw new Error('Pagamento não encontrado.');
+        ok = true;
+      } else if (entityType === 'installment') {
+        var ins = db.installments.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!ins) throw new Error('Parcela não encontrada.');
+        if (row.credit_card_id && (ins.credit_card_id || null) !== row.credit_card_id) throw new Error('Parcela de outro cartão.');
+        row.matched_installment_id = ins.id; ok = true;
+      } else if (entityType === 'installment_purchase') {
+        var pur = db.installment_purchases.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!pur) throw new Error('Compra parcelada não encontrada.');
+        if (row.credit_card_id && pur.credit_card_id !== row.credit_card_id) throw new Error('Compra de outro cartão.');
+        ok = true;
+      } else if (entityType === 'invoice') {
+        throw new Error('Fatura precisa ser paga pela ação de pagamento, não vinculada diretamente.');
+      } else throw new Error('Tipo inválido.');
+      if (!ok) throw new Error('Falha ao conciliar.');
+      row.match_status = 'matched';
+      row.confidence_score = 1; row.match_reason = 'Conciliação manual.';
+      row.updated_at = now();
+      db.reconciliation_matches.forEach(function (m) {
+        if (m.imported_transaction_id === rowId && m.status === 'pending') { m.status = 'accepted'; m.updated_at = now(); m.resolved_at = now(); m.resolved_by = userId; }
+      });
+      db.reconciliation_matches.push({ id: id('rm'), couple_id: cid, import_batch_id: row.import_batch_id, imported_transaction_id: rowId, entity_type: entityType, entity_id: entityId, match_type: 'exact', confidence_score: 1, match_reason: 'Conciliação manual.', status: 'accepted', created_at: now(), updated_at: now(), resolved_at: now(), resolved_by: userId });
+      var b = db.import_batches.find(function (x) { return x.id === row.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, cid, userId, 'import', b.id, 'conciliate', { row: rowId });
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    unmatchRow: function (userId, rowId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!row) throw new Error('Registro não encontrado.');
+      if (row.status === 'imported') throw new Error('Registro já importado.');
+      row.matched_transaction_id = null; row.matched_transfer_id = null; row.matched_installment_id = null;
+      row.match_status = 'new'; row.confidence_score = null; row.match_reason = null;
+      row.updated_at = now();
+      db.reconciliation_matches.forEach(function (m) {
+        if (m.imported_transaction_id === rowId && m.status !== 'accepted') { m.status = 'rejected'; m.updated_at = now(); m.resolved_at = now(); m.resolved_by = userId; }
+      });
+      var b = db.import_batches.find(function (x) { return x.id === row.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, cid, userId, 'import', b.id, 'unmatch', { row: rowId });
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    ignoreRow: function (userId, rowId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!row) throw new Error('Registro não encontrado.');
+      if (row.status === 'imported') throw new Error('Registro já importado.');
+      row.status = 'ignored'; row.updated_at = now();
+      db.reconciliation_matches.forEach(function (m) {
+        if (m.imported_transaction_id === rowId && m.status === 'pending') { m.status = 'ignored'; m.updated_at = now(); m.resolved_at = now(); m.resolved_by = userId; }
+      });
+      var b = db.import_batches.find(function (x) { return x.id === row.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, cid, userId, 'import', b.id, 'ignore', { row: rowId });
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    confirmRow: function (userId, rowId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.imported_transactions.find(function (x) { return x.id === rowId && x.couple_id === cid; });
+      if (!row) throw new Error('Registro não encontrado.');
+      if (row.status === 'imported') throw new Error('Registro já importado.');
+      if (row.status !== 'valid') throw new Error('Somente registros válidos.');
+      row.status = 'confirmed'; row.updated_at = now();
+      var b = db.import_batches.find(function (x) { return x.id === row.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    /* Importar como nova: via createTx (valida casal/conta/categoria, dispara
+       regras e sugestões). Idempotente por created_transaction_id + trava. */
+    importRowAsNew: function (userId, rowId, categoryId) {
+      var row = DB.getImportedRow(userId, rowId);
+      if (row.status === 'imported' || row.created_transaction_id) throw new Error('Registro já importado.');
+      if (row.status !== 'valid' && row.status !== 'confirmed') throw new Error('Somente registros válidos ou confirmados.');
+      if (row.credit_card_id) return DB.importCardRowAsNew(userId, rowId, categoryId);
+      var useCat = categoryId;
+      if (!useCat) {
+        var hit = DB.suggestCategory(userId, { description: row.normalized_description, type: row.normalized_type, amount: row.normalized_amount, payer_user_id: userId, date: row.normalized_date, excludeTxId: null });
+        useCat = hit ? hit.category_id : DB.defaultImportCategory(userId, row.normalized_type);
+      }
+      var t = DB.createTx(userId, {
+        type: row.normalized_type, description: row.normalized_description || row.raw_description,
+        amount: String(row.normalized_amount).replace('.', ','), date: row.normalized_date,
+        category_id: useCat, payer_user_id: userId, account_id: row.account_id,
+        is_shared: false, notes: 'Importado do extrato (linha ' + row.line_number + ').'
+      });
+      var db = read();
+      var r2 = db.imported_transactions.find(function (x) { return x.id === rowId; });
+      r2.status = 'imported'; r2.created_transaction_id = t.id; r2.updated_at = now();
+      var b = db.import_batches.find(function (x) { return x.id === r2.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, r2.couple_id, userId, 'import', b.id, 'import_row', { row: rowId, tx: t.id });
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    defaultImportCategory: function (userId, type) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.categories.find(function (x) { return x.couple_id === cid && x.active && DB.normalizeDescription(x.name) === 'outros'; });
+      if (!c) throw new Error('Categoria padrão indisponível.');
+      return c.id;
+    },
+    /* Importar item de fatura como lançamento no cartão (via createTx: valida
+       casal/cartão/categoria, vincula fatura aberta pela data, dispara regras
+       e sugestões, consome limite). Pagamento e estorno NÃO viram despesa. */
+    importCardRowAsNew: function (userId, rowId, categoryId) {
+      var row = DB.getImportedRow(userId, rowId);
+      if (row.status === 'imported' || row.created_transaction_id) throw new Error('Registro já importado.');
+      if (row.status !== 'valid' && row.status !== 'confirmed') throw new Error('Somente registros válidos ou confirmados.');
+      if (!row.credit_card_id) throw new Error('Lote sem cartão associado.');
+      if (row.card_item_type === 'card_payment') throw new Error('Pagamento de fatura não se importa como despesa: concilie ou ignore.');
+      if (row.card_item_type === 'card_refund') throw new Error('Estorno não vira nova despesa: concilie com a compra original ou ignore.');
+      var useCat = categoryId;
+      if (!useCat) {
+        var hit = DB.suggestCategory(userId, { description: row.normalized_description, type: 'expense', amount: row.normalized_amount, payer_user_id: userId, date: row.normalized_date, excludeTxId: null });
+        useCat = hit ? hit.category_id : DB.defaultImportCategory(userId, 'expense');
+      }
+      var t = DB.createTx(userId, {
+        type: 'expense', description: row.normalized_description || row.raw_description,
+        amount: String(row.normalized_amount).replace('.', ','), date: row.normalized_date,
+        category_id: useCat, payer_user_id: userId, account_id: null, credit_card_id: row.credit_card_id,
+        is_shared: false, notes: 'Importado da fatura (linha ' + row.line_number + ').'
+      });
+      var db = read();
+      var r2 = db.imported_transactions.find(function (x) { return x.id === rowId; });
+      r2.status = 'imported'; r2.created_transaction_id = t.id;
+      if (t.invoice_id) r2.invoice_id = t.invoice_id;
+      r2.updated_at = now();
+      var b = db.import_batches.find(function (x) { return x.id === r2.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, r2.couple_id, userId, 'import', b.id, 'import_card_row', { row: rowId, tx: t.id });
+      write(db);
+      return DB.getImportedRow(userId, rowId);
+    },
+    /* Identifica a fatura do lote (cartão + mês/ano). Sem create: só localiza.
+       Com create:true e confirmação da UI: cria explicitamente (nunca calada). */
+    ensureBatchInvoice: function (userId, batchId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      if (!DB.isCardBatch(b) || !b.credit_card_id) throw new Error('Lote sem cartão associado.');
+      var card = db.credit_cards.find(function (c) { return c.id === b.credit_card_id && c.couple_id === cid; });
+      if (!card) throw new Error('Cartão inválido para este casal.');
+      var ref;
+      if (opt.month && opt.year) {
+        ref = { month: parseInt(opt.month, 10), year: parseInt(opt.year, 10) };
+        if (!(ref.month >= 1 && ref.month <= 12) || !(ref.year >= 2000 && ref.year <= 2100)) throw new Error('Período inválido.');
+      } else {
+        if (!b.period_start) throw new Error('Período do arquivo não identificado.');
+        var per = invoicePeriodFor(card, b.period_start);
+        ref = { month: per.refMonth, year: per.refYear };
+      }
+      var inv = db.invoices.find(function (i) { return i.couple_id === cid && i.credit_card_id === card.id && i.reference_month === ref.month && i.reference_year === ref.year; });
+      if (inv) {
+        b.invoice_id = inv.id; b.updated_at = now();
+        logAudit(db, cid, userId, 'import', b.id, 'invoice_resolved', { invoice: inv.id });
+        write(db);
+        return { invoice: DB.getInvoiceRaw(userId, inv.id), created: false };
+      }
+      if (!opt.create) return { invoice: null, created: false, month: ref.month, year: ref.year };
+      var p2 = invoicePeriodFor(card, (ref.year + '-' + ('0' + ref.month).slice(-2) + '-15'));
+      inv = { id: id('iv'), couple_id: cid, credit_card_id: card.id, reference_month: ref.month, reference_year: ref.year, billing_period_start: p2.start, billing_period_end: p2.end, closing_date: p2.closing, due_date: p2.due, total_amount: 0, paid_amount: 0, status: 'open', payment_account_id: null, paid_at: null, created_at: now(), updated_at: now(), cancelled_at: null };
+      db.invoices.push(inv);
+      b.invoice_id = inv.id; b.updated_at = now();
+      logAudit(db, cid, userId, 'import', b.id, 'invoice_created', { invoice: inv.id });
+      write(db);
+      return { invoice: DB.getInvoiceRaw(userId, inv.id), created: true };
+    },
+    /* Total do arquivo: cobranças (+) menos pagamentos/créditos (−). */
+    calculateImportedStatementTotal: function (userId, batchId) {
+      var rows = DB.listImportedRows(userId, batchId, {}).filter(function (r) { return r.status === 'valid' || r.status === 'confirmed' || r.status === 'imported'; });
+      var charges = 0, credits = 0;
+      rows.forEach(function (r) {
+        var cents = Math.round(r.normalized_amount * 100);
+        if (r.debit_credit === 'credit') credits += cents; else charges += cents;
+      });
+      return { charges: charges / 100, credits: credits / 100, total: (charges - credits) / 100, count: rows.length };
+    },
+    /* Compara total do arquivo com o total central da fatura (sem 2º cálculo). */
+    statementDivergence: function (userId, batchId) {
+      var b = DB.getImportBatch(userId, batchId);
+      if (!b.invoice_id) return { invoice: null, statementTotal: null, invoiceTotal: null, diff: null };
+      var st = DB.calculateImportedStatementTotal(userId, batchId);
+      var invTotal = DB.calculateInvoiceTotal(userId, b.invoice_id);
+      var diff = Math.round((st.total - invTotal) * 100) / 100;
+      return { invoice: b.invoice_id, statementTotal: st.total, invoiceTotal: invTotal, diff: diff };
+    },
+    /* Criar compra parcelada a partir da linha (dados confirmados pelo usuário;
+       nunca inventa parcelas: total/count/datas vêm do formulário). */
+    createInstallmentPurchaseFromRow: function (userId, rowId, data) {
+      var row = DB.getImportedRow(userId, rowId);
+      if (row.status === 'imported' || row.created_transaction_id) throw new Error('Registro já importado.');
+      if (row.status !== 'valid' && row.status !== 'confirmed') throw new Error('Somente registros válidos ou confirmados.');
+      if (!row.credit_card_id) throw new Error('Lote sem cartão associado.');
+      data = data || {};
+      var p = DB.createInstallmentPurchase(userId, {
+        credit_card_id: row.credit_card_id, description: String(data.description || row.normalized_description || row.raw_description || ''),
+        total_amount: data.total_amount, count: data.count, first_installment_date: data.first_installment_date || row.normalized_date,
+        category_id: data.category_id, is_shared: !!data.is_shared, payer_user_id: data.payer_user_id || userId, notes: 'Criada da fatura importada (linha ' + row.line_number + ').'
+      });
+      var db = read();
+      var r2 = db.imported_transactions.find(function (x) { return x.id === rowId; });
+      r2.status = 'imported'; r2.match_status = 'matched';
+      r2.confidence_score = 1; r2.match_reason = 'Compra parcelada criada na conciliação.';
+      r2.updated_at = now();
+      db.reconciliation_matches.push({ id: id('rm'), couple_id: r2.couple_id, import_batch_id: r2.import_batch_id, imported_transaction_id: rowId, entity_type: 'installment_purchase', entity_id: p.id, match_type: 'exact', confidence_score: 1, match_reason: 'Compra parcelada criada.', status: 'accepted', created_at: now(), updated_at: now(), resolved_at: now(), resolved_by: userId });
+      var b = db.import_batches.find(function (x) { return x.id === r2.import_batch_id; });
+      DB.refreshBatchCountersInDb(db, b);
+      logAudit(db, r2.couple_id, userId, 'import', b.id, 'installment_created', { row: rowId, purchase: p.id });
+      write(db);
+      return p;
+    },
+    /* Criar transferência a partir de par confirmado (serviço central). */
+    createTransferFromPair: function (userId, outRowId, inRowId) {
+      var o = DB.getImportedRow(userId, outRowId);
+      var r = DB.getImportedRow(userId, inRowId);
+      if (o.status === 'imported' || r.status === 'imported') throw new Error('Registro já importado.');
+      if (o.debit_credit !== 'debit' || r.debit_credit !== 'credit') throw new Error('Par precisa ser saída + entrada.');
+      if (o.account_id === r.account_id) throw new Error('Contas precisam ser diferentes.');
+      if (Math.round(o.normalized_amount * 100) !== Math.round(r.normalized_amount * 100)) throw new Error('Valores diferentes.');
+      var t = DB.createTransfer(userId, { from_account_id: o.account_id, to_account_id: r.account_id, amount: String(o.normalized_amount).replace('.', ','), date: o.normalized_date, description: o.normalized_description || r.normalized_description });
+      var db = read();
+      [o.id, r.id].forEach(function (id) {
+        var row = db.imported_transactions.find(function (x) { return x.id === id; });
+        row.matched_transfer_id = t.id; row.match_status = 'matched';
+        row.confidence_score = 1; row.match_reason = 'Transferência criada na conciliação.';
+        row.updated_at = now();
+      });
+      db.reconciliation_matches.forEach(function (m) {
+        if ((m.imported_transaction_id === o.id || m.imported_transaction_id === r.id) && m.status === 'pending') { m.status = 'accepted'; m.updated_at = now(); m.resolved_at = now(); m.resolved_by = userId; }
+      });
+      var b = db.import_batches.find(function (x) { return x.id === o.import_batch_id; });
+      if (b) DB.refreshBatchCountersInDb(db, b);
+      var b2 = db.import_batches.find(function (x) { return x.id === r.import_batch_id; });
+      if (b2 && b2.id !== (b && b.id)) DB.refreshBatchCountersInDb(db, b2);
+      logAudit(db, o.couple_id, userId, 'import', o.import_batch_id, 'transfer_created', { tx: t.id });
+      write(db);
+      return t;
+    },
+    /* Confirmar pagamento de fatura a partir da linha (usa invoice_payments). */
+    confirmInvoicePayment: function (userId, rowId, invoiceId) {
+      var row = DB.getImportedRow(userId, rowId);
+      if (row.status === 'imported' || row.created_transaction_id) throw new Error('Registro já importado.');
+      if (row.debit_credit !== 'debit') throw new Error('Pagamento de fatura parte de uma saída.');
+      var db = read();
+      var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === row.couple_id; });
+      if (!inv) throw new Error('Fatura não encontrada.');
+      var out = DB.calculateInvoiceOutstanding(userId, invoiceId);
+      if (Math.round(row.normalized_amount * 100) !== toCents(out)) throw new Error('Valor diferente do pendente (' + money(out) + ').');
+      var pay = DB.payInvoice(userId, invoiceId, { payment_account_id: row.account_id, amount: String(row.normalized_amount).replace('.', ','), payment_date: row.normalized_date, notes: 'Conciliação de extrato.' });
+      var db2 = read();
+      var r2 = db2.imported_transactions.find(function (x) { return x.id === rowId; });
+      r2.match_status = 'matched'; r2.confidence_score = 1; r2.match_reason = 'Pagamento de fatura conciliado.'; r2.updated_at = now();
+      db2.reconciliation_matches.push({ id: id('rm'), couple_id: r2.couple_id, import_batch_id: r2.import_batch_id, imported_transaction_id: rowId, entity_type: 'invoice_payment', entity_id: pay.id, match_type: 'exact', confidence_score: 1, match_reason: 'Pagamento conciliado.', status: 'accepted', created_at: now(), updated_at: now(), resolved_at: now(), resolved_by: userId });
+      var b = db2.import_batches.find(function (x) { return x.id === r2.import_batch_id; });
+      DB.refreshBatchCountersInDb(db2, b);
+      logAudit(db2, r2.couple_id, userId, 'import', b.id, 'invoice_paid', { row: rowId });
+      write(db2);
+      return DB.getImportedRow(userId, rowId);
+    },
+    confirmAllNew: function (userId, batchId) {
+      var rows = DB.listImportedRows(userId, batchId, {}).filter(function (r) { return r.status === 'valid' && r.match_status === 'new'; });
+      rows.forEach(function (r) { DB.confirmRow(userId, r.id); });
+      return rows.length;
+    },
+    finalizeBatch: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      if (['completed', 'partially_completed', 'cancelled'].indexOf(b.status) >= 0) throw new Error('Lote já encerrado.');
+      if (b.status === 'processing') throw new Error('Lote em processamento.');
+      b.status = 'processing'; write(db);
+      var rows = DB.listImportedRows(userId, batchId, {}).filter(function (r) { return r.status === 'confirmed'; });
+      var done = 0, fail = 0;
+      rows.forEach(function (r) {
+        try { DB.importRowAsNew(userId, r.id); done++; }
+        catch (e) {
+          var db2 = read();
+          var row = db2.imported_transactions.find(function (x) { return x.id === r.id; });
+          if (row) { row.status = 'failed'; row.updated_at = now(); }
+          var bb = db2.import_batches.find(function (x) { return x.id === batchId; });
+          if (bb) DB.refreshBatchCountersInDb(db2, bb);
+          logAudit(db2, cid, userId, 'import', batchId, 'row_failed', { row: r.id });
+          write(db2);
+          fail++;
+        }
+      });
+      var db3 = read();
+      var b3 = db3.import_batches.find(function (x) { return x.id === batchId; });
+      DB.refreshBatchCountersInDb(db3, b3);
+      var left = db3.imported_transactions.filter(function (r) { return r.import_batch_id === batchId && (r.status === 'valid' || r.status === 'confirmed'); }).length;
+      b3.status = fail ? (done ? 'partially_completed' : 'failed') : (left ? 'partially_completed' : 'completed');
+      b3.completed_at = now(); b3.updated_at = now();
+      logAudit(db3, cid, userId, 'import', batchId, 'finalize', { done: done, fail: fail });
+      write(db3);
+      return DB.getImportBatch(userId, batchId);
+    },
+    cancelBatch: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      if (['completed', 'cancelled'].indexOf(b.status) >= 0) throw new Error('Lote já encerrado.');
+      b.status = 'cancelled'; b.updated_at = now();
+      logAudit(db, cid, userId, 'import', batchId, 'cancel', {});
+      write(db);
+      return DB.getImportBatch(userId, batchId);
+    },
+    saveImportMapping: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var acc = data.account_id ? db.accounts.find(function (a) { return a.id === data.account_id && a.couple_id === cid; }) : null;
+      var card = data.credit_card_id ? db.credit_cards.find(function (c) { return c.id === data.credit_card_id && c.couple_id === cid; }) : null;
+      if (data.credit_card_id && !card) throw new Error('Cartão inválido.');
+      if (!acc && !card) throw new Error(data.credit_card_id ? 'Cartão inválido.' : 'Conta inválida.');
+      var m = { id: id('im'), couple_id: cid, created_by: userId, account_id: acc ? acc.id : null, credit_card_id: card ? card.id : null, file_type: data.file_type || 'csv', mapping_name: String(data.mapping_name || 'Mapeamento').slice(0, 60), column_mapping: data.column_mapping || {}, date_format: data.date_format || 'auto', decimal_separator: data.decimal_separator || '', thousand_separator: data.thousand_separator || '', amount_sign_mode: data.amount_sign_mode || 'auto', created_at: now(), updated_at: now() };
+      db.import_mappings.push(m);
+      logAudit(db, cid, userId, 'import', m.id, 'mapping_saved', {});
+      write(db);
+      return m;
+    },
+    listImportMappings: function (userId, accountId, fileType, cardId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.import_mappings.filter(function (m) {
+        return m.couple_id === cid && (!accountId || m.account_id === accountId) && (!fileType || m.file_type === fileType) && (cardId === undefined || (m.credit_card_id || null) === (cardId || null));
+      }).sort(function (a, b) { return (b.updated_at + b.id).localeCompare(a.updated_at + a.id); });
+    },
+    detectColumnMapping: function (headers) {
+      var H = headers.map(function (h) {
+        var s = String(h || '').toLowerCase();
+        try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+        return s.replace(/[^a-z0-9]/g, '');
+      });
+      function find(words) {
+        for (var i = 0; i < H.length; i++) {
+          for (var w = 0; w < words.length; w++) {
+            if (H[i] === words[w] || H[i].indexOf(words[w]) === 0 || (H[i].length >= 1 && words[w].indexOf(H[i]) === 0)) return i;
+          }
+        }
+        return -1;
+      }
+      return {
+        date: find(['data', 'date', 'dt', 'transactiondate', 'datamovimento']),
+        description: find(['descricao', 'description', 'historico', 'memo', 'lancamento', 'detalhe']),
+        amount: find(['valor', 'amount', 'value', 'montante']),
+        debit: find(['debito', 'debit', 'saida', 'saidas']),
+        credit: find(['credito', 'credit', 'entrada', 'entradas']),
+        type: find(['tipo', 'type', 'operacao']),
+        installment: find(['parcela', 'parcelas', 'parc', 'prestacao', 'installment', 'nparcela']),
+        external_id: find(['id', 'identificador', 'fitid', 'nsu', 'documento'])
+      };
+    },
+    /* Pares saída×entrada entre contas do casal (±3 dias, mesmo valor). */
+    /* Pares saída×entrada entre contas do casal (±3 dias, mesmo valor).
+       Fatura de cartão nunca participa (pagamento de fatura ≠ transferência). */
+    detectTransferPairs: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      var found = [];
+      var outs = db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.status === 'valid' && r.match_status !== 'duplicate' && r.debit_credit === 'debit' && !r.credit_card_id; });
+      outs.forEach(function (o) {
+        if (o.match_status !== 'new' && o.match_status !== 'matched') return;
+        var ov = Math.round(o.normalized_amount * 100);
+        var cands = db.imported_transactions.filter(function (r) {
+          return r.id !== o.id && r.couple_id === cid && r.status === 'valid' && r.debit_credit === 'credit' && !r.credit_card_id &&
+            r.account_id !== o.account_id && Math.round(r.normalized_amount * 100) === ov &&
+            Math.abs(Math.round((Date.UTC(+r.normalized_date.slice(0, 4), +r.normalized_date.slice(5, 7) - 1, +r.normalized_date.slice(8, 10)) - Date.UTC(+o.normalized_date.slice(0, 4), +o.normalized_date.slice(5, 7) - 1, +o.normalized_date.slice(8, 10))) / 864e5)) <= 3;
+        });
+        cands.forEach(function (r) {
+          var sim = DB.tokenSimilarity(DB.normalizeDescription(o.normalized_description), DB.normalizeDescription(r.normalized_description));
+          var dd = Math.abs(Math.round((Date.UTC(+r.normalized_date.slice(0, 4), +r.normalized_date.slice(5, 7) - 1, +r.normalized_date.slice(8, 10)) - Date.UTC(+o.normalized_date.slice(0, 4), +o.normalized_date.slice(5, 7) - 1, +o.normalized_date.slice(8, 10))) / 864e5));
+          var s = Math.round(Math.min(0.95, (dd === 0 ? 0.8 : dd === 1 ? 0.75 : 0.7) + (sim >= 0.5 ? 0.1 : 0)) * 100) / 100;
+          var cls = DB.classifyReconciliation(s);
+          if (!cls) return;
+          DB.saveMatchInDb(db, cid, o, 'transfer', r.id, s, 'transfer_pair', 'Saída e entrada compatíveis com transferência.');
+          DB.saveMatchInDb(db, cid, r, 'transfer', o.id, s, 'transfer_pair', 'Entrada e saída compatíveis com transferência.');
+          o.match_status = 'matched'; o.confidence_score = s; o.match_reason = 'Possível transferência.'; o.updated_at = now();
+          r.match_status = 'matched'; r.confidence_score = s; r.match_reason = 'Possível transferência.'; r.updated_at = now();
+          found.push({ out: o.id, in: r.id, score: s });
+        });
+      });
+      if (found.length) write(db);
+      return found;
+    },
+    getImportBatch: function (userId, batchId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      return b;
+    },
+    listImportBatches: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.import_batches.filter(function (b) {
+        return b.couple_id === cid &&
+          (!f.file_type || b.file_type === f.file_type) &&
+          (!f.account_id || b.account_id === f.account_id) &&
+          (!f.status || b.status === f.status);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 50);
+    },
+    /* ============ PROMPT 19.1: FATURA DE CARTÃO (reusa tudo do 19) ============
+       bank_statement vs credit_card_statement. Fatura nunca é conta: compra,
+       parcela, fatura e pagamento continuam entidades distintas. */
+    isCardBatch: function (b) { return !!b && (b.import_source_type || 'bank_statement') === 'credit_card_statement'; },
+    /* "1/3", "1 de 3", "01/12" → {n,total}; "à vista/avista/unica/1x" → 1/1. */
+    parseInstallmentHint: function (raw) {
+      var s = String(raw == null ? '' : raw).toLowerCase();
+      try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+      s = s.replace(/[^a-z0-9/]/g, '');
+      var m;
+      if (!s || /^(avista|vista|unica|single|1x)$/.test(s)) return s ? { n: 1, total: 1 } : null;
+      if ((m = s.match(/^(\d{1,2})\/(\d{1,2})$/))) {
+        var n = parseInt(m[1], 10), t = parseInt(m[2], 10);
+        if (n >= 1 && t >= 1 && t <= 60 && n <= t) return { n: n, total: t };
+        return null;
+      }
+      if ((m = s.match(/^(\d{1,2})de(\d{1,2})$/))) {
+        var n2 = parseInt(m[1], 10), t2 = parseInt(m[2], 10);
+        if (n2 >= 1 && t2 >= 1 && t2 <= 60 && n2 <= t2) return { n: n2, total: t2 };
+        return null;
+      }
+      return null;
+    },
+    /* Classifica o item da fatura (tipo explícito > descrição > parcela > padrão). */
+    classifyCardItem: function (descRaw, typeRaw, amountCents, inst) {
+      var t = String(typeRaw || '').toLowerCase(), d = String(descRaw || '').toLowerCase();
+      try { t = t.normalize('NFD').replace(/[̀-ͯ]/g, ''); d = d.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+      function has(s, words) { return words.some(function (w) { return s.indexOf(w) >= 0; }); }
+      if (has(t, ['pagamento', 'pagto', 'payment']) || has(d, ['pagamento recebido', 'pagamento fatura', 'pagto fatura', 'payment received'])) return 'card_payment';
+      if (has(t, ['estorno', 'devol', 'reembolso', 'refund', 'chargeback']) || has(d, ['estorno', 'devolucao', 'reembolso', 'chargeback'])) return 'card_refund';
+      if (has(t + ' ' + d, ['juros', 'multa', 'mora', 'iof', 'tarifa', 'anuidade', 'encargo', 'interest', 'fee'])) return 'card_fee';
+      if (amountCents < 0) return 'card_refund';
+      if (inst && inst.total > 1) return 'card_installment';
+      return 'card_purchase';
+    },
+    /* Período de referência de uma data para um cartão (sem I/O). */
+    invoiceRefForDate: function (userId, cardId, dateISO) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var card = db.credit_cards.find(function (c) { return c.id === cardId && c.couple_id === cid; });
+      if (!card) throw new Error('Cartão inválido para este casal.');
+      var per = invoicePeriodFor(card, dateISO);
+      return { month: per.refMonth, year: per.refYear, closing: per.closing, due: per.due, start: per.start, end: per.end };
+    },
+    /* Upload: valida e persiste lote + linhas (SEM criar transações). */
+    createImportBatch: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var fileName = String((data && data.file_name) || 'arquivo');
+      var fileType = (/\.ofx$/i.test(fileName) || (data && data.file_type) === 'ofx') ? 'ofx' : 'csv';
+      if (!/\.(csv|ofx)$/i.test(fileName) && (data.file_type !== 'csv' && data.file_type !== 'ofx')) throw new Error('Formato não suportado. Envie CSV ou OFX.');
+      var content = String((data && data.content) || '');
+      if (!content.trim()) throw new Error('Arquivo vazio.');
+      if (content.length > DB.IMPORT_MAX_CHARS) throw new Error('Arquivo muito grande (máx ~2MB).');
+      var srcType = (data && data.import_source_type) === 'credit_card_statement' ? 'credit_card_statement' : 'bank_statement';
+      var card = null;
+      if (srcType === 'credit_card_statement') {
+        card = db.credit_cards.find(function (c) { return c.id === (data && data.credit_card_id) && c.couple_id === cid; });
+        if (!card) throw new Error('Escolha o cartão desta fatura.');
+        if (!card.active) throw new Error('Este cartão está desativado.');
+      }
+      var acc = null;
+      if (data && data.account_id) {
+        acc = db.accounts.find(function (a) { return a.id === data.account_id && a.couple_id === cid; });
+        if (!acc) throw new Error(srcType === 'credit_card_statement' ? 'Conta inválida para este casal.' : 'Escolha a conta de destino.');
+      } else if (srcType === 'bank_statement') throw new Error('Escolha a conta de destino.');
+      var hash = DB.importFileHash(content);
+      var dup = db.import_batches.find(function (b) {
+        return b.couple_id === cid && b.file_hash === hash &&
+          ((srcType === 'credit_card_statement' && (b.credit_card_id || null) === card.id) ||
+           (srcType === 'bank_statement' && b.account_id === (acc && acc.id))) &&
+          b.status !== 'cancelled' && b.status !== 'failed';
+      });
+      var b = { id: id('ib'), couple_id: cid, created_by: userId, file_name: fileName.slice(0, 120), file_type: fileType, file_size: content.length, file_hash: hash, account_id: acc ? acc.id : null, import_source_type: srcType, credit_card_id: card ? card.id : null, invoice_id: null, statement_total: null, status: 'uploaded', total_rows: 0, valid_rows: 0, invalid_rows: 0, duplicate_rows: 0, matched_rows: 0, new_rows: 0, confirmed_rows: 0, imported_rows: 0, ignored_rows: 0, failed_rows: 0, period_start: null, period_end: null, created_at: now(), updated_at: now(), completed_at: null, error_message: dup ? 'Este arquivo parece já ter sido importado.' : null };
+      db.import_batches.push(b);
+      logAudit(db, cid, userId, 'import', b.id, 'upload', { file: b.file_name });
+      write(db);
+      DB.parseImportBatch(userId, b.id, { content: content, mapping: data.mapping });
+      var out = DB.getImportBatch(userId, b.id);
+      out.possible_duplicate = !!dup;
+      return out;
+    },
+    /* Parsing + normalização → linhas persistidas (valid/invalid). */
+    parseImportBatch: function (userId, batchId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.import_batches.find(function (x) { return x.id === batchId && x.couple_id === cid; });
+      if (!b) throw new Error('Importação não encontrada.');
+      if (b.status !== 'uploaded' && b.status !== 'parsing') throw new Error('Lote já processado.');
+      b.status = 'parsing'; write(db);
+      var content = String(opt.content || '');
+      var map = opt.mapping || {};
+      var rawRows = [], lineErrors = [];
+      try {
+        if (b.file_type === 'ofx') {
+          var ofx = DB.parseOfxText(content);
+          ofx.errors.forEach(function (e) {
+            lineErrors.push(e);
+            var m = /Linha (\d+):/.exec(e);
+            if (m) rawRows.push({ line: +m[1], invalid: true, error: e });
+          });
+          ofx.transactions.forEach(function (t) {
+            var oItem = null;
+            if (DB.isCardBatch(b)) {
+              oItem = DB.classifyCardItem(t.memo, t.type, t.amount, null);
+            }
+            rawRows.push({ line: t.line, date: t.date, description: t.memo, amount: t.amount, type: oItem ? ((oItem === 'card_payment' || oItem === 'card_refund') ? 'credit' : 'debit') : (t.amount < 0 ? 'debit' : 'credit'), external_id: t.fitid, currency: 'BRL', cardItem: oItem, instN: null, instT: null });
+          });
+          rawRows.sort(function (a, c) { return a.line - c.line; });
+          if (!rawRows.length) throw new Error(ofx.errors.join(' ') || 'Nenhuma transação encontrada no OFX.');
+          if (!map.accountExternal && ofx.accounts.length) map.accountExternal = ofx.accounts[0];
+        } else {
+          var delim = map.delimiter || DB.detectCsvDelimiter(content);
+          var grid = DB.parseCsvRows(content, delim);
+          if (grid.length > DB.IMPORT_MAX_ROWS + 1) throw new Error('Muitas linhas (máx ' + DB.IMPORT_MAX_ROWS + ').');
+          if (!grid.length) throw new Error('Arquivo sem linhas.');
+          var headers = grid[0];
+          var auto = DB.detectColumnMapping(headers);
+          var M = {
+            date: map.date != null ? map.date : auto.date,
+            description: map.description != null ? map.description : auto.description,
+            amount: map.amount != null ? map.amount : auto.amount,
+            debit: map.debit != null ? map.debit : auto.debit,
+            credit: map.credit != null ? map.credit : auto.credit,
+            type: map.type != null ? map.type : auto.type,
+            installment: map.installment != null ? map.installment : auto.installment,
+            external_id: map.external_id != null ? map.external_id : auto.external_id,
+            date_format: map.date_format || 'auto',
+            decimal_separator: map.decimal_separator || '',
+            amount_sign_mode: map.amount_sign_mode || 'auto'
+          };
+          if (M.date < 0) throw new Error('Não foi possível identificar uma coluna de data.');
+          if (M.description < 0) throw new Error('Não foi possível identificar uma coluna de descrição.');
+          if (M.amount < 0 && (M.debit < 0 || M.credit < 0)) throw new Error('Não foi possível identificar coluna de valor (única ou débito/crédito).');
+          b.mapping_used = M;
+          var isCardFile = DB.isCardBatch(b);
+          grid.slice(1).forEach(function (cols, i) {
+            var line = i + 1;
+            try {
+              var amountCents, dc;
+              if (M.amount >= 0) {
+                amountCents = DB.parseImportAmount(cols[M.amount] || '', M.decimal_separator);
+                dc = amountCents < 0 ? 'debit' : 'credit';
+              } else {
+                var dv = DB.parseImportAmount(cols[M.debit] || '0', M.decimal_separator);
+                var cv = DB.parseImportAmount(cols[M.credit] || '0', M.decimal_separator);
+                if (dv !== 0 && cv !== 0) throw new Error('Débito e crédito preenchidos.');
+                if (dv === 0 && cv === 0) throw new Error('Valor zerado.');
+                amountCents = dv !== 0 ? -Math.abs(dv) : Math.abs(cv);
+                dc = dv !== 0 ? 'debit' : 'credit';
+              }
+              var dd = DB.parseImportDate(cols[M.date] || '', M.date_format === 'auto' ? undefined : M.date_format);
+              var tp = M.type >= 0 ? String(cols[M.type] || '').toLowerCase() : '';
+              var typeHint = /deb|saida|pagto|compra/.test(tp) ? 'debit' : /cred|entrada|receb|salario/.test(tp) ? 'credit' : dc;
+              var inst = (isCardFile && M.installment >= 0) ? DB.parseInstallmentHint(cols[M.installment]) : null;
+              var itemType = null;
+              if (isCardFile) {
+                /* Fatura: positivo = cobrança; negativo = pagamento/crédito. */
+                itemType = DB.classifyCardItem(cols[M.description], tp, amountCents, inst);
+                if (itemType === 'card_payment' || itemType === 'card_refund') typeHint = 'credit';
+                else typeHint = 'debit';
+              }
+              rawRows.push({ line: line, date: dd.iso, ambiguous: dd.ambiguous, cellDate: String(cols[M.date] || ''), description: String(cols[M.description] || ''), cellAmount: M.amount >= 0 ? String(cols[M.amount] || '') : (String(cols[M.debit] || '') + ' / ' + String(cols[M.credit] || '')), amount: amountCents, type: typeHint, external_id: M.external_id >= 0 ? String(cols[M.external_id] || '') : '', currency: 'BRL', cardItem: itemType, instN: inst ? inst.n : null, instT: inst ? inst.total : null });
+            } catch (e) {
+              lineErrors.push('Linha ' + line + ': ' + (e.message || e));
+              rawRows.push({ line: line, invalid: true, error: String((e && e.message) || e) });
+            }
+          });
+        }
+      } catch (e) {
+        b.status = 'failed'; b.error_message = String((e && e.message) || e); b.updated_at = now(); write(db);
+        throw new Error(b.error_message);
+      }
+      var minD = null, maxD = null, ok = 0, bad = 0;
+      rawRows.forEach(function (r) {
+        if (r.invalid) {
+          bad++;
+          db.imported_transactions.push({ id: id('ir'), couple_id: cid, import_batch_id: b.id, account_id: b.account_id, credit_card_id: b.credit_card_id || null, invoice_id: null, card_item_type: null, installment_number: null, total_installments: null, purchase_reference: null, line_number: r.line, external_transaction_id: null, raw_date: '', raw_description: '', raw_amount: '', raw_type: '', normalized_date: null, normalized_description: '', normalized_amount: 0, normalized_type: 'expense', debit_credit: 'debit', currency: 'BRL', date_ambiguous: false, status: 'invalid', match_status: 'invalid', matched_transaction_id: null, matched_transfer_id: null, matched_installment_id: null, confidence_score: null, match_reason: null, created_transaction_id: null, import_error: r.error || 'Linha inválida.', created_at: now(), updated_at: now() });
+          return;
+        }
+        var row = { id: id('ir'), couple_id: cid, import_batch_id: b.id, account_id: b.account_id, credit_card_id: b.credit_card_id || null, invoice_id: null, card_item_type: r.cardItem || null, installment_number: r.instN || null, total_installments: r.instT || null, purchase_reference: null, line_number: r.line, external_transaction_id: r.external_id || null, raw_date: r.cellDate !== undefined ? r.cellDate : String(r.date || ''), raw_description: String(r.description || ''), raw_amount: r.cellAmount !== undefined ? r.cellAmount : String(r.amount), raw_type: String(r.type || ''), normalized_date: r.date, normalized_description: r.description, normalized_amount: fromCents(Math.abs(r.amount)), normalized_type: r.type === 'credit' ? 'income' : 'expense', debit_credit: r.type, currency: r.currency || 'BRL', date_ambiguous: !!r.ambiguous, status: 'valid', match_status: 'new', matched_transaction_id: null, matched_transfer_id: null, matched_installment_id: null, confidence_score: null, match_reason: null, created_transaction_id: null, created_at: now(), updated_at: now() };
+        if (!row.normalized_description.trim()) { row.status = 'invalid'; row.match_status = 'invalid'; bad++; db.imported_transactions.push(row); return; }
+        ok++;
+        if (!minD || r.date < minD) minD = r.date;
+        if (!maxD || r.date > maxD) maxD = r.date;
+        db.imported_transactions.push(row);
+      });
+      b.total_rows = rawRows.length;
+      b.valid_rows = ok; b.invalid_rows = bad;
+      b.period_start = minD; b.period_end = maxD;
+      b.status = 'preview'; b.updated_at = now();
+      logAudit(db, cid, userId, 'import', b.id, 'parse', { total: rawRows.length });
+      write(db);
+      return DB.getImportBatch(userId, b.id);
+    },
+    /* ============ PROMPT 20: MOTOR DE ANÁLISE FINANCEIRA (read-only) ============
+       Camada determinística: DADOS → Financial Services → Analytics → métricas.
+       Sem IA, sem texto gerado, sem escrita (nunca cria/edita/apaga nada).
+       Centavos inteiros; reutiliza dashboardCalc/settle/budgetSummary/
+       goalProgress/accountsSummary/calculateAvailableToSpend/expenseCounts.
+       Tendência: mínimos quadrados sobre a série mensal (documentado).
+       Matriz: transferência e pagamento de fatura NÃO são receita/despesa;
+       parcela futura/fatura aberta = compromisso (não realizado). */
+    analyticsEngineVersion: function () { return '1.0.0'; },
+    analyticsResolvePeriod: function (preset, custom) {
+      var today = now().slice(0, 10), curYm = today.slice(0, 7);
+      function mk(s, e, label) {
+        var ms = monthsBetween(s.slice(0, 7), e.slice(0, 7));
+        return { startDate: s, endDate: e, label: label, days: Math.round((Date.parse(e) - Date.parse(s)) / 864e5) + 1, months: ms, monthCount: ms.length, isCurrentPeriod: s <= today && today <= e };
+      }
+      function monthRange(ym) { return { s: ym + '-01', e: ym + '-' + dim(+ym.slice(0, 4), +ym.slice(5, 7)) }; }
+      if (preset === 'previous_month') { var pm = monthRange(shiftMonth(curYm, -1)); return mk(pm.s, pm.e, 'Mês anterior'); }
+      if (preset === 'last_3_months' || preset === 'last_6_months' || preset === 'last_12_months') {
+        var n = preset === 'last_3_months' ? 3 : preset === 'last_6_months' ? 6 : 12;
+        var s0 = monthRange(shiftMonth(curYm, -(n - 1))), e0 = monthRange(curYm);
+        return mk(s0.s, e0.e, 'Últimos ' + n + ' meses');
+      }
+      if (preset === 'custom' && custom) {
+        var s = cleanDate(custom.start), e = cleanDate(custom.end);
+        if (s > e) throw new Error('Período inválido.');
+        if (Math.round((Date.parse(e) - Date.parse(s)) / 864e5) > 366 * 3) throw new Error('Período muito longo (máx 36 meses).');
+        return mk(s, e, 'Período personalizado');
+      }
+      var cm = monthRange(curYm);
+      return mk(cm.s, cm.e, 'Mês atual');
+    },
+    analyticsFingerprint: function (db) {
+      var n = 0, mx = '';
+      ['transactions', 'transfers', 'invoice_payments', 'installments', 'installment_purchases', 'invoices', 'budgets', 'goals', 'splits', 'recurring_transactions', 'recurring_occurrences'].forEach(function (k) {
+        var arr = db[k] || []; n += arr.length * 7 + k.length;
+        for (var i = 0; i < arr.length; i++) { var t = arr[i].updated_at || arr[i].created_at || arr[i].deleted_at || ''; if (t > mx) mx = t; }
+      });
+      return n + '|' + mx;
+    },
+    /* Varredura única (sem N+1): agrega tudo das transações do intervalo em
+       centavos, com a mesma semântica de visão do dashboardCalc (casal = valor
+       cheio 1x; eu/parceiro = recebido + individuais + responsabilidade). */
+    analyticsScanTx: function (db, cid, o) {
+      var s = { inc: 0, exp: 0, incCount: 0, expCount: 0, byCat: {}, incomeByCat: {}, incomeCatCount: {}, incomeCatMonths: {}, catMonths: {}, sharedFull: 0, indivFull: 0, sharedCount: 0, indivCount: 0, months: {}, paidExp: {}, recvInc: {}, owed: {}, perCatPaid: {}, perCatOwed: {}, merchants: {}, largest: [], txCount: 0, days: {}, catCount: {}, fixed: 0, variable: 0, hasRecurring: false };
+      var ids = orderedMemberIds(db, cid);
+      var splitMap = {};
+      (db.splits || []).forEach(function (x) { (splitMap[x.transaction_id] = splitMap[x.transaction_id] || []).push(x); });
+      function shareOf(t, uid) {
+        var ss = splitMap[t.id] || [];
+        for (var i = 0; i < ss.length; i++) if (ss[i].user_id === uid) return toCents(ss[i].calculated_amount);
+        var n = ids.length || 1, idx = ids.indexOf(uid);
+        if (idx < 0) return 0;
+        var tot = toCents(t.amount);
+        return (idx === ids.length - 1 || n === 1) ? tot - Math.floor(tot / n) * (n - 1) : Math.floor(tot / n);
+      }
+      var norms = {};
+      (db.recurring_transactions || []).forEach(function (r) {
+        if (r.couple_id === cid && r.active) { norms[DB.normalizeDescription(r.description)] = true; s.hasRecurring = true; }
+      });
+      var f = o.filters || {};
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.date < o.start || t.date > o.end) return;
+        if (f.category_id && !DB.catInFilter(db, cid, t.category_id, f.category_id)) return;
+        if (f.account_id && (t.account_id || null) !== f.account_id) return;
+        if (f.credit_card_id && (t.credit_card_id || null) !== f.credit_card_id) return;
+        if (f.payer_user_id && t.payer_user_id !== f.payer_user_id) return;
+        if (f.shared === 'shared' && !t.is_shared) return;
+        if (f.shared === 'individual' && t.is_shared) return;
+        var c = toCents(t.amount), ym = t.date.slice(0, 7);
+        var m = s.months[ym] || (s.months[ym] = { inc: 0, exp: 0, incCount: 0, expCount: 0 });
+        s.txCount++; s.days[t.date] = true;
+        s.catCount[t.category_id] = (s.catCount[t.category_id] || 0) + 1;
+        if (t.type === 'income') {
+          s.recvInc[t.payer_user_id] = (s.recvInc[t.payer_user_id] || 0) + c;
+          var vi = (!o.focus || t.payer_user_id === o.focus) ? c : 0;
+          s.inc += vi; m.inc += vi; if (vi) { s.incCount++; m.incCount++; s.incomeByCat[t.category_id] = (s.incomeByCat[t.category_id] || 0) + vi; s.incomeCatCount[t.category_id] = (s.incomeCatCount[t.category_id] || 0) + 1; var icm = s.incomeCatMonths[t.category_id] || (s.incomeCatMonths[t.category_id] = {}); icm[ym] = (icm[ym] || 0) + vi; }
+        } else {
+          s.paidExp[t.payer_user_id] = (s.paidExp[t.payer_user_id] || 0) + c;
+          if (t.is_shared) {
+            s.sharedFull += c; s.sharedCount++;
+            ids.forEach(function (u) {
+              var q = Math.round(shareOf(t, u));
+              s.owed[u] = (s.owed[u] || 0) + q;
+              var pc = s.perCatOwed[t.category_id] || (s.perCatOwed[t.category_id] = {}); pc[u] = (pc[u] || 0) + q;
+            });
+          } else {
+            s.indivFull += c; s.indivCount++;
+            s.owed[t.payer_user_id] = (s.owed[t.payer_user_id] || 0) + c;
+            var pc2 = s.perCatOwed[t.category_id] || (s.perCatOwed[t.category_id] = {}); pc2[t.payer_user_id] = (pc2[t.payer_user_id] || 0) + c;
+          }
+          var pc3 = s.perCatPaid[t.category_id] || (s.perCatPaid[t.category_id] = {}); pc3[t.payer_user_id] = (pc3[t.payer_user_id] || 0) + c;
+          var ve = 0;
+          if (!o.focus) ve = c;
+          else if (!t.is_shared) ve = (t.payer_user_id === o.focus) ? c : 0;
+          else ve = Math.round(shareOf(t, o.focus));
+          s.exp += ve; m.exp += ve; if (ve) { s.expCount++; m.expCount++; s.byCat[t.category_id] = (s.byCat[t.category_id] || 0) + ve; var cm = s.catMonths[t.category_id] || (s.catMonths[t.category_id] = {}); cm[ym] = (cm[ym] || 0) + ve; }
+          var key = DB.normalizeDescription(t.description);
+          var mm = s.merchants[key] || (s.merchants[key] = { total: 0, count: 0, months: {} });
+          mm.total += c; mm.count++;
+          mm.months[ym] = (mm.months[ym] || 0) + c;
+          s.largest.push({ id: t.id, date: t.date, description: t.description, amount: t.amount, category_id: t.category_id, payer_user_id: t.payer_user_id, account_id: t.account_id, credit_card_id: t.credit_card_id, is_shared: !!t.is_shared });
+          if (norms[key]) s.fixed += c; else s.variable += c;
+        }
+      });
+      return s;
+    },
+    /* Diferença factual atual×anterior (pct null quando anterior = 0). */
+    analyticsDiff: function (cur, prev) {
+      var abs = Math.round((cur - prev) * 100) / 100;
+      return { currentValue: cur, previousValue: prev, absoluteDifference: abs, percentageDifference: prev ? Math.round(abs / prev * 1000) / 10 : null };
+    },
+    /* Tendência matemática: mínimos quadrados sobre a série mensal. Estável
+       quando a variação implícita (|inclinação|×(n−1)) < 5% da média. */
+    analyticsTrendOf: function (points) {
+      var n = points.length;
+      if (n < 3) return { direction: 'insufficient_data', method: 'least_squares_slope', points: n, slope: null };
+      var sx = 0, sy = 0, sxx = 0, sxy = 0, i;
+      for (i = 0; i < n; i++) { sx += i; sy += points[i].value; sxx += i * i; sxy += i * points[i].value; }
+      var den = n * sxx - sx * sx;
+      var slope = den ? (n * sxy - sx * sy) / den : 0;
+      var mean = sy / n;
+      var rel = mean ? slope * (n - 1) / mean : (slope ? 1 : 0);
+      return { direction: Math.abs(rel) < 0.05 ? 'stable' : (slope > 0 ? 'increasing' : 'decreasing'), method: 'least_squares_slope', points: n, slope: Math.round(slope * 100) / 100 };
+    },
+    /* API interna: FinancialAnalyticsService.analyze({periodStart, periodEnd,
+       preset, view, filters}). coupleId deriva do usuário (nunca do input). */
+    analyzeFinancialPeriod: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      if (opt.coupleId && opt.coupleId !== cid) throw new Error('Acesso negado.');
+      var per = opt.periodStart && opt.periodEnd
+        ? DB.analyticsResolvePeriod('custom', { start: opt.periodStart, end: opt.periodEnd })
+        : DB.analyticsResolvePeriod(opt.preset || 'current_month');
+      var view = opt.view || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(view) < 0) throw new Error('Visão inválida.');
+      var ids = orderedMemberIds(db, cid);
+      var focus = view === 'me' ? userId : (view === 'partner' ? ids.filter(function (x) { return x !== userId; })[0] || null : null);
+      var f = opt.filters || {};
+      ['category_id', 'account_id', 'credit_card_id'].forEach(function (k) {
+        if (!f[k]) return;
+        var table = k === 'category_id' ? db.categories : k === 'account_id' ? db.accounts : db.credit_cards;
+        if (!table.some(function (x) { return x.id === f[k] && x.couple_id === cid; })) throw new Error('Filtro inválido.');
+      });
+      if (f.payer_user_id && ids.indexOf(f.payer_user_id) < 0) throw new Error('Filtro inválido.');
+      if (f.shared && ['shared', 'individual'].indexOf(f.shared) < 0) throw new Error('Filtro inválido.');
+      var cacheKey = JSON.stringify([cid, per.startDate, per.endDate, view, f, DB.analyticsEngineVersion()]);
+      DB._acache = DB._acache || {};
+      var fp = DB.analyticsFingerprint(db);
+      var hit = DB._acache[cacheKey];
+      if (hit && hit.fp === fp) {
+        var cached = JSON.parse(JSON.stringify(hit.result));
+        cached.metadata.cached = true;
+        return cached;
+      }
+      var warnings = [];
+      if (per.isCurrentPeriod) warnings.push({ code: 'partial_data', message: 'Período em andamento: valores podem mudar.' });
+      function money2(c) { return Math.round(c) / 100; }
+      var scan = DB.analyticsScanTx(db, cid, { start: per.startDate, end: per.endDate, focus: focus, filters: f });
+      var months = per.months;
+      var monthly = months.map(function (ym) {
+        var mm = scan.months[ym] || { inc: 0, exp: 0 };
+        var inc = money2(mm.inc), exp = money2(mm.exp);
+        return { month: ym, income: inc, expenses: exp, result: money2(mm.inc - mm.exp), savingsRate: mm.inc ? Math.round((mm.inc - mm.exp) / mm.inc * 1000) / 10 : null };
+      });
+      var n = months.length || 1;
+      var income = money2(scan.inc), expense = money2(scan.exp);
+      var metrics = {
+        totalIncome: income, totalExpenses: expense, financialResult: money2(scan.inc - scan.exp),
+        savingsRate: scan.inc ? Math.round((scan.inc - scan.exp) / scan.inc * 1000) / 10 : null,
+        averageMonthlyIncome: Math.round(income / n * 100) / 100, averageMonthlyExpenses: Math.round(expense / n * 100) / 100,
+        averageMonthlyResult: Math.round((income - expense) / n * 100) / 100,
+        totalSharedExpenses: money2(scan.sharedFull), totalIndividualExpenses: money2(scan.indivFull),
+        sharedCount: scan.sharedCount, individualCount: scan.indivCount,
+        incomeCount: scan.incCount, expenseCount: scan.expCount
+      };
+      /* Comparação com período anterior de mesma duração (meses cheios
+         alinham no calendário; demais usam janela de mesmos dias). */
+      var aligned = per.startDate.slice(8) === '01' && per.endDate === per.endDate.slice(0, 7) + '-' + dim(+per.endDate.slice(0, 4), +per.endDate.slice(5, 7));
+      var prevStart, prevEnd;
+      if (aligned) {
+        var pms = months.map(function (ym) { return shiftMonth(ym, -months.length); });
+        prevStart = pms[0] + '-01';
+        prevEnd = pms[pms.length - 1] + '-' + dim(+pms[pms.length - 1].slice(0, 4), +pms[pms.length - 1].slice(5, 7));
+      } else {
+        prevStart = DB.dateAddDays(per.startDate, -per.days); prevEnd = DB.dateAddDays(per.startDate, -1);
+      }
+      var ps = DB.analyticsScanTx(db, cid, { start: prevStart, end: prevEnd, focus: focus, filters: f });
+      var pIncome = money2(ps.inc), pExpense = money2(ps.exp);
+      var comparison = {
+        income: DB.analyticsDiff(income, pIncome), expenses: DB.analyticsDiff(expense, pExpense),
+        result: DB.analyticsDiff(money2(scan.inc - scan.exp), money2(ps.inc - ps.exp)),
+        savingsRate: DB.analyticsDiff(metrics.savingsRate == null ? 0 : metrics.savingsRate, ps.inc ? Math.round((ps.inc - ps.exp) / ps.inc * 1000) / 10 : 0),
+        shared: DB.analyticsDiff(money2(scan.sharedFull), money2(ps.sharedFull)),
+        individual: DB.analyticsDiff(money2(scan.indivFull), money2(ps.indivFull)),
+        previousPeriod: { startDate: prevStart, endDate: prevEnd }
+      };
+      var trends = {
+        income: DB.analyticsTrendOf(monthly.map(function (x) { return { month: x.month, value: x.income }; })),
+        expenses: DB.analyticsTrendOf(monthly.map(function (x) { return { month: x.month, value: x.expenses }; })),
+        result: DB.analyticsTrendOf(monthly.map(function (x) { return { month: x.month, value: x.result }; }))
+      };
+      var out = {
+        status: scan.txCount ? 'success' : 'no_data', data: {}, warnings: warnings,
+        metadata: { period: per, txCount: scan.txCount, generatedAt: now(), engineVersion: DB.analyticsEngineVersion(), view: view, filters: f, cached: false }
+      };
+      out.data.metrics = metrics; out.data.monthlyTrend = monthly; out.data.comparison = comparison; out.data.trends = trends;
+      var catMap = DB.analyticsCatMap(db, cid), userMap = DB.analyticsUserMap(db);
+      var catAnalysis = DB.analyticsCategoryAnalysis(scan, ps, months, catMap);
+      out.data.categoryAnalysis = catAnalysis;
+      out.data.topCategories = catAnalysis.slice(0, 5).map(function (c) { return { categoryId: c.categoryId, categoryName: c.categoryName, total: c.total, share: c.percentageOfExpenses }; });
+      out.data.incomeAnalysis = DB.analyticsIncomeAnalysis(scan, months, catMap);
+      out.data.largestExpenses = DB.analyticsLargest(scan, catMap, userMap, 5);
+      out.data.averages = DB.analyticsAverages(scan, n);
+      out.data.frequency = DB.analyticsFrequency(scan, per.days);
+      out.data.merchants = DB.analyticsMerchants(scan, months, 10);
+      out.data.fixedVariable = DB.analyticsFixedVariable(scan);
+      var anom = DB.analyticsAnomalies(db, cid, scan, per.endDate);
+      out.data.anomalies = anom.anomalies; out.data.unusualExpenses = anom.unusualExpenses;
+      var cardPurch = DB.analyticsCardPurchases(db, cid, { start: per.startDate, end: per.endDate });
+      out.data.cards = DB.analyticsCards(db, cid, userId, scan, cardPurch);
+      out.data.invoices = DB.analyticsInvoices(db, cid, userId);
+      var inst = DB.analyticsInstallments(db, cid, userId);
+      out.data.installments = inst;
+      var rec = DB.analyticsRecurring(db, cid, userId, { start: per.startDate, end: per.endDate });
+      out.data.recurring = rec;
+      out.data.commitments = DB.analyticsCommitments(db, cid, userId, scan, inst, rec);
+      var budget = DB.analyticsBudget(userId, months);
+      out.data.budget = budget;
+      var goals = DB.analyticsGoals(userId);
+      out.data.goals = goals;
+      var userMap = DB.analyticsUserMap(db);
+      out.data.settlement = DB.analyticsSettlement(db, cid, userId, scan, ids, userMap);
+      out.data.participation = DB.analyticsParticipation(scan, ids, userMap, catMap);
+      out.data.cashFlow = DB.analyticsCashFlow(db, cid, userId, scan, { start: per.startDate, end: per.endDate, view: view });
+      out.data.health = DB.analyticsHealth(scan, metrics, out.data.cards, budget, rec, out.data.commitments.committed);
+      out.data.calendar = DB.analyticsCalendar(db, cid, userId, inst, rec);
+      out.data.summary = DB.analyticsBuildSummary(out);
+      DB._acache[cacheKey] = { fp: fp, result: JSON.parse(JSON.stringify(out)) };
+      return out;
+    },
+    analyticsCatMap: function (db, cid) {
+      var m = {};
+      (db.categories || []).forEach(function (c) { if (c.couple_id === cid) m[c.id] = c; });
+      return m;
+    },
+    analyticsUserMap: function (db) {
+      var m = {};
+      (db.users || []).forEach(function (u) { m[u.id] = u.nome || 'Pessoa'; });
+      return m;
+    },
+    /* Busca entrada de análise por id, incluindo filhas (com contexto do pai). */
+    findAnalysisEntry: function (analysis, categoryId) {
+      var hit = null;
+      (analysis || []).forEach(function (c) {
+        if (c.categoryId === categoryId) hit = c;
+        (c.children || []).forEach(function (k) { if (k.categoryId === categoryId) hit = k; });
+      });
+      return hit;
+    },
+    analyticsCategoryAnalysis: function (scan, prevScan, months, catMap) {
+      var out = [], agg = {}, kidAgg = {}, kidCount = {}, kidMonths = {}, prevAgg = {}, prevKid = {};
+      function topOf(id) { var c = catMap[id]; return (c && c.parent_category_id && catMap[c.parent_category_id]) ? c.parent_category_id : id; }
+      Object.keys(scan.byCat).forEach(function (id) {
+        var pk = topOf(id);
+        agg[pk] = (agg[pk] || 0) + scan.byCat[id];
+        if (pk !== id) {
+          kidAgg[pk] = kidAgg[pk] || {}; kidAgg[pk][id] = (kidAgg[pk][id] || 0) + scan.byCat[id];
+          kidCount[pk] = kidCount[pk] || {}; kidCount[pk][id] = (kidCount[pk][id] || 0) + (scan.catCount[id] || 0);
+          var cm = scan.catMonths[id] || {}, km = kidMonths[pk] || (kidMonths[pk] = {});
+          Object.keys(cm).forEach(function (ym) { km[id] = km[id] || {}; km[id][ym] = (km[id][ym] || 0) + cm[ym]; });
+        }
+      });
+      if (prevScan) Object.keys(prevScan.byCat).forEach(function (id) {
+        var pk = topOf(id);
+        prevAgg[pk] = (prevAgg[pk] || 0) + prevScan.byCat[id];
+        if (pk !== id) { prevKid[pk] = prevKid[pk] || {}; prevKid[pk][id] = (prevKid[pk][id] || 0) + prevScan.byCat[id]; }
+      });
+      Object.keys(agg).forEach(function (id) {
+        var total = Math.round(agg[id]) / 100;
+        var cm0 = {};
+        Object.keys(scan.catMonths).forEach(function (rk) { if (topOf(rk) === id) { Object.keys(scan.catMonths[rk]).forEach(function (ym) { cm0[ym] = (cm0[ym] || 0) + scan.catMonths[rk][ym]; }); } });
+        var trend = DB.analyticsTrendOf(months.map(function (ym) { return { month: ym, value: Math.round(cm0[ym] || 0) / 100 }; }));
+        var cat = catMap[id] || { name: 'Categoria', icon: '🏷️' };
+        var kids = Object.keys(kidAgg[id] || {}).map(function (sk) {
+          var sc = catMap[sk] || { name: 'Categoria', icon: '🏷️' };
+          var st = Math.round(kidAgg[id][sk]) / 100, sp = (prevKid[id] && prevKid[id][sk]) ? Math.round(prevKid[id][sk]) / 100 : 0;
+          var sct = kidCount[id][sk] || 0;
+          return { categoryId: sk, categoryName: sc.name, icon: sc.icon, isSubcategory: true, parentId: id, parentName: cat.name, total: st, transactionCount: sct, percentageOfExpenses: scan.exp ? Math.round(kidAgg[id][sk] / scan.exp * 1000) / 10 : null, averageTransaction: sct ? Math.round(st / sct * 100) / 100 : null, previousPeriodTotal: sp, variation: DB.analyticsDiff(st, sp), trend: null };
+        }).sort(function (a, b) { return b.total - a.total; });
+        var prev = prevAgg[id] ? Math.round(prevAgg[id]) / 100 : 0;
+        var cnt = 0;
+        Object.keys(scan.catCount).forEach(function (rk) { if (topOf(rk) === id) cnt += scan.catCount[rk]; });
+        out.push({ categoryId: id, categoryName: cat.name, icon: cat.icon, total: total, transactionCount: cnt, percentageOfExpenses: scan.exp ? Math.round(agg[id] / scan.exp * 1000) / 10 : null, averageTransaction: cnt ? Math.round(total / cnt * 100) / 100 : null, previousPeriodTotal: prev, variation: DB.analyticsDiff(total, prev), trend: trend.direction, children: kids });
+      });
+      out.sort(function (a, b) { return b.total - a.total; });
+      return out;
+    },
+    analyticsIncomeAnalysis: function (scan, months, catMap) {
+      var out = [], agg = {}, kidAgg = {}, kidCount = {}, kidMonths = {};
+      function topOf(id) { var c = catMap[id]; return (c && c.parent_category_id && catMap[c.parent_category_id]) ? c.parent_category_id : id; }
+      Object.keys(scan.incomeByCat).forEach(function (id) {
+        var pk = topOf(id);
+        agg[pk] = (agg[pk] || 0) + scan.incomeByCat[id];
+        if (pk !== id) {
+          kidAgg[pk] = kidAgg[pk] || {}; kidAgg[pk][id] = (kidAgg[pk][id] || 0) + scan.incomeByCat[id];
+          kidCount[pk] = kidCount[pk] || {}; kidCount[pk][id] = (kidCount[pk][id] || 0) + (scan.incomeCatCount[id] || 0);
+          var icm = scan.incomeCatMonths[id] || {}, km = kidMonths[pk] || (kidMonths[pk] = {});
+          Object.keys(icm).forEach(function (ym) { km[id] = km[id] || {}; km[id][ym] = (km[id][ym] || 0) + icm[ym]; });
+        }
+      });
+      Object.keys(agg).forEach(function (id) {
+        var icm0 = {};
+        Object.keys(scan.incomeCatMonths).forEach(function (rk) { if (topOf(rk) === id) { Object.keys(scan.incomeCatMonths[rk]).forEach(function (ym) { icm0[ym] = (icm0[ym] || 0) + scan.incomeCatMonths[rk][ym]; }); } });
+        var cat = catMap[id] || { name: 'Receita' };
+        var kids = Object.keys(kidAgg[id] || {}).map(function (sk) {
+          var sc = catMap[sk] || { name: 'Receita' };
+          var kc = kidCount[id][sk] || 0;
+          return { categoryId: sk, categoryName: sc.name, isSubcategory: true, parentId: id, parentName: cat.name, total: Math.round(kidAgg[id][sk]) / 100, count: kc, average: kc ? Math.round(kidAgg[id][sk] / kc) / 100 : null, share: scan.inc ? Math.round(kidAgg[id][sk] / scan.inc * 1000) / 10 : null, evolution: months.map(function (ym) { return { month: ym, value: Math.round(((kidMonths[id][sk] || {})[ym]) || 0) / 100 }; }) };
+        }).sort(function (a, b) { return b.total - a.total; });
+        var cnt = 0;
+        Object.keys(scan.incomeCatCount).forEach(function (rk) { if (topOf(rk) === id) cnt += scan.incomeCatCount[rk]; });
+        out.push({ categoryId: id, categoryName: cat.name, total: Math.round(agg[id]) / 100, count: cnt, average: cnt ? Math.round(agg[id] / cnt) / 100 : null, share: scan.inc ? Math.round(agg[id] / scan.inc * 1000) / 10 : null, evolution: months.map(function (ym) { return { month: ym, value: Math.round(icm0[ym] || 0) / 100 }; }), children: kids });
+      });
+      out.sort(function (a, b) { return b.total - a.total; });
+      return { sources: out, concentration: out.map(function (x) { return { categoryId: x.categoryId, categoryName: x.categoryName, share: x.share }; }) };
+    },
+    analyticsLargest: function (scan, catMap, userMap, n) {
+      var arr = scan.largest.slice().sort(function (a, b) { return toCents(b.amount) - toCents(a.amount); }).slice(0, n || 5);
+      return arr.map(function (t) {
+        var cat = catMap[t.category_id] || { name: 'Categoria' };
+        return { id: t.id, date: t.date, description: t.description, amount: t.amount, category: cat.name, payer: userMap[t.payer_user_id] || '—', accountId: t.account_id, cardId: t.credit_card_id, shared: t.is_shared };
+      });
+    },
+    analyticsAverages: function (scan, monthCount) {
+      var perCat = Object.keys(scan.byCat).map(function (id) {
+        var c = scan.catCount[id] || 0;
+        return { categoryId: id, average: c ? Math.round(scan.byCat[id] / c) / 100 : null };
+      });
+      return {
+        perTransaction: scan.expCount ? Math.round(scan.exp / scan.expCount) / 100 : null,
+        perMonth: monthCount ? Math.round(scan.exp / monthCount) / 100 : null,
+        byCategory: perCat
+      };
+    },
+    analyticsFrequency: function (scan, days) {
+      var byCat = Object.keys(scan.catCount).map(function (id) { return { categoryId: id, count: scan.catCount[id] }; })
+        .sort(function (a, b) { return b.count - a.count; });
+      var activeDays = Object.keys(scan.days).length;
+      return { transactionCount: scan.txCount, expenseCount: scan.expCount, daysWithExpenses: activeDays, averagePerDay: days ? Math.round(scan.txCount / days * 100) / 100 : null, byCategory: byCat };
+    },
+    analyticsMerchants: function (scan, months, limit) {
+      var arr = Object.keys(scan.merchants).map(function (k) {
+        var m = scan.merchants[k];
+        return { key: k, total: Math.round(m.total) / 100, frequency: m.count, averageTicket: Math.round(m.total / m.count) / 100, evolution: months.map(function (ym) { return { month: ym, value: Math.round(m.months[ym] || 0) / 100 }; }) };
+      }).sort(function (a, b) { return b.total - a.total; });
+      return arr.slice(0, limit || 10);
+    },
+    /* Fixa = descrição normalizada igual a recorrência ativa do casal;
+       sem recorrências ativas → insufficient_data (nunca inventa). */
+    analyticsFixedVariable: function (scan) {
+      if (!scan.hasRecurring) return { status: 'insufficient_data', fixed: null, variable: null, fixedShare: null };
+      var tot = scan.fixed + scan.variable;
+      return { status: tot ? 'success' : 'no_data', fixed: Math.round(scan.fixed) / 100, variable: Math.round(scan.variable) / 100, fixedShare: tot ? Math.round(scan.fixed / tot * 1000) / 10 : null };
+    },
+    /* Anomalias objetivas: categoria acima de média+2dp (≥4 meses de
+       histórico) e transação > 3× ticket médio da categoria (≥3 lançamentos).
+       Linguagem factual: "fora do padrão histórico". */
+    analyticsAnomalies: function (db, cid, scan, periodEnd) {
+      var hist = {}, hmonths = [];
+      var endYm = periodEnd.slice(0, 7);
+      for (var i = 12; i >= 1; i--) hmonths.push(shiftMonth(endYm, -i));
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense') return;
+        var ym = t.date.slice(0, 7);
+        if (hmonths.indexOf(ym) < 0) return;
+        var h = hist[t.category_id] || (hist[t.category_id] = { months: {}, tickets: [] });
+        h.months[ym] = (h.months[ym] || 0) + toCents(t.amount);
+        h.tickets.push(toCents(t.amount));
+      });
+      function stats(arr) {
+        var n = arr.length, mean = arr.reduce(function (a, b) { return a + b; }, 0) / n, v = 0, i;
+        for (i = 0; i < n; i++) v += (arr[i] - mean) * (arr[i] - mean);
+        return { mean: mean, sd: Math.sqrt(v / n) };
+      }
+      var anomalies = [], unusual = [];
+      var curYm = endYm;
+      var curMap = {};
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense') return;
+        if (t.date.slice(0, 7) !== curYm) return;
+        curMap[t.category_id] = (curMap[t.category_id] || 0) + toCents(t.amount);
+      });
+      Object.keys(hist).forEach(function (id) {
+        var h = hist[id];
+        var vals = hmonths.map(function (ym) { return h.months[ym] || 0; });
+        var present = vals.filter(function (v) { return v > 0; });
+        if (present.length >= 4) {
+          var st = stats(present);
+          var cur = curMap[id] || 0;
+          if (st.sd > 0 && cur > st.mean + 2 * st.sd) {
+            anomalies.push({ categoryId: id, reason: 'Categoria acima do padrão histórico no mês.', baseline: Math.round(st.mean) / 100, actualValue: Math.round(cur) / 100, difference: Math.round(cur - st.mean) / 100, score: Math.round((cur - st.mean) / st.sd * 100) / 100 });
+          }
+        }
+        if (h.tickets.length >= 3) {
+          var avg = h.tickets.reduce(function (a, b) { return a + b; }, 0) / h.tickets.length;
+          db.transactions.forEach(function (t) {
+            if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense' || t.category_id !== id) return;
+            if (t.date.slice(0, 7) !== curYm) return;
+            var c = toCents(t.amount);
+            if (avg > 0 && c > 3 * avg) {
+              unusual.push({ transactionId: t.id, reason: 'Movimentação fora do padrão histórico.', baseline: Math.round(avg) / 100, actualValue: Math.round(c) / 100, difference: Math.round(c - avg) / 100, score: Math.round(c / avg * 100) / 100 });
+            }
+          });
+        }
+      });
+      unusual.sort(function (a, b) { return b.score - a.score; });
+      return { anomalies: anomalies, unusualExpenses: unusual.slice(0, 10) };
+    },
+    /* Cartões: limite via calculateCardAvailableLimit; faturas por status;
+       parcelas pendentes; ticket médio no período. */
+    analyticsCards: function (db, cid, userId, scan, purch) {
+      var cards = [];
+      var totLim = 0, totUsed = 0;
+      purch = purch || {};
+      db.credit_cards.forEach(function (c) {
+        if (c.couple_id !== cid || !c.active) return;
+        var u = DB.calculateCardAvailableLimit(userId, c.id);
+        totLim += toCents(u.limit); totUsed += toCents(u.used);
+        var invs = db.invoices.filter(function (i) { return i.couple_id === cid && i.credit_card_id === c.id; });
+        function shape(i) {
+          var total = toCents(DB.calculateInvoiceTotal(userId, i.id));
+          var paid = toCents(i.paid_amount);
+          var txc = db.transactions.filter(function (t) { return t.couple_id === cid && !t.deleted_at && (t.invoice_id || null) === i.id; }).length;
+          return { invoiceId: i.id, cardId: c.id, referenceMonth: i.reference_month, referenceYear: i.reference_year, total: total / 100, paidAmount: paid / 100, outstanding: Math.max(0, total - paid) / 100, status: i.status, dueDate: i.due_date, transactionCount: txc };
+        }
+        var open = null, closed = [], overdue = [];
+        invs.forEach(function (i) {
+          var dyn = DB.calculateInvoiceStatus(userId, i.id);
+          var sh = shape(i); sh.status = dyn;
+          if (dyn === 'open') { if (!open) open = sh; }
+          else if (dyn === 'overdue') overdue.push(sh);
+          else if (dyn === 'closed') closed.push(sh);
+        });
+        var pend = db.installments.filter(function (r) { return r.couple_id === cid && !r.deleted_at && (r.credit_card_id || null) === c.id && r.status === 'pending'; })
+          .sort(function (a, b) { return (a.due_date + a.id).localeCompare(b.due_date + b.id); });
+        var pendTot = pend.reduce(function (a, r) { return a + toCents(r.amount); }, 0);
+        var pp = purch[c.id] || { count: 0, total: 0 };
+        cards.push({
+          cardId: c.id, name: c.name, limit: u.limit, used: u.used, available: u.available, exceeded: u.exceeded,
+          utilization: toCents(u.limit) ? Math.round(toCents(u.used) / toCents(u.limit) * 1000) / 10 : null,
+          openInvoice: open, closedInvoices: closed, overdueInvoices: overdue,
+          pendingInstallments: { count: pend.length, total: pendTot / 100, next: pend.slice(0, 3).map(function (r) { return { id: r.id, number: r.installment_number + '/' + r.total_installments, amount: r.amount, dueDate: r.due_date }; }) },
+          periodPurchases: { count: pp.count, total: Math.round(pp.total) / 100, average: pp.count ? Math.round(pp.total / pp.count) / 100 : null }
+        });
+      });
+      return {
+        cards: cards,
+        totalUtilization: totLim ? Math.round(totUsed / totLim * 1000) / 10 : null,
+        totalLimit: totLim / 100, totalUsed: totUsed / 100
+      };
+    },
+    /* Compras no cartão dentro do período (para ticket médio por cartão). */
+    analyticsCardPurchases: function (db, cid, o) {
+      var byCard = {};
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.type !== 'expense' || !t.credit_card_id) return;
+        if (t.date < o.start || t.date > o.end) return;
+        var b = byCard[t.credit_card_id] || (byCard[t.credit_card_id] = { count: 0, total: 0 });
+        b.count++; b.total += toCents(t.amount);
+      });
+      return byCard;
+    },
+    /* Faturas: todas do casal com totais centrais (sem segundo cálculo). */
+    analyticsInvoices: function (db, cid, userId) {
+      return db.invoices.filter(function (i) { return i.couple_id === cid; }).map(function (i) {
+        var total = toCents(DB.calculateInvoiceTotal(userId, i.id));
+        var paid = toCents(i.paid_amount);
+        var txc = db.transactions.filter(function (t) { return t.couple_id === cid && !t.deleted_at && (t.invoice_id || null) === i.id; }).length;
+        return { invoiceId: i.id, cardId: i.credit_card_id, referenceMonth: i.reference_month, referenceYear: i.reference_year, total: total / 100, paidAmount: paid / 100, outstanding: Math.max(0, total - paid) / 100, status: DB.calculateInvoiceStatus(userId, i.id), dueDate: i.due_date, transactionCount: txc };
+      }).sort(function (a, b) { return (b.referenceYear * 100 + b.referenceMonth) - (a.referenceYear * 100 + a.referenceMonth); });
+    },
+    /* Parcelamentos: 1 compra → N parcelas; parcela nunca é compra isolada. */
+    analyticsInstallments: function (db, cid, userId) {
+      var today = now().slice(0, 10);
+      var purs = db.installment_purchases.filter(function (p) { return p.couple_id === cid && !p.deleted_at; });
+      var rows = db.installments.filter(function (r) { return r.couple_id === cid && !r.deleted_at; });
+      var orig = 0, paid = 0, pend = 0, pendN = 0, over = 0, fut = 0;
+      var next = [], byCard = {};
+      purs.forEach(function (p) { orig += toCents(p.total_amount); });
+      rows.forEach(function (r) {
+        var c = toCents(r.amount);
+        if (r.status === 'paid') paid += c;
+        else if (r.status === 'pending') {
+          pend += c; pendN++;
+          if (r.due_date < today) over += c; else fut += c;
+          next.push(r);
+          var k = r.credit_card_id || 'none';
+          byCard[k] = (byCard[k] || 0) + c;
+        }
+      });
+      next.sort(function (a, b) { return (a.due_date + a.id).localeCompare(b.due_date + b.id); });
+      return {
+        purchaseCount: purs.length, originalTotal: orig / 100, paidTotal: paid / 100, pendingTotal: pend / 100, pendingCount: pendN,
+        overdueTotal: over / 100, futureTotal: fut / 100,
+        next: next.slice(0, 5).map(function (r) { return { id: r.id, purchaseId: r.installment_purchase_id, number: r.installment_number + '/' + r.total_installments, amount: r.amount, dueDate: r.due_date, cardId: r.credit_card_id }; }),
+        byCard: Object.keys(byCard).map(function (k) { return { cardId: k === 'none' ? null : k, total: byCard[k] / 100 }; })
+      };
+    },
+    /* Recorrentes: realizado (ocorrências pagas no período) + templates ativos
+       (estimativa mensal: monthly cheio, yearly/12) + próximas. Sem gerar nada. */
+    analyticsRecurring: function (db, cid, userId, o) {
+      var tpl = db.recurring_transactions.filter(function (r) { return r.couple_id === cid && r.active; });
+      var realized = 0, realizedN = 0;
+      var byCat = {};
+      db.recurring_occurrences.forEach(function (x) {
+        if (x.couple_id !== cid || x.status !== 'paid') return;
+        if (x.due_date < o.start || x.due_date > o.end) return;
+        var t = x.transaction_id ? db.transactions.find(function (tt) { return tt.id === x.transaction_id; }) : null;
+        var c = t ? toCents(t.amount) : toCents(x.amount);
+        if (!t || t.type !== 'expense') return;
+        realized += c; realizedN++;
+        byCat[t.category_id] = (byCat[t.category_id] || 0) + c;
+      });
+      var monthlyEst = 0;
+      tpl.forEach(function (r) {
+        if (r.type !== 'expense') return;
+        monthlyEst += r.frequency === 'yearly' ? toCents(r.amount) / 12 : toCents(r.amount);
+      });
+      var next = DB.listOccurrences(userId, now().slice(0, 10), null, true).slice(0, 5).map(function (x) {
+        return { id: x.id, description: x.rec ? x.rec.description : '', amount: x.amount, dueDate: x.due_date, type: x.rec ? x.rec.type : null };
+      });
+      return {
+        realizedTotal: Math.round(realized) / 100, realizedCount: realizedN,
+        activeTemplates: tpl.length, monthlyEstimate: Math.round(monthlyEst) / 100,
+        byCategory: Object.keys(byCat).map(function (k) { return { categoryId: k, total: Math.round(byCat[k]) / 100 }; }),
+        upcoming: next
+      };
+    },
+    /* Compromissos: realizado × comprometido × projetado (nunca misturados). */
+    analyticsCommitments: function (db, cid, userId, scan, inst, rec) {
+      var openOut = 0, overdueOut = 0;
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'paid' || i.status === 'cancelled') return;
+        var oust = toCents(DB.calculateInvoiceOutstanding(userId, i.id));
+        openOut += oust;
+        if (DB.calculateInvoiceStatus(userId, i.id) === 'overdue') overdueOut += oust;
+      });
+      var committed = inst.pendingTotal + openOut / 100;
+      var projected = committed + rec.monthlyEstimate;
+      return {
+        realized: { income: Math.round(scan.inc) / 100, expenses: Math.round(scan.exp) / 100, result: Math.round(scan.inc - scan.exp) / 100 },
+        committed: { pendingInstallments: inst.pendingTotal, openInvoices: Math.round(openOut) / 100, overdueInvoices: Math.round(overdueOut) / 100, total: Math.round(committed * 100) / 100 },
+        projected: { recurringNext30d: rec.monthlyEstimate, total: Math.round(projected * 100) / 100 }
+      };
+    },
+    /* Orçamento: budgetSummary por mês (central), uso médio, estouros. */
+    analyticsBudget: function (userId, months) {
+      var ms = months.map(function (ym) {
+        var s = DB.budgetSummary(userId, ym);
+        return { month: ym, total: s.total, spent: s.spent, remaining: s.remaining, usage: s.pct, items: s.items, unbudgeted: s.unbudgeted };
+      });
+      var withB = ms.filter(function (x) { return x.total > 0; });
+      var avg = withB.length ? Math.round(withB.reduce(function (a, x) { return a + (x.usage || 0); }, 0) / withB.length * 10) / 10 : null;
+      var last = ms[ms.length - 1] || { items: [] };
+      return {
+        months: ms, monthsWithBudget: withB.length, averageUsage: avg,
+        overBudget: (last.items || []).filter(function (i) { return i.pct > 100; }),
+        nearLimit: (last.items || []).filter(function (i) { return i.pct >= 90 && i.pct <= 100; }),
+        latest: last,
+        status: withB.length ? 'success' : 'no_data'
+      };
+    },
+    /* Metas: progresso central + média de aportes com histórico (≥2 eventos). */
+    analyticsGoals: function (userId) {
+      return DB.listGoals(userId, false).filter(function (g) { return g.status !== 'archived'; }).map(function (g) {
+        var p = DB.goalProgress(g);
+        var evs = DB.listGoalEvents(userId, g.id);
+        var avg = null;
+        if (evs.length >= 2) {
+          var sum = evs.reduce(function (a, e) { return a + toCents(e.amount); }, 0);
+          avg = Math.round(sum / evs.length) / 100;
+        }
+        return { id: g.id, name: g.name, target: g.target_amount, current: g.current_amount, remaining: p.remaining, percentComplete: p.pct, deadline: g.deadline || null, status: g.status, averageContribution: avg, contributionCount: evs.length };
+      });
+    },
+    /* Acertos + participação: pago (cheio, 1x) × responsabilidade (splits).
+       Compartilhada no casal conta uma única vez pelo total. */
+    analyticsSettlement: function (db, cid, userId, scan, ids, userMap) {
+      var eng = DB.settle(userId);
+      function nm(u) { return userMap[u] || 'Pessoa'; }
+      return {
+        people: eng.people.map(function (p) { return { userId: p.user_id, name: nm(p.user_id), paid: p.paid, owed: p.owed, net: p.net }; }),
+        debt: eng.debt ? { from: eng.debt.from, fromName: nm(eng.debt.from), to: eng.debt.to, toName: nm(eng.debt.to), amount: eng.debt.amount } : null,
+        sharedCount: eng.sharedCount, sharedTotal: eng.sharedTotal, settledTotal: eng.settledTotal,
+        history: DB.listSettlements(userId).slice(0, 10).map(function (s) { return { id: s.id, from: nm(s.from_user_id), to: nm(s.to_user_id), amount: s.amount, date: s.date }; })
+      };
+    },
+    analyticsParticipation: function (scan, ids, userMap, catMap) {
+      function nm(u) { return userMap[u] || 'Pessoa'; }
+      return {
+        paid: ids.map(function (u) { return { userId: u, name: nm(u), total: Math.round(scan.paidExp[u] || 0) / 100 }; }),
+        received: ids.map(function (u) { return { userId: u, name: nm(u), total: Math.round(scan.recvInc[u] || 0) / 100 }; }),
+        responsibility: ids.map(function (u) { return { userId: u, name: nm(u), total: Math.round(scan.owed[u] || 0) / 100 }; }),
+        byCategory: Object.keys(scan.perCatPaid).map(function (id) {
+          var cat = catMap[id] || { name: 'Categoria' };
+          return {
+            categoryId: id, categoryName: cat.name,
+            paid: ids.map(function (u) { return { userId: u, name: nm(u), total: Math.round(((scan.perCatPaid[id] || {})[u] || 0)) / 100 }; }),
+            responsibility: ids.map(function (u) { return { userId: u, name: nm(u), total: Math.round(((scan.perCatOwed[id] || {})[u] || 0)) / 100 }; })
+          };
+        })
+      };
+    },
+    /* Fluxo de caixa: entradas × saídas × internas × pagamentos de fatura. */
+    analyticsCashFlow: function (db, cid, userId, scan, o) {
+      var internal = 0, internalN = 0;
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (t.date < o.start || t.date > o.end) return;
+        internal += toCents(t.amount); internalN++;
+      });
+      var payTot = 0, payN = 0;
+      db.invoice_payments.forEach(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return;
+        if (p.payment_date < o.start || p.payment_date > o.end) return;
+        payTot += toCents(p.amount); payN++;
+      });
+      var acc = DB.calculateAccountsSummary(userId);
+      var tot = toCents(acc.totalBalance);
+      return {
+        inflow: Math.round(scan.inc) / 100, outflow: Math.round(scan.exp) / 100, net: Math.round(scan.inc - scan.exp) / 100,
+        internal: { total: internal / 100, count: internalN },
+        invoicePayments: { total: payTot / 100, count: payN },
+        accounts: {
+          total: acc.totalBalance, joint: acc.jointBalance, individual: acc.individual, activeAccounts: acc.activeAccounts,
+          byAccount: acc.accounts.map(function (a) { return { id: a.id, name: a.name, type: a.type, owner: a.owner_type, balance: a.balance, share: tot ? Math.round(toCents(a.balance) / tot * 1000) / 10 : null }; })
+        },
+        availableToSpend: DB.calculateAvailableToSpend(userId, { from: o.start.slice(0, 7), to: o.end.slice(0, 7), vision: o.view })
+      };
+    },
+    /* Saúde: só métricas objetivas, sem rótulos (sem score proprietário). */
+    analyticsHealth: function (scan, metrics, cards, budget, rec, committed) {
+      var r = {
+        savingsRate: metrics.savingsRate,
+        expenseToIncomeRatio: metrics.totalIncome ? Math.round(metrics.totalExpenses / metrics.totalIncome * 1000) / 10 : null,
+        fixedExpenseRatio: null, recurringExpenseRatio: null, cardUtilization: cards.totalUtilization,
+        budgetUsage: budget.latest ? budget.latest.usage : null,
+        futureCommitmentRatio: null, debtCommitmentRatio: null
+      };
+      if (scan.fixed + scan.variable > 0) r.fixedExpenseRatio = Math.round(scan.fixed / (scan.fixed + scan.variable) * 1000) / 10;
+      if (metrics.totalExpenses) r.recurringExpenseRatio = Math.round(rec.realizedTotal / metrics.totalExpenses * 1000) / 10;
+      if (metrics.averageMonthlyIncome) r.futureCommitmentRatio = Math.round((committed ? committed.total : 0) / metrics.averageMonthlyIncome * 1000) / 10;
+      return r;
+    },
+    /* Próximos eventos cronológicos (somente leitura: nunca gera ocorrências). */
+    analyticsCalendar: function (db, cid, userId, inst, rec) {
+      var evs = [];
+      DB.listOccurrences(userId, now().slice(0, 10), null, true).slice(0, 10).forEach(function (x) {
+        evs.push({ date: x.due_date, kind: 'recurring', title: x.rec ? x.rec.description : 'Recorrente', amount: x.amount });
+      });
+      inst.next.forEach(function (r) {
+        evs.push({ date: r.dueDate, kind: 'installment', title: 'Parcela ' + r.number, amount: r.amount });
+      });
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'paid' || i.status === 'cancelled') return;
+        var oust = toCents(DB.calculateInvoiceOutstanding(userId, i.id));
+        if (oust > 0) evs.push({ date: i.due_date, kind: 'invoice', title: 'Fatura ' + ('0' + i.reference_month).slice(-2) + '/' + i.reference_year, amount: oust / 100 });
+      });
+      db.goals.forEach(function (g) {
+        if (g.couple_id !== cid || g.status !== 'active' || !g.deadline) return;
+        evs.push({ date: g.deadline, kind: 'goal', title: g.name, amount: Math.round((g.target_amount - g.current_amount) * 100) / 100 });
+      });
+      evs.sort(function (a, b) { return (a.date).localeCompare(b.date); });
+      return evs.slice(0, 15);
+    },
+    /* ============ PROMPT 21: INSIGHT ENGINE (determinístico, sem IA) ============
+       FinancialAnalysisSummary → regras → evidências → deduplicação →
+       financial_insights. Fatos, nunca julgamentos; sem score; sem escrita
+       financeira (só persiste insights). Integração com AutomationEngine via
+       generateInsightsForEvent (por evento) — sem alterar o motor. */
+    INSIGHT_TYPES: ['spending_increase', 'spending_decrease', 'category_increase', 'category_decrease', 'unusual_expense', 'budget_attention', 'budget_exceeded', 'upcoming_commitment', 'invoice_due', 'invoice_overdue', 'card_utilization', 'installment_commitment', 'recurring_expense', 'goal_progress', 'goal_deadline', 'settlement_pending', 'cash_flow_change', 'income_change', 'expense_change', 'financial_pattern', 'reconciliation_attention'],
+    INSIGHT_CATEGORIES: ['spending', 'budget', 'cards', 'invoices', 'installments', 'recurring', 'goals', 'settlements', 'cash_flow', 'income', 'expenses', 'reconciliation', 'general'],
+    INSIGHT_SEVERITIES: ['info', 'attention', 'important'],
+    INSIGHT_STATUSES: ['new', 'read', 'dismissed', 'archived', 'acted_on', 'expired'],
+    INSIGHT_ACTIONS: ['none', 'view_transactions', 'view_budget', 'view_invoice', 'view_card', 'view_installments', 'view_goals', 'view_settlements', 'view_reconciliation', 'view_recurring', 'view_reports'],
+    /* Thresholds centrais (nada arbitrário espalhado no código). */
+    INSIGHT_THRESHOLDS: function () {
+      return {
+        spendingChange: 15, categoryChange: 20, categoryMinAbs: 100,
+        budgetAttention: 80, budgetExceeded: 100,
+        invoiceDueDays: 7, cardAttention: 70, cardImportant: 90,
+        installmentsMin: 100, installmentsImportant: 1000,
+        settlementMin: 10, reconciliationMin: 5,
+        cashFlowChange: 10, incomeChange: 15,
+        commitmentsAttention: 200, commitmentsImportant: 1000,
+        recurringSoonDays: 7, goalDeadlineDays: 90, maxCategoryInsights: 5
+      };
+    },
+    /* Catálogo de regras: severidade padrão, cooldown (dias) e categoria. */
+    INSIGHT_RULES: function () {
+      return [
+        { key: 'spending_increase', type: 'spending_increase', category: 'spending', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'spending_decrease', type: 'spending_decrease', category: 'spending', severity: 'info', cooldownDays: 7, enabled: true },
+        { key: 'category_increase', type: 'category_increase', category: 'spending', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'category_decrease', type: 'category_decrease', category: 'spending', severity: 'info', cooldownDays: 7, enabled: true },
+        { key: 'unusual_expense', type: 'unusual_expense', category: 'expenses', severity: 'attention', cooldownDays: 14, enabled: true },
+        { key: 'budget_attention', type: 'budget_attention', category: 'budget', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'budget_exceeded', type: 'budget_exceeded', category: 'budget', severity: 'important', cooldownDays: 7, enabled: true },
+        { key: 'invoice_due', type: 'invoice_due', category: 'invoices', severity: 'attention', cooldownDays: 3, enabled: true },
+        { key: 'invoice_overdue', type: 'invoice_overdue', category: 'invoices', severity: 'important', cooldownDays: 3, enabled: true },
+        { key: 'card_utilization', type: 'card_utilization', category: 'cards', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'installment_commitment', type: 'installment_commitment', category: 'installments', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'recurring_expense', type: 'recurring_expense', category: 'recurring', severity: 'info', cooldownDays: 7, enabled: true },
+        { key: 'goal_progress', type: 'goal_progress', category: 'goals', severity: 'info', cooldownDays: 14, enabled: true },
+        { key: 'goal_deadline', type: 'goal_deadline', category: 'goals', severity: 'attention', cooldownDays: 14, enabled: true },
+        { key: 'settlement_pending', type: 'settlement_pending', category: 'settlements', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'cash_flow_change', type: 'cash_flow_change', category: 'cash_flow', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'income_change', type: 'income_change', category: 'income', severity: 'attention', cooldownDays: 7, enabled: true },
+        { key: 'reconciliation_attention', type: 'reconciliation_attention', category: 'reconciliation', severity: 'attention', cooldownDays: 3, enabled: true },
+        { key: 'upcoming_commitment', type: 'upcoming_commitment', category: 'general', severity: 'attention', cooldownDays: 3, enabled: true }
+      ];
+    },
+    /* Dinheiro pt-BR para textos de insight (sem moralismo, só fato). */
+    insightMoney: function (v) {
+      var n = Math.round(Number(v) * 100) / 100;
+      var s = n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return 'R$ ' + (s.slice(-3) === ',00' ? s.slice(0, -3) : s);
+    },
+    insightPct: function (v) { return (Math.round(Number(v) * 10) / 10).toLocaleString('pt-BR') + '%'; },
+    insightRule: function (key) {
+      return DB.INSIGHT_RULES().filter(function (r) { return r.key === key; })[0] || null;
+    },
+    insightEnabled: function (db, cid, userId, type) {
+      var prefs = db.financial_insight_preferences.filter(function (p) {
+        return p.couple_id === cid && p.insight_type === type && !p.enabled && (p.user_id === null || p.user_id === userId);
+      });
+      return !prefs.length;
+    },
+    setInsightPreference: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var type = String((data && data.insight_type) || '');
+      if (DB.INSIGHT_TYPES.indexOf(type) < 0) throw new Error('Tipo inválido.');
+      var scope = (data && data.scope) === 'me' ? userId : null;
+      var ex = db.financial_insight_preferences.find(function (p) { return p.couple_id === cid && (p.user_id || null) === scope && p.insight_type === type; });
+      if (ex) { ex.enabled = !!(data && data.enabled); ex.updated_at = now(); }
+      else db.financial_insight_preferences.push({ id: id('ip'), couple_id: cid, user_id: scope, insight_type: type, enabled: !!(data && data.enabled), created_at: now(), updated_at: now() });
+      logAudit(db, cid, userId, 'insight_preference', type, 'update', {});
+      write(db);
+      return true;
+    },
+    /* Avalia UMA regra sobre (summary atual + baseline). Retorna candidatos. */
+    insightEvaluate: function (key, a, base, ctx) {
+      var T = DB.INSIGHT_THRESHOLDS(), out = [];
+      var per = ctx.period, cid = ctx.cid, view = ctx.view;
+      function fp(suffix) { return key + ':' + cid + ':' + suffix + ':' + view; }
+      function C(o) {
+        o.rule_key = key; o.fingerprint = fp(o.fpSuffix);
+        out.push(o);
+      }
+      var m = a.data.metrics, months3 = 3;
+      if (key === 'spending_increase' || key === 'spending_decrease') {
+        var avg = base.data.metrics.totalExpenses / months3;
+        if (avg > 0 && m.totalExpenses >= 0) {
+          var pct = (m.totalExpenses - avg) / avg * 100;
+          if (Math.abs(pct) >= T.spendingChange && ((key === 'spending_increase') === (pct > 0))) {
+            C({ insight_type: key === 'spending_increase' ? 'spending_increase' : 'spending_decrease', category: 'spending', severity: pct > 0 ? 'attention' : 'info',
+              title: pct > 0 ? 'Despesas acima da média recente' : 'Despesas abaixo da média recente',
+              summary: 'As despesas do período estão ' + DB.insightPct(Math.abs(pct)) + (pct > 0 ? ' acima' : ' abaixo') + ' da média dos 3 meses anteriores.',
+              explanation: 'Despesas de ' + DB.insightMoney(m.totalExpenses) + ' neste período, contra média de ' + DB.insightMoney(avg) + ' nos 3 meses anteriores.',
+              action_type: 'view_transactions', action_label: 'Ver gastos',
+              evidence: { metric: 'total_expenses', current_value: m.totalExpenses, previous_average: Math.round(avg * 100) / 100, difference: Math.round((m.totalExpenses - avg) * 100) / 100, percentage_change: Math.round(pct * 10) / 10, comparison_periods: 3 },
+              metric_name: 'total_expenses', metric_value: m.totalExpenses, comparison_value: Math.round(avg * 100) / 100, comparison_percentage: Math.round(pct * 10) / 10,
+              fpSuffix: per.startDate + '_' + per.endDate });
+          }
+        }
+      } else if (key === 'category_increase' || key === 'category_decrease') {
+        var baseMap = {};
+        base.data.categoryAnalysis.forEach(function (c) {
+          baseMap[c.categoryId] = c.total / months3;
+          (c.children || []).forEach(function (k) { baseMap[k.categoryId] = k.total / months3; });
+        });
+        var cands = [];
+        function pushCand(entry, baseAvg, isSub) {
+          if (entry.total < T.categoryMinAbs) return;
+          if (baseAvg <= 0) return;
+          var p = (entry.total - baseAvg) / baseAvg * 100;
+          if (Math.abs(p) >= T.categoryChange && ((key === 'category_increase') === (p > 0))) {
+            cands.push({ c: entry, ba: baseAvg, p: p, isSub: !!isSub });
+          }
+        }
+        a.data.categoryAnalysis.slice(0, 8).forEach(function (c) {
+          pushCand(c, baseMap[c.categoryId] || 0, false);
+          (c.children || []).forEach(function (k) { pushCand(k, (baseMap[k.categoryId] || 0), true); });
+        });
+        cands.sort(function (x, y) { return Math.abs(y.c.total - y.ba) - Math.abs(x.c.total - x.ba); });
+        cands.slice(0, T.maxCategoryInsights).forEach(function (h) {
+          var dispName = h.isSub ? (h.c.parentName + ' → ' + h.c.categoryName) : h.c.categoryName;
+          C({ insight_type: key === 'category_increase' ? 'category_increase' : 'category_decrease', category: 'spending', severity: h.p > 0 ? 'attention' : 'info',
+            title: dispName + (h.p > 0 ? ' aumentou no período' : ' reduziu no período'),
+            summary: 'Os gastos com ' + dispName + ' estão ' + DB.insightPct(Math.abs(h.p)) + (h.p > 0 ? ' acima' : ' abaixo') + ' da média dos 3 meses anteriores.',
+            explanation: DB.insightMoney(h.c.total) + ' neste período, contra média de ' + DB.insightMoney(h.ba) + ' nos 3 meses anteriores.' + (h.isSub ? ' Parte de ' + h.c.parentName + '.' : ''),
+            action_type: 'view_transactions', action_label: 'Ver gastos',
+            evidence: { metric: 'category_expense', category: dispName, current_value: h.c.total, previous_average: Math.round(h.ba * 100) / 100, difference: Math.round((h.c.total - h.ba) * 100) / 100, percentage_change: Math.round(h.p * 10) / 10, comparison_periods: 3 },
+            related_entity_type: 'category', related_entity_id: h.c.categoryId,
+            metric_name: 'category_expense', metric_value: h.c.total, comparison_value: Math.round(h.ba * 100) / 100, comparison_percentage: Math.round(h.p * 10) / 10,
+            fpSuffix: h.c.categoryId + ':' + per.startDate + '_' + per.endDate });
+        });
+      } else if (key === 'unusual_expense') {
+        (a.data.unusualExpenses || []).slice(0, 3).forEach(function (u) {
+          var t = ctx.db.transactions.filter(function (x) { return x.id === u.transactionId; })[0] || {};
+          var cat = ctx.catMap[t.category_id] || { name: 'Categoria' };
+          C({ insight_type: 'unusual_expense', category: 'expenses', severity: 'attention',
+            title: 'Despesa fora do padrão em ' + cat.name,
+            summary: 'Uma despesa de ' + DB.insightMoney(u.actualValue) + ' em ' + cat.name + ' ficou acima do padrão observado para essa categoria.',
+            explanation: 'Valor de ' + DB.insightMoney(u.actualValue) + ' em ' + (t.date || '').split('-').reverse().join('/') + ', contra referência de ' + DB.insightMoney(u.baseline) + '. Pode valer a pena revisar.',
+            action_type: 'view_transactions', action_label: 'Ver gastos',
+            evidence: { metric: 'unusual_expense', transaction_id: u.transactionId, category: cat.name, actual_value: u.actualValue, baseline: u.baseline, difference: u.difference, score: u.score },
+            related_entity_type: 'transaction', related_entity_id: u.transactionId,
+            metric_name: 'unusual_expense', metric_value: u.actualValue, comparison_value: u.baseline, comparison_percentage: null,
+            fpSuffix: u.transactionId });
+        });
+      } else if (key === 'budget_attention' || key === 'budget_exceeded') {
+        var items = (a.data.budget && a.data.budget.latest && a.data.budget.latest.items) || [];
+        var ym = (a.data.budget && a.data.budget.latest && a.data.budget.latest.month) || '';
+        items.forEach(function (it) {
+          var fire = key === 'budget_exceeded' ? it.pct >= T.budgetExceeded : (it.pct >= T.budgetAttention && it.pct < T.budgetExceeded);
+          if (!fire) return;
+          C({ insight_type: key === 'budget_exceeded' ? 'budget_exceeded' : 'budget_attention', category: 'budget', severity: key === 'budget_exceeded' ? 'important' : 'attention',
+            title: it.name + (key === 'budget_exceeded' ? ' ultrapassou o orçamento' : ' próximo do limite do orçamento'),
+            summary: it.name + ' já utiliza ' + DB.insightPct(it.pct) + ' do orçamento deste mês.',
+            explanation: 'Gasto de ' + DB.insightMoney(it.spent) + ' para orçamento de ' + DB.insightMoney(it.limit) + '. Restam ' + DB.insightMoney(it.remaining) + '.',
+            action_type: 'view_budget', action_label: 'Ver orçamento',
+            evidence: { metric: 'budget_usage', category: it.name, limit: it.limit, spent: it.spent, remaining: it.remaining, usage: it.pct },
+            related_entity_type: 'category', related_entity_id: it.category_id,
+            metric_name: 'budget_usage', metric_value: it.spent, comparison_value: it.limit, comparison_percentage: it.pct,
+            fpSuffix: it.category_id + ':' + ym });
+        });
+      } else if (key === 'invoice_due' || key === 'invoice_overdue') {
+        var today = now().slice(0, 10);
+        (a.data.invoices || []).forEach(function (inv) {
+          if (inv.outstanding <= 0) return;
+          var card = ctx.db.credit_cards.filter(function (c) { return c.id === inv.cardId; })[0] || {};
+          var tail = card.last_four_digits ? ' final ' + card.last_four_digits : '';
+          if (key === 'invoice_overdue' && inv.status === 'overdue') {
+            C({ insight_type: 'invoice_overdue', category: 'invoices', severity: 'important',
+              title: 'Fatura vencida' + (tail ? ' do cartão' + tail : ''),
+              summary: 'A fatura de ' + ('0' + inv.referenceMonth).slice(-2) + '/' + inv.referenceYear + ' está vencida, com ' + DB.insightMoney(inv.outstanding) + ' em aberto.',
+              explanation: 'Vencimento em ' + inv.dueDate.split('-').reverse().join('/') + '. Total ' + DB.insightMoney(inv.total) + ', pago ' + DB.insightMoney(inv.paidAmount) + '.',
+              action_type: 'view_invoice', action_label: 'Ver fatura',
+              evidence: { metric: 'invoice_outstanding', total: inv.total, outstanding: inv.outstanding, due_date: inv.dueDate, status: inv.status },
+              related_entity_type: 'invoice', related_entity_id: inv.invoiceId,
+              metric_name: 'invoice_outstanding', metric_value: inv.outstanding, comparison_value: inv.total, comparison_percentage: null,
+              fpSuffix: inv.invoiceId });
+          } else if (key === 'invoice_due' && (inv.status === 'open' || inv.status === 'closed') && inv.dueDate >= today) {
+            var dd = Math.round((Date.parse(inv.dueDate) - Date.parse(today)) / 864e5);
+            if (dd <= T.invoiceDueDays) {
+              C({ insight_type: 'invoice_due', category: 'invoices', severity: 'attention',
+                title: 'Fatura vence em ' + dd + (dd === 1 ? ' dia' : ' dias'),
+                summary: 'A fatura' + tail + ' vence em ' + dd + (dd === 1 ? ' dia' : ' dias') + ' e tem ' + DB.insightMoney(inv.outstanding) + ' em aberto.',
+                explanation: 'Vencimento em ' + inv.dueDate.split('-').reverse().join('/') + '. Total ' + DB.insightMoney(inv.total) + '.',
+                action_type: 'view_invoice', action_label: 'Ver fatura',
+                evidence: { metric: 'invoice_outstanding', total: inv.total, outstanding: inv.outstanding, due_date: inv.dueDate, days_to_due: dd },
+                related_entity_type: 'invoice', related_entity_id: inv.invoiceId,
+                metric_name: 'invoice_outstanding', metric_value: inv.outstanding, comparison_value: inv.total, comparison_percentage: null,
+                fpSuffix: inv.invoiceId });
+            }
+          }
+        });
+      } else if (key === 'card_utilization') {
+        (a.data.cards.cards || []).forEach(function (c) {
+          if (c.utilization == null) return;
+          var sev = c.utilization >= T.cardImportant ? 'important' : (c.utilization >= T.cardAttention ? 'attention' : null);
+          if (!sev) return;
+          var tail = c.name;
+          C({ insight_type: 'card_utilization', category: 'cards', severity: sev,
+            title: 'Cartão ' + tail + ' com ' + DB.insightPct(c.utilization) + ' do limite comprometido',
+            summary: 'O cartão ' + tail + ' está com ' + DB.insightPct(c.utilization) + ' do limite comprometido.',
+            explanation: 'Limite ' + DB.insightMoney(c.limit) + ', utilizado ' + DB.insightMoney(c.used) + ', disponível ' + DB.insightMoney(c.available) + '.',
+            action_type: 'view_card', action_label: 'Ver cartão',
+            evidence: { metric: 'card_utilization', card: c.name, limit: c.limit, used: c.used, available: c.available, utilization: c.utilization },
+            related_entity_type: 'credit_card', related_entity_id: c.cardId,
+            metric_name: 'card_utilization', metric_value: c.used, comparison_value: c.limit, comparison_percentage: c.utilization,
+            fpSuffix: c.cardId });
+        });
+      } else if (key === 'installment_commitment') {
+        var today2 = now().slice(0, 10);
+        var lim = DB.dateAddDays(today2, 30);
+        var nx = (a.data.installments.next || []).filter(function (r) { return r.dueDate <= lim; });
+        var tot = Math.round(nx.reduce(function (s, r) { return s + r.amount; }, 0) * 100) / 100;
+        if (tot >= T.installmentsMin) {
+          var sev2 = tot >= T.installmentsImportant ? 'important' : 'attention';
+          C({ insight_type: 'installment_commitment', category: 'installments', severity: sev2,
+            title: DB.insightMoney(tot) + ' em parcelas nos próximos 30 dias',
+            summary: 'Existem ' + DB.insightMoney(tot) + ' em ' + nx.length + (nx.length === 1 ? ' parcela' : ' parcelas') + ' previstas para os próximos 30 dias.',
+            explanation: 'Somente parcelas, sem somar novamente o valor total das compras.',
+            action_type: 'view_installments', action_label: 'Ver parcelas',
+            evidence: { metric: 'upcoming_installments', total: tot, count: nx.length, horizon_days: 30 },
+            metric_name: 'upcoming_installments', metric_value: tot, comparison_value: null, comparison_percentage: null,
+            fpSuffix: per.startDate + '_' + per.endDate });
+        }
+      } else if (key === 'recurring_expense') {
+        var today3 = now().slice(0, 10);
+        var lim3 = DB.dateAddDays(today3, T.recurringSoonDays);
+        var up = ((a.data.recurring && a.data.recurring.upcoming) || []).filter(function (x) { return x.dueDate <= lim3 && x.type === 'expense'; });
+        if (up.length) {
+          var t3 = Math.round(up.reduce(function (s, x) { return s + x.amount; }, 0) * 100) / 100;
+          C({ insight_type: 'recurring_expense', category: 'recurring', severity: 'info',
+            title: up.length + (up.length === 1 ? ' recorrente vence' : ' recorrentes vencem') + ' nos próximos ' + T.recurringSoonDays + ' dias',
+            summary: up.length + (up.length === 1 ? ' despesa recorrente vence' : ' despesas recorrentes vencem') + ' nos próximos ' + T.recurringSoonDays + ' dias (' + DB.insightMoney(t3) + ').',
+            explanation: 'Estimativa mensal de recorrentes: ' + DB.insightMoney(a.data.recurring.monthlyEstimate) + '.',
+            action_type: 'view_recurring', action_label: 'Ver recorrentes',
+            evidence: { metric: 'upcoming_recurring', total: t3, count: up.length, horizon_days: T.recurringSoonDays, monthly_estimate: a.data.recurring.monthlyEstimate },
+            metric_name: 'upcoming_recurring', metric_value: t3, comparison_value: null, comparison_percentage: null,
+            fpSuffix: per.startDate + '_' + per.endDate });
+        }
+      } else if (key === 'goal_progress' || key === 'goal_deadline') {
+        var today4 = now().slice(0, 10);
+        (a.data.goals || []).forEach(function (g) {
+          if (key === 'goal_progress' && g.status === 'completed') {
+            C({ insight_type: 'goal_progress', category: 'goals', severity: 'info',
+              title: 'Meta "' + g.name + '" concluída',
+              summary: 'A meta "' + g.name + '" atingiu ' + DB.insightMoney(g.current) + ' de ' + DB.insightMoney(g.target) + '.',
+              explanation: 'Progresso de ' + DB.insightPct(g.percentComplete) + '.',
+              action_type: 'view_goals', action_label: 'Ver metas',
+              evidence: { metric: 'goal_progress', goal: g.name, current: g.current, target: g.target, percent: g.percentComplete },
+              related_entity_type: 'goal', related_entity_id: g.id,
+              metric_name: 'goal_progress', metric_value: g.current, comparison_value: g.target, comparison_percentage: g.percentComplete,
+              fpSuffix: g.id });
+          } else if (key === 'goal_deadline' && g.status === 'active' && g.deadline) {
+            var dl = Math.round((Date.parse(g.deadline) - Date.parse(today4)) / 864e5);
+            if (dl >= 0 && dl <= T.goalDeadlineDays) {
+              var monthsLeft = Math.max(1, Math.ceil(dl / 30));
+              var need = Math.round((g.remaining / monthsLeft) * 100) / 100;
+              C({ insight_type: 'goal_deadline', category: 'goals', severity: 'attention',
+                title: 'Meta "' + g.name + '" em ' + g.percentComplete + '% com prazo se aproximando',
+                summary: 'A meta "' + g.name + '" está em ' + DB.insightPct(g.percentComplete) + ' do objetivo, com vencimento em ' + g.deadline.split('-').reverse().join('/') + '.',
+                explanation: 'Faltam ' + DB.insightMoney(g.remaining) + '. Para atingir o restante no prazo atual, seriam necessários aproximadamente ' + DB.insightMoney(need) + ' por mês (cálculo matemático).',
+                action_type: 'view_goals', action_label: 'Ver metas',
+                evidence: { metric: 'goal_deadline', goal: g.name, percent: g.percentComplete, remaining: g.remaining, deadline: g.deadline, days_left: dl, required_per_month: need },
+                related_entity_type: 'goal', related_entity_id: g.id,
+                metric_name: 'goal_deadline', metric_value: g.current, comparison_value: g.target, comparison_percentage: g.percentComplete,
+                fpSuffix: g.id });
+            }
+          }
+        });
+      } else if (key === 'settlement_pending') {
+        var cp38 = (ctx.db.couples || []).filter(function (x) { return x.id === ctx.cid; })[0];
+        if (cp38 && cp38.money_management_mode === 'JOINT') return []; // P38: tudo junto não gera acerto
+        var debt = a.data.settlement && a.data.settlement.debt;
+        if (debt && debt.amount >= T.settlementMin) {
+          C({ insight_type: 'settlement_pending', category: 'settlements', severity: 'attention',
+            title: 'Acerto pendente de ' + DB.insightMoney(debt.amount),
+            summary: 'Existe um acerto pendente de ' + DB.insightMoney(debt.amount) + ': ' + debt.fromName + ' para ' + debt.toName + '.',
+            explanation: 'Saldo líquido dos gastos compartilhados, já descontados acertos registrados. Acerto não é despesa nova.',
+            action_type: 'view_settlements', action_label: 'Ver acertos',
+            evidence: { metric: 'settlement_debt', amount: debt.amount, from: debt.fromName, to: debt.toName },
+            metric_name: 'settlement_debt', metric_value: debt.amount, comparison_value: null, comparison_percentage: null,
+            fpSuffix: 'open' });
+        }
+      } else if (key === 'cash_flow_change') {
+        var dRes = a.data.comparison.result;
+        var inc = m.totalIncome;
+        if (inc > 0 && Math.abs(dRes.absoluteDifference) >= inc * T.cashFlowChange / 100) {
+          var up = dRes.absoluteDifference > 0;
+          C({ insight_type: 'cash_flow_change', category: 'cash_flow', severity: up ? 'info' : 'attention',
+            title: 'Resultado ' + (up ? 'acima' : 'abaixo') + ' do período anterior',
+            summary: 'O resultado financeiro (' + DB.insightMoney(m.financialResult) + ') está ' + DB.insightMoney(Math.abs(dRes.absoluteDifference)) + ' ' + (up ? 'acima' : 'abaixo') + ' do período anterior.',
+            explanation: 'Receitas ' + DB.insightMoney(m.totalIncome) + ', despesas ' + DB.insightMoney(m.totalExpenses) + '.',
+            action_type: 'view_reports', action_label: 'Ver relatório',
+            evidence: { metric: 'financial_result', current_value: m.financialResult, previous_value: dRes.previousValue, difference: dRes.absoluteDifference },
+            metric_name: 'financial_result', metric_value: m.financialResult, comparison_value: dRes.previousValue, comparison_percentage: null,
+            fpSuffix: per.startDate + '_' + per.endDate });
+        }
+      } else if (key === 'income_change') {
+        var avgI = base.data.metrics.totalIncome / months3;
+        if (avgI > 0) {
+          var pi = (m.totalIncome - avgI) / avgI * 100;
+          if (Math.abs(pi) >= T.incomeChange) {
+            C({ insight_type: 'income_change', category: 'income', severity: pi > 0 ? 'info' : 'attention',
+              title: pi > 0 ? 'Receitas acima da média recente' : 'Receitas abaixo da média recente',
+              summary: 'As receitas do período estão ' + DB.insightPct(Math.abs(pi)) + (pi > 0 ? ' acima' : ' abaixo') + ' da média dos 3 meses anteriores.',
+              explanation: DB.insightMoney(m.totalIncome) + ' contra média de ' + DB.insightMoney(avgI) + '.',
+              action_type: 'view_transactions', action_label: 'Ver receitas',
+              evidence: { metric: 'total_income', current_value: m.totalIncome, previous_average: Math.round(avgI * 100) / 100, difference: Math.round((m.totalIncome - avgI) * 100) / 100, percentage_change: Math.round(pi * 10) / 10 },
+              metric_name: 'total_income', metric_value: m.totalIncome, comparison_value: Math.round(avgI * 100) / 100, comparison_percentage: Math.round(pi * 10) / 10,
+              fpSuffix: per.startDate + '_' + per.endDate });
+          }
+        }
+      } else if (key === 'reconciliation_attention') {
+        var pend = ctx.db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.status === 'valid'; }).length;
+        if (pend >= T.reconciliationMin) {
+          C({ insight_type: 'reconciliation_attention', category: 'reconciliation', severity: 'attention',
+            title: pend + ' movimentações aguardando conciliação',
+            summary: 'Existem ' + pend + ' movimentações importadas aguardando conciliação.',
+            explanation: 'Revise a conciliação para classificar os lançamentos antes de importar.',
+            action_type: 'view_reconciliation', action_label: 'Revisar conciliação',
+            evidence: { metric: 'pending_reconciliation', count: pend },
+            metric_name: 'pending_reconciliation', metric_value: pend, comparison_value: null, comparison_percentage: null,
+            fpSuffix: 'open' });
+        }
+      } else if (key === 'upcoming_commitment') {
+        var today5 = now().slice(0, 10);
+        var lim5 = DB.dateAddDays(today5, 15);
+        var evs = (a.data.calendar || []).filter(function (e) { return e.date >= today5 && e.date <= lim5 && e.kind !== 'goal'; });
+        var tc = Math.round(evs.reduce(function (s, e) { return s + e.amount; }, 0) * 100) / 100;
+        if (tc >= T.commitmentsAttention) {
+          C({ insight_type: 'upcoming_commitment', category: 'general', severity: tc >= T.commitmentsImportant ? 'important' : 'attention',
+            title: DB.insightMoney(tc) + ' em compromissos nos próximos 15 dias',
+            summary: 'Nos próximos 15 dias existem ' + DB.insightMoney(tc) + ' em compromissos financeiros previstos.',
+            explanation: 'Compromissos (parcelas, recorrentes, faturas), sem misturar com despesas já realizadas.',
+            action_type: 'view_reports', action_label: 'Ver relatório',
+            evidence: { metric: 'upcoming_commitments', total: tc, count: evs.length, horizon_days: 15 },
+            metric_name: 'upcoming_commitments', metric_value: tc, comparison_value: null, comparison_percentage: null,
+            fpSuffix: per.startDate + '_' + per.endDate });
+        }
+      }
+      return out;
+    },
+    /* Gera insights para o período/visão (idempotente: fingerprint + status).
+       Dispensados/arquivados/acionados nunca ressuscitam; expirados respeitam
+       cooldown antes de recriar. Expira o que perdeu a condição. */
+    generateInsights: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      if (opt.coupleId && opt.coupleId !== cid) throw new Error('Acesso negado.');
+      var view = opt.view || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(view) < 0) throw new Error('Visão inválida.');
+      var per = opt.periodStart && opt.periodEnd
+        ? DB.analyticsResolvePeriod('custom', { start: opt.periodStart, end: opt.periodEnd })
+        : DB.analyticsResolvePeriod(opt.preset || 'current_month');
+      var a = DB.analyzeFinancialPeriod(userId, { periodStart: per.startDate, periodEnd: per.endDate, view: view, filters: opt.filters });
+      var bStartYm = shiftMonth(per.startDate.slice(0, 7), -3);
+      var bEndYm = shiftMonth(per.startDate.slice(0, 7), -1);
+      var base = DB.analyzeFinancialPeriod(userId, { periodStart: bStartYm + '-01', periodEnd: bEndYm + '-' + dim(+bEndYm.slice(0, 4), +bEndYm.slice(5, 7)), view: view, filters: opt.filters });
+      var ids = db.members.filter(function (m) { return m.couple_id === cid; }).map(function (m) { return m.user_id; });
+      var focus = view === 'me' ? userId : (view === 'partner' ? ids.filter(function (x) { return x !== userId; })[0] || null : null);
+      var scopeUser = view === 'couple' ? null : (focus || userId);
+      var catMap = DB.analyticsCatMap(db, cid);
+      var ctx = { db: db, cid: cid, view: view, period: per, catMap: catMap };
+      var made = [];
+      var evaluatedOk = {}, candidateFps = {};
+      var COUPLE_WIDE = ['budget_attention', 'budget_exceeded', 'invoice_due', 'invoice_overdue', 'card_utilization', 'installment_commitment', 'recurring_expense', 'goal_progress', 'goal_deadline', 'settlement_pending', 'reconciliation_attention', 'upcoming_commitment'];
+      DB.INSIGHT_RULES().forEach(function (rule) {
+        if (!rule.enabled || !DB.insightEnabled(db, cid, userId, rule.type)) return;
+        var cands;
+        try { cands = DB.insightEvaluate(rule.key, a, base, ctx); }
+        catch (e) { return; }
+        evaluatedOk[rule.key] = true;
+        cands.forEach(function (cd) {
+          if (DB.INSIGHT_TYPES.indexOf(cd.insight_type) < 0) return;
+          /* Regras de dados do casal: escopo e fingerprint únicos (sem triplicar por visão). */
+          var rowScope = scopeUser;
+          if (COUPLE_WIDE.indexOf(rule.key) >= 0) {
+            cd.fingerprint = cd.fingerprint.replace(/:(couple|me|partner)$/, ':couple');
+            rowScope = null;
+          }
+          candidateFps[cd.fingerprint] = true;
+          var ex = db.financial_insights.filter(function (r) { return r.fingerprint === cd.fingerprint; })[0] || null;
+          if (ex && (ex.status === 'dismissed' || ex.status === 'archived' || ex.status === 'acted_on')) return;
+          if (ex && ex.status === 'expired') {
+            if (Date.now() - Date.parse(ex.updated_at) < rule.cooldownDays * 864e5) return;
+          }
+          if (ex && (ex.status === 'new' || ex.status === 'read')) {
+            ex.evidence = cd.evidence; ex.metric_value = cd.metric_value; ex.comparison_value = cd.comparison_value;
+            ex.comparison_percentage = cd.comparison_percentage; ex.severity = cd.severity;
+            ex.title = cd.title; ex.summary = cd.summary; ex.explanation = cd.explanation;
+            ex.last_detected_at = now(); ex.updated_at = now();
+            logAudit(db, cid, userId, 'insight', ex.id, 'updated', { rule: rule.key });
+            made.push(ex.id);
+            return;
+          }
+          var row = {
+            id: id('fi'), couple_id: cid, user_id: rowScope, insight_type: cd.insight_type, category: cd.category,
+            severity: cd.severity, status: 'new', title: String(cd.title).slice(0, 140), summary: String(cd.summary).slice(0, 500),
+            explanation: String(cd.explanation).slice(0, 1000), action_label: cd.action_label || '', action_type: cd.action_type || 'none',
+            evidence: cd.evidence || {}, period_start: per.startDate, period_end: per.endDate,
+            related_entity_type: cd.related_entity_type || null, related_entity_id: cd.related_entity_id || null,
+            metric_name: cd.metric_name || null, metric_value: cd.metric_value != null ? cd.metric_value : null,
+            comparison_value: cd.comparison_value != null ? cd.comparison_value : null,
+            comparison_percentage: cd.comparison_percentage != null ? cd.comparison_percentage : null,
+            rule_key: rule.key, fingerprint: cd.fingerprint,
+            first_detected_at: now(), last_detected_at: now(), expires_at: null,
+            read_at: null, dismissed_at: null, acted_on_at: null, created_at: now(), updated_at: now()
+          };
+          if (cd.insight_type === 'budget_attention' || cd.insight_type === 'budget_exceeded') {
+            var ym = per.endDate.slice(0, 7);
+            row.expires_at = ym + '-' + dim(+ym.slice(0, 4), +ym.slice(5, 7)) + 'T23:59:59.000Z';
+          }
+          if (cd.insight_type === 'invoice_due' && cd.evidence && cd.evidence.due_date) row.expires_at = cd.evidence.due_date + 'T23:59:59.000Z';
+          db.financial_insights.push(row);
+          logAudit(db, cid, userId, 'insight', row.id, 'created', { rule: rule.key });
+          made.push(row.id);
+        });
+      });
+      DB.insightExpirePass(db, cid, userId, per, { evaluated: evaluatedOk, candidates: candidateFps, view: view, userId: userId });
+      write(db);
+      return DB.listInsights(userId, { view: view });
+    },
+    /* Expira o que perdeu a condição (histórico preservado, nunca apaga). */
+    insightExpirePass: function (db, cid, userId, per, ctx2) {
+      ctx2 = ctx2 || {};
+      var today = now().slice(0, 10), curYm = today.slice(0, 7);
+      function expire(r, why) {
+        if (r.status !== 'new' && r.status !== 'read') return;
+        r.status = 'expired'; r.updated_at = now();
+        logAudit(db, cid, userId, 'insight', r.id, 'expired', { rule: r.rule_key, why: why });
+      }
+      db.financial_insights.forEach(function (r) {
+        if (r.couple_id !== cid) return;
+        if (r.status !== 'new' && r.status !== 'read') return;
+        if (r.user_id !== null && r.user_id !== userId) return;
+        if (r.expires_at && r.expires_at.slice(0, 10) < today) { expire(r, 'prazo'); return; }
+        var VISION_KEYS = ['spending_increase', 'spending_decrease', 'category_increase', 'category_decrease', 'cash_flow_change', 'income_change'];
+        var scope = VISION_KEYS.indexOf(r.rule_key) >= 0 ? (ctx2.view || 'couple') : 'couple';
+        if (r.fingerprint.split(':').pop() !== scope) return;
+        if (ctx2.evaluated && ctx2.evaluated[r.rule_key] && r.rule_key !== 'unusual_expense' && r.rule_key !== 'goal_progress' && !ctx2.candidates[r.fingerprint]) { expire(r, 'condição atualizada'); return; }
+        if (r.rule_key === 'invoice_due' || r.rule_key === 'invoice_overdue') {
+          var inv = r.related_entity_id ? db.invoices.find(function (i) { return i.id === r.related_entity_id; }) : null;
+          if (!inv || inv.couple_id !== cid || inv.status === 'paid' || inv.status === 'cancelled' || toCents(inv.paid_amount) >= toCents(DB.calculateInvoiceTotal(userId, inv.id))) expire(r, 'fatura paga');
+        } else if (r.rule_key === 'budget_attention' || r.rule_key === 'budget_exceeded') {
+          var ym = (r.fingerprint.match(/:(\d{4}-\d{2})$/) || [])[1] || '';
+          if (ym && ym < curYm) expire(r, 'mês encerrado');
+        } else if (r.rule_key === 'goal_deadline') {
+          var g = r.related_entity_id ? db.goals.find(function (x) { return x.id === r.related_entity_id; }) : null;
+          if (!g || g.couple_id !== cid || g.status !== 'active') expire(r, 'meta concluída');
+        } else if (r.rule_key === 'settlement_pending') {
+          var eng = DB.settle(userId);
+          if (!eng.debt || eng.debt.amount < DB.INSIGHT_THRESHOLDS().settlementMin) expire(r, 'sem pendência');
+        } else if (r.rule_key === 'reconciliation_attention') {
+          var pend = db.imported_transactions.filter(function (x) { return x.couple_id === cid && x.status === 'valid'; }).length;
+          if (pend < DB.INSIGHT_THRESHOLDS().reconciliationMin) expire(r, 'sem pendência');
+        } else if (per && ['spending_increase', 'spending_decrease', 'category_increase', 'category_decrease', 'cash_flow_change', 'income_change', 'installment_commitment', 'recurring_expense', 'upcoming_commitment'].indexOf(r.rule_key) >= 0) {
+          if (r.period_start !== per.startDate || r.period_end !== per.endDate) expire(r, 'período mudou');
+        }
+      });
+    },
+    insightVisible: function (db, cid, userId, r) {
+      return r.couple_id === cid && (r.user_id === null || r.user_id === userId);
+    },
+    getInsight: function (userId, insightId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.financial_insights.find(function (x) { return x.id === insightId; });
+      if (!r || !DB.insightVisible(db, cid, userId, r)) throw new Error('Insight não encontrado.');
+      return r;
+    },
+    listInsights: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.financial_insights.filter(function (r) {
+        if (!DB.insightVisible(db, cid, userId, r)) return false;
+        if (!DB.insightEnabled(db, cid, userId, r.insight_type)) return false;
+        if (f.view === 'couple' && r.user_id !== null) return false;
+        if (f.view === 'me' && !(r.user_id === null || r.user_id === userId)) return false;
+        if (f.type && r.insight_type !== f.type) return false;
+        if (f.severity && r.severity !== f.severity) return false;
+        if (f.category && r.category !== f.category) return false;
+        if (f.status && r.status !== f.status) return false;
+        if (f.active && !(r.status === 'new' || r.status === 'read')) return false;
+        if (f.periodStart && r.period_end < f.periodStart) return false;
+        if (f.periodEnd && r.period_start > f.periodEnd) return false;
+        return true;
+      }).sort(function (a, b) {
+        var rank = { new: 0, read: 1, acted_on: 2, dismissed: 3, archived: 4, expired: 5 };
+        var sev = { important: 0, attention: 1, info: 2 };
+        return ((rank[a.status] - rank[b.status]) || (sev[a.severity] - sev[b.severity]) || (b.created_at + b.id).localeCompare(a.created_at + a.id));
+      }).slice(0, f.limit || 100);
+    },
+    getActiveInsights: function (userId, f) {
+      f = f || {}; f.active = true;
+      return DB.listInsights(userId, f);
+    },
+    getUnreadInsights: function (userId, f) {
+      f = f || {}; f.status = 'new';
+      return DB.listInsights(userId, f);
+    },
+    insightCounts: function (userId, f) {
+      var act = DB.getActiveInsights(userId, f);
+      return { total: act.length, unread: act.filter(function (r) { return r.status === 'new'; }).length, attention: act.filter(function (r) { return r.severity === 'attention' || r.severity === 'important'; }).length };
+    },
+    /* read | dismiss | archive | act — valida casal + privacidade. */
+    setInsightStatus: function (userId, insightId, action) {
+      var map = { read: 'read', dismiss: 'dismissed', archive: 'archived', act: 'acted_on' };
+      if (!map[action]) throw new Error('Ação inválida.');
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.financial_insights.find(function (x) { return x.id === insightId; });
+      if (!r || !DB.insightVisible(db, cid, userId, r)) throw new Error('Insight não encontrado.');
+      r.status = map[action]; r.updated_at = now();
+      if (action === 'read') r.read_at = now();
+      if (action === 'dismiss') r.dismissed_at = now();
+      if (action === 'act') r.acted_on_at = now();
+      logAudit(db, cid, userId, 'insight', r.id, map[action] === 'acted_on' ? 'acted_on' : map[action], { rule: r.rule_key });
+      write(db);
+      return r;
+    },
+    /* Integração com AutomationEngine/FinancialEventService (por evento ou
+       job): barato via cache do analytics; idempotente por fingerprint. */
+    generateInsightsForEvent: function (userId, event) {
+      var t = String((event && (event.event_type || event.type)) || '');
+      var prefix = t.split('.')[0];
+      var okTypes = ['transaction', 'transfer', 'invoice', 'budget', 'goal', 'installment', 'recurring', 'settlement', 'import', 'reconciliation', 'automation'];
+      var hit = okTypes.some(function (p) { return t === p || t.indexOf(p + '.') === 0 || t.indexOf(p + '_') === 0; });
+      if (!hit) return [];
+      return DB.generateInsights(userId, { view: 'couple' });
+    },
+    /* ============ PROMPT 22: ASSISTENTE FINANCEIRO (camada de conversa) ============
+       IA conversa SOBRE os dados; Financial Services continuam a autoridade.
+       Sem LLM externo: NLU determinística (pt-BR) + provider local plugável.
+       Leitura via tools oficiais; escrita SOMENTE com confirmação explícita,
+       idempotente, auditada. Sem SQL, sem acesso direto ao banco pela IA. */
+    AI_CONFIG: function () {
+      return { provider: 'local-deterministic', model: 'local-v1', maxTokens: 500, temperature: 0, timeoutMs: 15000, maxContext: 10, maxMessageChars: 1000, ratePerMinute: 20 };
+    },
+    AI_INTENTS: function () {
+      return [
+        { key: 'financial_summary', kind: 'read' }, { key: 'expense_analysis', kind: 'read' },
+        { key: 'income_analysis', kind: 'read' }, { key: 'category_analysis', kind: 'read' },
+        { key: 'budget_status', kind: 'read' }, { key: 'goal_status', kind: 'read' },
+        { key: 'account_balance', kind: 'read' }, { key: 'card_status', kind: 'read' },
+        { key: 'invoice_status', kind: 'read' }, { key: 'installment_status', kind: 'read' },
+        { key: 'recurring_status', kind: 'read' }, { key: 'settlement_status', kind: 'read' },
+        { key: 'cash_flow', kind: 'read' }, { key: 'financial_insights', kind: 'read' },
+        { key: 'transaction_search', kind: 'read' }, { key: 'report_explanation', kind: 'read' },
+        { key: 'planning_question', kind: 'read' }, { key: 'help', kind: 'read' },
+        { key: 'openfinance_status', kind: 'read' }, { key: 'openfinance_reconciliation', kind: 'read' },
+        { key: 'create_transaction', kind: 'write' }, { key: 'create_transfer', kind: 'write' },
+        { key: 'create_goal', kind: 'write' }, { key: 'create_recurring', kind: 'write' },
+        { key: 'mark_invoice_paid', kind: 'write' }, { key: 'update_transaction', kind: 'write' }
+      ];
+    },
+    AI_READ_TOOLS: function () {
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+    },
+    AI_WRITE_TOOLS: function () {
+      return ['create_transaction', 'create_transfer', 'create_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction'];
+    },
+    AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
+    /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
+    aiNorm: function (s) {
+      s = String(s || '').toLowerCase();
+      try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+      return s.replace(/[^a-z0-9\s$.,/%-]/g, ' ').replace(/\s+/g, ' ').trim();
+    },
+    /* Higiene anti-injection: a mensagem nunca vira instrução de sistema.
+       Padrões de jailbreak são neutralizados (regras e confirmação valem). */
+    aiSanitize: function (text) {
+      var cfg = DB.AI_CONFIG();
+      var s = String(text || '').replace(/[̀-Ϳ‑-]/g, '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, cfg.maxMessageChars);
+      var jailed = /(ignore|esqueca|ignorar).*(regras|instrucoes|regras|sistema)|voce e agora|voce eh agora|system\s*:|modo (admin|root|deus)|desative (a |)seguranca/i.test(s);
+      return { text: s, injectionFlag: jailed };
+    },
+    /* Valor em pt-BR: "R$ 1.500,50", "1500 reais", "10 mil", "85". */
+    aiParseAmount: function (text) {
+      var s = DB.aiNorm(text);
+      var m = s.match(/(?:r\$?\s?)?(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?\s?(mil|milhao|milhoes)?(?:\s?(reais|real|r\$))?/);
+      if (!m) return null;
+      var v = parseFloat(m[1].replace(/\./g, '')) + (m[2] ? parseFloat('0.' + m[2]) : 0);
+      if (m[3] && m[3].indexOf('milh') === 0) v *= 1000000;
+      else if (m[3] === 'mil') v *= 1000;
+      if (!(v > 0)) return null;
+      return Math.round(v * 100) / 100;
+    },
+    /* Período explícito: hoje/ontem/semana/mês/passado/3 meses/nomes de mês. */
+    aiParsePeriod: function (text) {
+      var s = DB.aiNorm(text);
+      var today = now().slice(0, 10), ym = today.slice(0, 7);
+      function mr(yymm) { return { start: yymm + '-01', end: yymm + '-' + dim(+yymm.slice(0, 4), +yymm.slice(5, 7)) }; }
+      if (/\b(hoje)\b/.test(s)) return { start: today, end: today, label: 'hoje' };
+      if (/\b(ontem)\b/.test(s)) return { start: DB.dateAddDays(today, -1), end: DB.dateAddDays(today, -1), label: 'ontem' };
+      if (/\b(amanha)\b/.test(s)) return { start: DB.dateAddDays(today, 1), end: DB.dateAddDays(today, 1), label: 'amanhã' };
+      if (/(esta semana|essa semana)/.test(s)) return { start: DB.dateAddDays(today, -6), end: today, label: 'últimos 7 dias' };
+      if (/(proximos 7 dias|proxima semana)/.test(s)) return { start: today, end: DB.dateAddDays(today, 7), label: 'próximos 7 dias' };
+      if (/(proximos 15 dias)/.test(s)) return { start: today, end: DB.dateAddDays(today, 15), label: 'próximos 15 dias' };
+      if (/(proximos 30 dias|proximo mes)/.test(s)) return { start: today, end: DB.dateAddDays(today, 30), label: 'próximos 30 dias' };
+      if (/(mes passado|mes anterior)/.test(s)) { var p = mr(shiftMonth(ym, -1)); p.label = 'mês passado'; return p; }
+      if (/(ultimos 3 meses|ultimo trimestre)/.test(s)) { var s3 = mr(shiftMonth(ym, -2)); return { start: s3.start, end: mr(ym).end, label: 'últimos 3 meses' }; }
+      if (/(ultimos 6 meses)/.test(s)) { var s6 = mr(shiftMonth(ym, -5)); return { start: s6.start, end: mr(ym).end, label: 'últimos 6 meses' }; }
+      if (/(ultimos 12 meses|ultimo ano)/.test(s)) { var s12 = mr(shiftMonth(ym, -11)); return { start: s12.start, end: mr(ym).end, label: 'últimos 12 meses' }; }
+      if (/(este mes|esse mes|no mes|do mes)/.test(s)) { var c = mr(ym); c.label = 'este mês'; return c; }
+      var months = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+      var mm = s.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
+      if (mm) {
+        var num = ('0' + months[mm[1]]).slice(-2), y = today.slice(0, 4);
+        var ymr = y + '-' + num;
+        if (ymr > ym) ymr = (parseInt(y, 10) - 1) + '-' + num;
+        var r = mr(ymr); r.label = mm[1]; return r;
+      }
+      var dd = s.match(/\bdesde (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
+      if (dd) {
+        var n2 = ('0' + months[dd[1]]).slice(-2), y2 = today.slice(0, 4), ymr2 = y2 + '-' + n2;
+        if (ymr2 > ym) ymr2 = (parseInt(y2, 10) - 1) + '-' + n2;
+        return { start: ymr2 + '-01', end: today, label: 'desde ' + dd[1] };
+      }
+      return null;
+    },
+    /* Moeda pt-BR p/ respostas (fato, sem julgamento). */
+    aiMoney: function (v) {
+      var n = Math.round(Number(v) * 100) / 100;
+      var s = n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return 'R$ ' + (s.slice(-3) === ',00' ? s.slice(0, -3) : s);
+    },
+    /* Provider plugável (hoje: determinístico local; OpenAI/futuros sem
+       reescrever o financeiro). Fallback usa o rascunho estruturado. */
+    aiProviderGenerate: function (draft, facts) {
+      var t0 = Date.now(), cfg = DB.AI_CONFIG();
+      try {
+        if (DB._aiProviderFail) throw new Error('Provedor indisponível.');
+        var out = { answer: draft, elapsedMs: Date.now() - t0, provider: cfg.provider, model: cfg.model };
+        if (out.elapsedMs > cfg.timeoutMs) throw new Error('Timeout do provedor.');
+        return out;
+      } catch (e) {
+        return { answer: draft, elapsedMs: Date.now() - t0, provider: 'fallback-estruturado', model: 'fallback-v1', fallback: true };
+      }
+    },
+    /* Validador: todo R$ da resposta precisa existir nos fatos (nunca inventar). */
+    aiValidateResponse: function (answer, facts) {
+      var nums = String(answer || '').match(/R\$ [\d.,]+/g) || [];
+      var norm = function (x) { return String(x).replace(/[^\d,]/g, ''); };
+      var pool = (facts || []).map(function (f) { return norm(DB.aiMoney(f.value != null ? f.value : f)); });
+      var bad = nums.filter(function (n) { return pool.indexOf(norm(n)) < 0; });
+      return { ok: !bad.length, unknown: bad };
+    },
+    /* Conversas: CRUD com isolamento (excluir conversa nunca apaga finanças). */
+    aiCreateConversation: function (userId, title, opts) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      opts = opts || {};
+      var c = { id: id('ac'), couple_id: cid, user_id: userId, title: String(title || 'Conversa').slice(0, 80), context: {}, channel: opts.channel || 'web', external_conversation_id: opts.externalId || null, status: 'active', created_at: now(), updated_at: now(), last_message_at: now() };
+      db.ai_conversations.push(c);
+      logAudit(db, cid, userId, 'ai_conversation', c.id, 'created', {});
+      write(db);
+      return c;
+    },
+    aiGetConversation: function (userId, convId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.ai_conversations.find(function (x) { return x.id === convId && x.couple_id === cid && x.user_id === userId && x.status !== 'deleted'; });
+      if (!c) throw new Error('Conversa não encontrada.');
+      return c;
+    },
+    aiListConversations: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.ai_conversations.filter(function (c) { return c.couple_id === cid && c.user_id === userId && c.status !== 'deleted'; })
+        .sort(function (a, b) { return (b.last_message_at + b.id).localeCompare(a.last_message_at + a.id); });
+    },
+    aiRenameConversation: function (userId, convId, title) {
+      var db = read();
+      var c = DB.aiGetConversation(userId, convId);
+      var row = db.ai_conversations.find(function (x) { return x.id === convId; });
+      row.title = String(title || '').trim().slice(0, 80) || row.title;
+      row.updated_at = now(); write(db); return row;
+    },
+    aiArchiveConversation: function (userId, convId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.aiGetConversation(userId, convId);
+      var row = db.ai_conversations.find(function (x) { return x.id === convId; });
+      row.status = row.status === 'archived' ? 'active' : 'archived'; row.updated_at = now(); write(db); return row;
+    },
+    aiDeleteConversation: function (userId, convId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.aiGetConversation(userId, convId);
+      var row = db.ai_conversations.find(function (x) { return x.id === convId; });
+      row.status = 'deleted'; row.updated_at = now(); write(db); return true;
+    },
+    aiListMessages: function (userId, convId, limit) {
+      DB.aiGetConversation(userId, convId);
+      var db = read();
+      return db.ai_messages.filter(function (m) { return m.conversation_id === convId; })
+        .sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); })
+        .slice(-(limit || 50));
+    },
+    /* Rate limit em memória: 20 msg/min por usuário; 1000 chars por mensagem. */
+    aiCheckRate: function (userId) {
+      var cfg = DB.AI_CONFIG();
+      DB._aiRate = DB._aiRate || {};
+      var nowT = Date.now(), win = (DB._aiRate[userId] || []).filter(function (t) { return nowT - t < 60000; });
+      if (win.length >= cfg.ratePerMinute) throw new Error('Muitas mensagens. Aguarde um minuto.');
+      win.push(nowT); DB._aiRate[userId] = win;
+    },
+    /* Intent + entidades (determinístico, auditável; sem LLM aqui). */
+    aiDetectIntent: function (userId, text) {
+      var s = DB.aiNorm(text);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var out = { intent: 'help', entities: {}, confidence: 'low', clarification: null };
+      /* visão */
+      var ids = db.members.filter(function (m) { return m.couple_id === cid; }).map(function (m) { return m.user_id; });
+      var partnerId = ids.filter(function (x) { return x !== userId; })[0] || null;
+      var partnerName = '';
+      if (partnerId) { var pu = db.users.filter(function (u) { return u.id === partnerId; })[0]; partnerName = pu ? DB.aiNorm(pu.nome).split(' ')[0] : ''; }
+      var meName = '';
+      { var mu = db.users.filter(function (u) { return u.id === userId; })[0]; meName = mu ? DB.aiNorm(mu.nome).split(' ')[0] : ''; }
+      if (/\b(eu|meu|minha|meus|minhas|paguei|recebi|devo|para mim)\b/.test(s)) out.entities.view = 'me';
+      else if ((partnerName && s.indexOf(partnerName) >= 0) || /\b(parceiro|parceira|dele|dela|ele pagou|ela pagou|deveria pagar)\b/.test(s)) out.entities.view = 'partner';
+      else out.entities.view = 'couple';
+      /* período */
+      var per = DB.aiParsePeriod(text);
+      if (per) { out.entities.periodStart = per.start; out.entities.periodEnd = per.end; out.entities.periodLabel = per.label; }
+      /* categoria pelo nome real (filhas primeiro: mais específicas).
+         Nome completo exige fronteira de palavra (evita "gás" em "gastei"). */
+      var cats = db.categories.filter(function (c) { return c.couple_id === cid && c.active; });
+      cats.sort(function (a, b) { return ((b.parent_category_id ? 1 : 0) - (a.parent_category_id ? 1 : 0)) || a.name.localeCompare(b.name); });
+      function escRe(sx) { return String(sx).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+      for (var i = 0; i < cats.length; i++) {
+        var cn = DB.aiNorm(cats[i].name);
+        if (cn.length >= 3 && new RegExp('\\b' + escRe(cn) + '\\b').test(s)) { out.entities.category_id = cats[i].id; out.entities.categoryName = DB.catDisplayPath(userId, cats[i].id); break; }
+        var first = cn.split(' ')[0];
+        if (first.length >= 4 && new RegExp('\\b' + escRe(first) + '\\b').test(s)) { out.entities.category_id = cats[i].id; out.entities.categoryName = DB.catDisplayPath(userId, cats[i].id); break; }
+      }
+      /* "mercado/supermercado" → sub Supermercado; senão Alimentação */
+      if (!out.entities.category_id && /(mercado|supermercado|feira)\b/.test(s)) {
+        var sub = cats.filter(function (c) { return c.parent_category_id && DB.aiNorm(c.name).indexOf('supermercado') === 0; })[0];
+        var ali = sub || cats.filter(function (c) { return DB.aiNorm(c.name).indexOf('aliment') === 0; })[0];
+        if (ali) { out.entities.category_id = ali.id; out.entities.categoryName = DB.catDisplayPath(userId, ali.id); }
+      }
+      /* "delivery/ifood" → sub Delivery; "uber/99" → sub de transporte */
+      if (!out.entities.category_id && /(delivery|ifood|rappi)\b/.test(s)) {
+        var dl = cats.filter(function (c) { return c.parent_category_id && DB.aiNorm(c.name).indexOf('delivery') === 0; })[0];
+        if (dl) { out.entities.category_id = dl.id; out.entities.categoryName = DB.catDisplayPath(userId, dl.id); }
+      }
+      if (!out.entities.category_id && /(uber|99|pop|corrida)\b/.test(s)) {
+        var ub = cats.filter(function (c) { return c.parent_category_id && /^(uber|99)/.test(DB.aiNorm(c.name)); })[0];
+        if (ub) { out.entities.category_id = ub.id; out.entities.categoryName = DB.catDisplayPath(userId, ub.id); }
+      }
+      /* conta / cartão */
+      var accs = db.accounts.filter(function (a) { return a.couple_id === cid && a.active; });
+      for (var a2 = 0; a2 < accs.length; a2++) {
+        var an = DB.aiNorm(accs[a2].name);
+        if (an.length >= 3 && s.indexOf(an) >= 0) { out.entities.account_id = accs[a2].id; out.entities.accountName = accs[a2].name; break; }
+      }
+      if (!out.entities.account_id && /(conta conjunta|conta do casal|conta compartilhada)/.test(s)) {
+        var ja = accs.filter(function (a) { return a.owner_type === 'joint'; });
+        if (ja.length === 1) { out.entities.account_id = ja[0].id; out.entities.accountName = ja[0].name; }
+        else if (ja.length > 1) out.clarification = 'Qual conta conjunta: ' + ja.map(function (a) { return a.name; }).join(', ') + '?';
+      }
+      var cards = db.credit_cards.filter(function (c) { return c.couple_id === cid && c.active; });
+      var m4 = s.match(/final\s?(\d{4})/);
+      if (m4) {
+        var cc = cards.filter(function (c) { return (c.last_four_digits || '') === m4[1]; })[0];
+        if (cc) { out.entities.credit_card_id = cc.id; out.entities.cardName = cc.name; }
+        else out.clarification = 'Não encontrei cartão com final ' + m4[1] + '.';
+      }
+      if (!out.entities.credit_card_id && /(meu cartao|minha fatura)\b/.test(s)) {
+        var mine = cards.filter(function (c) { return (c.owner_user_id || null) === userId; });
+        if (mine.length === 1) { out.entities.credit_card_id = mine[0].id; out.entities.cardName = mine[0].name; }
+        else if (mine.length > 1) out.clarification = 'Qual dos seus cartões?';
+      }
+      if (!out.entities.credit_card_id && /(nosso cartao|cartao do casal|cartao conjunto)\b/.test(s)) {
+        if (cards.length === 1) { out.entities.credit_card_id = cards[0].id; out.entities.cardName = cards[0].name; }
+        else if (cards.length > 1) out.clarification = 'Qual cartão?';
+      }
+      for (var c3 = 0; c3 < cards.length && !out.entities.credit_card_id; c3++) {
+        var cnn = DB.aiNorm(cards[c3].name);
+        if (cnn.length >= 3 && s.indexOf(cnn) >= 0) { out.entities.credit_card_id = cards[c3].id; out.entities.cardName = cards[c3].name; }
+      }
+      /* valor */
+      var amt = DB.aiParseAmount(text);
+      if (amt != null) out.entities.amount = amt;
+      /* ---- intents de ESCRITA primeiro (verbos de ação) ---- */
+      function has(words) { return words.some(function (w) { return s.indexOf(w) >= 0; }); }
+      if (has(['transfira', 'transferir', 'transfere', 'transferencia', 'mova ', 'mover '])) out.intent = 'create_transfer';
+      else if (has(['pague a fatura', 'pagar a fatura', 'pague minha fatura', 'quitar fatura', 'pague o cartao'])) out.intent = 'mark_invoice_paid';
+      else if (has(['crie uma meta', 'criar meta', 'nova meta', 'meta de']) || (has(['meta']) && has(['criar', 'nova', 'novo']))) out.intent = 'create_goal';
+      else if (has(['recorrente']) && has(['criar', 'cria', 'crie', 'nova', 'novo', 'cadastrar'])) out.intent = 'create_recurring';
+      else if (has(['corrija', 'corrigir', 'altere', 'alterar', 'mude ', 'mudar', 'edite', 'editar'])) out.intent = 'update_transaction';
+      else if (has(['gastei', 'recebi', 'registre', 'registra', 'anota', 'anote', 'lance', 'lanca', 'adicione', 'paguei', 'recebido']) || (has(['despesa', 'receita']) && has(['nova', 'novo', 'criar', 'cria']))) out.intent = 'create_transaction';
+      /* ---- leitura ---- */
+      else if (has(['quanto gastamos', 'quanto foi gasto', 'total gasto', 'total de gastos', 'como estamos', 'resumo', 'quanto sobrou', 'balanco', 'situacao'])) out.intent = 'financial_summary';
+      else if (has(['orcamento', 'posso gastar', 'ainda tenho', 'resta', 'restam', 'limite da categoria', 'estour'])) out.intent = 'budget_status';
+      else if (has(['meta', 'objetivo', 'falta para', 'progresso da meta'])) out.intent = 'goal_status';
+      else if (has(['saldo', 'quanto temos', 'quanto tenho', 'nas contas', 'na conta', 'conta tem'])) out.intent = 'account_balance';
+      else if (has(['limite', 'cartao tem', 'disponivel no cartao', 'usado no cartao', 'meu cartao', 'nosso cartao'])) out.intent = 'card_status';
+      else if (has(['fatura', 'vence', 'vencimento', 'vence em'])) out.intent = 'invoice_status';
+      else if (has(['parcela', 'parcelas', 'parcelado', 'falta pagar das parcelas'])) out.intent = 'installment_status';
+      else if (has(['recorrente', 'recorrentes', 'fixo', 'fixa', 'assinatura', 'mensalidade'])) out.intent = 'recurring_status';
+      else if (has(['acerto', 'devo ', 'devendo', 'me deve', 'pendente de acerto', 'dividas entre'])) out.intent = 'settlement_status';
+      else if (has(['fluxo de caixa', 'fluxo', 'resultado'])) out.intent = 'cash_flow';
+      else if (has(['atencao', 'atencoes', 'novidade', 'insights', 'alerta', 'preocupar', 'olhar'])) out.intent = 'financial_insights';
+      else if (has(['maior despesa', 'maiores gastos', 'maiores despesas', 'mostre', 'liste', 'listar', 'procure', 'buscar', 'gastos com', 'quanto foi'])) out.intent = 'transaction_search';
+      else if (has(['receita', 'receitas', 'ganhamos', 'recebemos', 'salario', 'freela', 'renda'])) out.intent = 'income_analysis';
+      else if (has(['gasto', 'gastos', 'despesa', 'despesas', 'gastamos', 'comparad', 'evolucao', 'aumentou', 'diminuiu', 'variacao'])) out.intent = out.entities.category_id ? 'category_analysis' : 'expense_analysis';
+      else if (has(['explique', 'explica', 'por que', 'porque', 'significa', 'detalhe', 'entender'])) out.intent = 'report_explanation';
+      else if (has(['planejar', 'planejamento', 'conseguimos', 'da para', 'vale a pena'])) out.intent = 'planning_question';
+      else if (has(['conciliar', 'conciliacao', 'conciliacao bancaria', 'transacoes do banco', 'transacao do banco', 'coisas para conciliar', 'pendencias do banco', 'sincronizou', 'sincronizacao', 'quando sincronizou', 'banco conectado', 'bancos conectados', 'open finance'])) out.intent = 'openfinance_reconciliation';
+      else if (has(['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'ajuda', 'help', 'o que voce'])) out.intent = 'help';
+      /* Categoria explícita com verbo de gasto → análise da categoria. */
+      if ((out.intent === 'financial_summary' || out.intent === 'expense_analysis') && out.entities.category_id && /(gasto|despesa|gastamos|gastei|com |em )/.test(s)) out.intent = 'category_analysis';
+      /* Cartão explícito com limite → status do cartão (não saldo em conta). */
+      if (out.intent === 'account_balance' && out.entities.credit_card_id && /(limite|cartao|fatura)/.test(s)) out.intent = 'card_status';
+      if (out.intent !== 'help') out.confidence = out.clarification ? 'low' : 'medium';
+      return out;
+    },
+    /* Tools de LEITURA: só chamam serviços oficiais. Allowlist rígida. */
+    aiRunTool: function (userId, name, args) {
+      args = args || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      if (DB.AI_READ_TOOLS().indexOf(name) < 0) throw new Error('Ferramenta não permitida.');
+      var view = args.view || 'couple';
+      var per = args.periodStart && args.periodEnd ? { start: args.periodStart, end: args.periodEnd } : null;
+      function range(label) {
+        if (per) return { from: per.start.slice(0, 7), to: per.end.slice(0, 7), start: per.start, end: per.end, label: label || 'período' };
+        var p = DB.analyticsResolvePeriod('current_month');
+        return { from: p.startDate.slice(0, 7), to: p.endDate.slice(0, 7), start: p.startDate, end: p.endDate, label: 'este mês' };
+      }
+      logAudit(db, cid, userId, 'ai_tool', name, 'called', {});
+      write(db);
+      var r = range(args.periodLabel), out;
+      if (name === 'financial_summary' || name === 'expenses' || name === 'income' || name === 'cash_flow') {
+        var a = DB.analyzeFinancialPeriod(userId, { periodStart: r.start, periodEnd: r.end, view: view, filters: args.filters });
+        out = { metrics: a.data.metrics, monthly: a.data.monthlyTrend, comparison: a.data.comparison, cashFlow: a.data.cashFlow, status: a.status };
+      } else if (name === 'category_analysis') {
+        var a2 = DB.analyzeFinancialPeriod(userId, { periodStart: r.start, periodEnd: r.end, view: view, filters: args.filters });
+        out = { categories: a2.data.categoryAnalysis, top: a2.data.topCategories };
+        if (args.category_id) out.selected = DB.findAnalysisEntry(a2.data.categoryAnalysis, args.category_id);
+      } else if (name === 'budget_status') {
+        var ym = r.to;
+        var bs = DB.budgetSummary(userId, ym);
+        out = { month: ym, total: bs.total, spent: bs.spent, remaining: bs.remaining, usage: bs.pct, items: bs.items };
+        if (args.category_id) out.selected = bs.items.filter(function (i) { return i.category_id === args.category_id; })[0] || null;
+      } else if (name === 'goal_status') {
+        out = DB.analyticsGoals(userId);
+        if (args.goal_id) out = out.filter(function (g) { return g.id === args.goal_id; });
+      } else if (name === 'account_balances') {
+        var s = DB.calculateAccountsSummary(userId);
+        out = { total: s.totalBalance, joint: s.jointBalance, individual: s.individual, accounts: s.accounts };
+        if (args.account_id) out.selected = s.accounts.filter(function (x) { return x.id === args.account_id; })[0] || null;
+      } else if (name === 'card_status') {
+        var cs = DB.cardsSummary(userId);
+        out = { totalLimit: cs.totalLimit, totalUsed: cs.totalUsed, totalAvailable: cs.totalAvailable, exceeded: cs.anyExceeded, cards: [] };
+        var list = args.credit_card_id ? [args.credit_card_id] : DB.listCards(userId, 'active').map(function (c) { return c.id; });
+        list.forEach(function (id) {
+          try {
+            var u = DB.calculateCardAvailableLimit(userId, id);
+            var c = DB.getCard(userId, id);
+            out.cards.push({ id: id, name: c.name, last4: c.last_four_digits || null, limit: u.limit, used: u.used, available: u.available, exceeded: u.exceeded });
+          } catch (e) { /* cartão inválido: ignora */ }
+        });
+      } else if (name === 'invoice_status') {
+        var invs = DB.listInvoices(userId, args.credit_card_id ? { card_id: args.credit_card_id } : {});
+        out = invs.slice(0, 6).map(function (i) {
+          var full = DB.getInvoice(userId, i.id);
+          return { id: full.id, card: DB.cardName(userId, full.credit_card_id), ref: ('0' + full.reference_month).slice(-2) + '/' + full.reference_year, total: DB.calculateInvoiceTotal(userId, full.id), outstanding: DB.calculateInvoiceOutstanding(userId, full.id), status: full.status, due: full.due_date };
+        });
+      } else if (name === 'installment_summary') {
+        var a3 = DB.analyzeFinancialPeriod(userId, { periodStart: r.start, periodEnd: r.end, view: view, filters: args.filters });
+        out = a3.data.installments;
+      } else if (name === 'recurring_summary') {
+        var a4 = DB.analyzeFinancialPeriod(userId, { periodStart: r.start, periodEnd: r.end, view: view, filters: args.filters });
+        out = a4.data.recurring;
+      } else if (name === 'settlement_status') {
+        var st = DB.settle(userId);
+        var umap = {};
+        db.users.forEach(function (u) { umap[u.id] = u.nome; });
+        var mm38 = DB.moneyMode(userId);
+        if (mm38 === 'JOINT') {
+          out = { debt: null, mode: 'JOINT', joint: true, historyCount: DB.listSettlements(userId).length,
+            note: 'Casal no modo Tudo junto: despesas conjuntas não geram acerto.', people: st.people.map(function (p) { return { name: umap[p.user_id] || '?', paid: p.paid, owed: p.owed, net: p.net }; }) };
+        } else {
+          out = { debt: st.debt ? { from: umap[st.debt.from] || '?', to: umap[st.debt.to] || '?', amount: st.debt.amount } : null, mode: 'SEPARATE', people: st.people.map(function (p) { return { name: umap[p.user_id] || '?', paid: p.paid, owed: p.owed, net: p.net }; }) };
+        }
+      } else if (name === 'financial_insights') {
+        out = DB.getActiveInsights(userId, {}).slice(0, 5).map(function (x) {
+          return { title: x.title, summary: x.summary, severity: x.severity, type: x.insight_type };
+        });
+      } else if (name === 'search_transactions') {
+        var f = { type: args.tx_type || '', category_id: args.category_id || '', account_id: args.account_id || '', credit_card_id: args.credit_card_id || '', payer_user_id: args.payer_user_id || '', search: args.search || '' };
+        if (r.start && r.start !== '0000-00') { f.from = r.start.slice(0, 7); f.to = r.end.slice(0, 7); }
+        var rows = DB.listTx(userId, f).slice(0, 10);
+        out = rows.map(function (t) {
+          return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
+        });
+      } else if (name === 'openfinance_status') {
+        DB.ofAssertEnabled();
+        out = { connections: DB.ofListConnections(userId).map(function (c) { return { institution: c.institution_name, provider: c.provider, status: c.status, lastSync: c.last_sync_at, health: DB.ofConnectionHealth(userId, c.id).status }; }) };
+      } else if (name === 'openfinance_sync_status') {
+        DB.ofAssertEnabled();
+        out = DB.ofListSyncRuns(userId, { limit: 3 }).map(function (x) { return { status: x.status, type: x.sync_type, new: x.transactions_new, matched: x.transactions_matched, conflicts: x.transactions_conflicts, at: x.completed_at || x.started_at }; });
+      } else if (name === 'openfinance_reconciliation') {
+        DB.ofAssertEnabled();
+        var exs = DB.ofListExceptions(userId, { status: 'open', limit: 10 });
+        out = { open: exs.length, items: exs.slice(0, 5).map(function (x) { return { type: x.exception_type, description: x.description }; }) };
+      } else if (name === 'openfinance_pending') {
+        DB.ofAssertEnabled();
+        var dbp = read(), cidp = DB.myCoupleId(userId);
+        var pend = dbp.openfinance_bank_transactions.filter(function (t) { return t.couple_id === cidp && !t.canonical_transaction_id && (t.ext_status || 'posted') !== 'cancelled'; }).slice(0, 10);
+        out = { count: pend.length, items: pend.map(function (t) { return { date: t.date, description: t.description, amount: t.amount }; }) };
+      } else throw new Error('Ferramenta não permitida.');
+      out._period = r;
+      out._sources = [name];
+      return out;
+    },
+    /* Ações: sempre CONFIRMATION_REQUIRED aqui. Cria pendente, executa só
+       após confirmação explícita da MESMA ação. Idempotente por chave. */
+    aiRequestAction: function (userId, convId, messageId, actionType, params, opt) {
+      if (DB.AI_WRITE_TOOLS().indexOf(actionType) < 0) throw new Error('Ação não permitida.');
+      DB.requireAuthz(userId, 'ai_request_action', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.aiGetConversation(userId, convId);
+      DB.aiValidateActionParams(userId, actionType, params);
+      opt = opt || {};
+      var key = 'ai_action:' + convId + ':' + messageId;
+      var dup = db.ai_actions.find(function (x) { return x.idempotency_key === key && x.status !== 'cancelled' && x.status !== 'expired'; });
+      if (dup) return dup;
+      var row = { id: id('aa'), couple_id: cid, user_id: userId, conversation_id: convId, message_id: messageId, channel: opt.channel || 'web', external_message_id: opt.externalMessageId || null, action_type: actionType, status: 'pending_confirmation', confirmation_required: true, confirmation_expires_at: opt.expiresAt || null, confirmed_at: null, executed_at: null, idempotency_key: key, request_data: params, result_data: null, error_message: null, created_at: now(), updated_at: now() };
+      db.ai_actions.push(row);
+      logAudit(db, cid, userId, 'ai_action', row.id, 'requested', { type: actionType });
+      write(db);
+      return row;
+    },
+    /* Validação de schema no backend (a IA nunca valida sozinha). */
+    aiValidateActionParams: function (userId, actionType, p) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      p = p || {};
+      function ownAccount(id) {
+        var a = db.accounts.find(function (x) { return x.id === id && x.couple_id === cid && x.active; });
+        if (!a) throw new Error('Conta inválida para este casal.');
+        return a;
+      }
+      function ownCard(id) {
+        var c = db.credit_cards.find(function (x) { return x.id === id && x.couple_id === cid && x.active; });
+        if (!c) throw new Error('Cartão inválido para este casal.');
+        return c;
+      }
+      function ownCat(id, type) {
+        var c = db.categories.find(function (x) { return x.id === id && x.couple_id === cid && x.active; });
+        if (!c) throw new Error('Categoria inválida.');
+        if (type && c.type !== 'both' && c.type !== type) throw new Error('Categoria incompatível.');
+        return c;
+      }
+      function member(id) {
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === id; })) throw new Error('Pessoa inválida.');
+      }
+      if (actionType === 'create_transaction') {
+        if (p.type !== 'income' && p.type !== 'expense') throw new Error('Tipo inválido.');
+        if (!String(p.description || '').trim()) throw new Error('Descrição obrigatória.');
+        if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+        ownCat(p.category_id, p.type);
+        member(p.payer_user_id);
+        if (p.account_id && p.credit_card_id) throw new Error('Conta ou cartão, não os dois.');
+        if (p.account_id) ownAccount(p.account_id);
+        else if (p.credit_card_id) { if (p.type !== 'expense') throw new Error('Cartão só em despesas.'); ownCard(p.credit_card_id); }
+        else throw new Error('Informe conta ou cartão.');
+      } else if (actionType === 'create_transfer') {
+        var f = ownAccount(p.from_account_id), t = ownAccount(p.to_account_id);
+        if (f.id === t.id) throw new Error('Contas iguais.');
+        if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+      } else if (actionType === 'create_goal') {
+        if (String(p.name || '').trim().length < 2) throw new Error('Nome da meta obrigatório.');
+        if (!(Number(p.target_amount) > 0)) throw new Error('Valor inválido.');
+      } else if (actionType === 'create_recurring') {
+        if (!String(p.description || '').trim()) throw new Error('Descrição obrigatória.');
+        if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+        if (p.type !== 'income' && p.type !== 'expense') throw new Error('Tipo inválido.');
+        ownCat(p.category_id, p.type);
+        member(p.payer_user_id);
+        if (['monthly', 'yearly'].indexOf(p.frequency) < 0) throw new Error('Frequência inválida.');
+        if (!(parseInt(p.day_of_month, 10) >= 1 && parseInt(p.day_of_month, 10) <= 31)) throw new Error('Dia inválido.');
+      } else if (actionType === 'mark_invoice_paid') {
+        var inv = db.invoices.find(function (i) { return i.id === p.invoice_id && i.couple_id === cid; });
+        if (!inv) throw new Error('Fatura inválida.');
+        if (inv.status === 'paid') throw new Error('Fatura já paga.');
+        ownAccount(p.payment_account_id);
+        if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+      } else if (actionType === 'update_transaction') {
+        var tx = db.transactions.find(function (x) { return x.id === p.transaction_id && x.couple_id === cid && !x.deleted_at; });
+        if (!tx) throw new Error('Transação inválida.');
+        if (p.amount != null && !(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+        if (p.category_id) ownCat(p.category_id);
+      } else throw new Error('Ação não permitida.');
+      return true;
+    },
+    aiPendingAction: function (userId, convId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.aiGetConversation(userId, convId);
+      var rows = db.ai_actions.filter(function (x) { return x.conversation_id === convId && x.couple_id === cid && x.status === 'pending_confirmation'; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+      return rows[0] || null;
+    },
+    aiCancelAction: function (userId, actionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.ai_actions.find(function (x) { return x.id === actionId && x.couple_id === cid && x.user_id === userId; });
+      if (!r) throw new Error('Ação não encontrada.');
+      if (r.status !== 'pending_confirmation') throw new Error('Ação já resolvida.');
+      r.status = 'cancelled'; r.updated_at = now();
+      logAudit(db, cid, userId, 'ai_action', r.id, 'cancelled', { type: r.action_type });
+      write(db);
+      return r;
+    },
+    /* Confirma e executa via serviços oficiais. Re-confirmar retorna o
+       resultado anterior (idempotente, nunca duplica). */
+    aiConfirmAction: function (userId, actionId) {
+      DB.requireAuthz(userId, 'ai_confirm_action', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.ai_actions.find(function (x) { return x.id === actionId && x.couple_id === cid && x.user_id === userId; });
+      if (!r) throw new Error('Ação não encontrada.');
+      if (r.status === 'completed') return r;
+      if (r.status === 'failed') throw new Error(r.error_message || 'Ação falhou.');
+      if (r.status !== 'pending_confirmation' && r.status !== 'confirmed') throw new Error('Ação já resolvida.');
+      if (r.confirmation_expires_at && r.confirmation_expires_at < now()) {
+        r.status = 'expired'; r.updated_at = now();
+        logAudit(db, cid, userId, 'ai_action', r.id, 'expired', { type: r.action_type });
+        write(db);
+        throw new Error('Essa confirmação expirou. Se quiser, posso preparar novamente o lançamento.');
+      }
+      r.status = 'executing'; r.confirmed_at = r.confirmed_at || now(); r.updated_at = now();
+      logAudit(db, cid, userId, 'ai_action', r.id, 'confirmed', { type: r.action_type });
+      write(db);
+      try {
+        var p = r.request_data || {}, res = null;
+        if (r.action_type === 'create_transaction') {
+          var t = DB.createTx(userId, { type: p.type, description: p.description, amount: String(p.amount).replace('.', ','), date: p.date, category_id: p.category_id, payer_user_id: p.payer_user_id, is_shared: !!p.is_shared, account_id: p.account_id || null, credit_card_id: p.credit_card_id || null, notes: p.notes || '' });
+          res = { transaction_id: t.id };
+        } else if (r.action_type === 'create_transfer') {
+          var tr = DB.createTransfer(userId, { from_account_id: p.from_account_id, to_account_id: p.to_account_id, amount: String(p.amount).replace('.', ','), date: p.date, description: p.description || '' });
+          res = { transfer_id: tr.id };
+        } else if (r.action_type === 'create_goal') {
+          var g = DB.createGoal(userId, { name: p.name, target_amount: String(p.target_amount).replace('.', ','), current_amount: '0', deadline: p.deadline || '', description: '' });
+          res = { goal_id: g.id };
+        } else if (r.action_type === 'create_recurring') {
+          var rc = DB.createRecurring(userId, { description: p.description, type: p.type, amount: String(p.amount).replace('.', ','), category_id: p.category_id, frequency: p.frequency, day_of_month: p.day_of_month, start_date: p.start_date, payer_user_id: p.payer_user_id, is_shared: !!p.is_shared, notes: '' });
+          res = { recurring_id: rc.id };
+        } else if (r.action_type === 'mark_invoice_paid') {
+          var pay = DB.payInvoice(userId, p.invoice_id, { payment_account_id: p.payment_account_id, amount: String(p.amount).replace('.', ','), payment_date: p.payment_date, notes: 'Via assistente.' });
+          res = { payment_id: pay.id };
+        } else if (r.action_type === 'update_transaction') {
+          var old = DB.getTx(userId, p.transaction_id);
+          DB.updateTx(userId, p.transaction_id, { type: old.type, description: p.description || old.description, amount: p.amount != null ? String(p.amount).replace('.', ',') : String(old.amount).replace('.', ','), date: old.date, category_id: p.category_id || old.category_id, payer_user_id: old.payer_user_id, is_shared: old.is_shared, account_id: old.account_id, credit_card_id: old.credit_card_id, notes: old.notes || '' });
+          res = { transaction_id: p.transaction_id };
+        } else throw new Error('Ação não permitida.');
+        var db2 = read();
+        var r2 = db2.ai_actions.find(function (x) { return x.id === actionId; });
+        r2.status = 'completed'; r2.executed_at = now(); r2.result_data = res; r2.updated_at = now();
+        logAudit(db2, cid, userId, 'ai_action', r2.id, 'executed', { type: r2.action_type });
+        write(db2);
+        return DB.aiGetAction(userId, actionId);
+      } catch (e) {
+        var db3 = read();
+        var r3 = db3.ai_actions.find(function (x) { return x.id === actionId; });
+        r3.status = 'failed'; r3.error_message = String((e && e.message) || e).slice(0, 300); r3.updated_at = now();
+        logAudit(db3, cid, userId, 'ai_action', r3.id, 'failed', { type: r3.action_type });
+        write(db3);
+        throw new Error(r3.error_message);
+      }
+    },
+    aiGetAction: function (userId, actionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.ai_actions.find(function (x) { return x.id === actionId && x.couple_id === cid && x.user_id === userId; });
+      if (!r) throw new Error('Ação não encontrada.');
+      return r;
+    },
+    /* Todas as contas/cartões mencionados (p/ transferências origem→destino). */
+    aiFindAccounts: function (userId, text) {
+      var s = DB.aiNorm(text);
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.accounts.filter(function (a) {
+        if (a.couple_id !== cid || !a.active) return false;
+        var an = DB.aiNorm(a.name);
+        return an.length >= 3 && s.indexOf(an) >= 0;
+      });
+    },
+    aiFindCards: function (userId, text) {
+      var s = DB.aiNorm(text);
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.credit_cards.filter(function (c) {
+        if (c.couple_id !== cid || !c.active) return false;
+        var cn = DB.aiNorm(c.name);
+        if (cn.length >= 3 && s.indexOf(cn) >= 0) return true;
+        var m = s.match(/final\s?(\d{4})/);
+        return m && (c.last_four_digits || '') === m[1];
+      });
+    },
+    /* Pipeline: mensagem → intent → permissões → tool oficial → resposta.
+       Escrita nunca executa sem confirmação explícita da mesma ação. */
+    aiProcessMessage: function (userId, convId, rawText, opts) {
+      DB.aiCheckRate(userId);
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      opts = opts || {};
+      var channel = opts.channel || 'web';
+      var conv = convId ? DB.aiGetConversation(userId, convId) : DB.aiCreateConversation(userId, 'Conversa');
+      var san = DB.aiSanitize(rawText);
+      if (!san.text) throw new Error('Escreva uma mensagem.');
+      function saveMsg(role, content, extra) {
+        extra = extra || {};
+        var d = read();
+        var mtype = opts.imageMessageId ? 'image' : (opts.audioMessageId ? 'audio' : (opts.documentMessageId ? 'document' : (opts.multimodalContextId ? 'multimodal' : 'text')));
+        var m = { id: id('am'), conversation_id: conv.id, couple_id: cid, user_id: userId, role: role, content: String(content).slice(0, 2000), channel: channel, external_message_id: null, message_type: mtype, audio_message_id: opts.audioMessageId || null, image_message_id: opts.imageMessageId || null, document_message_id: opts.documentMessageId || null, multimodal_context_id: opts.multimodalContextId || null, input_ids: opts.inputIds || null, attachment_ids: opts.attachmentIds || null, evidence_ids: opts.evidenceIds || null, intent: extra.intent || null, tool_name: extra.tool || null, tool_input: extra.input || null, tool_output: extra.output || null, status: extra.status || 'ok', created_at: now() };
+        d.ai_messages.push(m);
+        var crow = d.ai_conversations.find(function (x) { return x.id === conv.id; });
+        if (crow) {
+          crow.last_message_at = now(); crow.updated_at = now();
+          if (role === 'user' && !crow._titled) {
+            crow.title = san.text.slice(0, 40); crow._titled = true;
+          }
+        }
+        logAudit(d, cid, userId, 'ai_message', m.id, 'created', { role: role });
+        write(d);
+        return m;
+      }
+      var um = saveMsg('user', san.text);
+      var s = DB.aiNorm(san.text);
+      function reply(o) {
+        var draft = o.answer;
+        var prov = DB.aiProviderGenerate(draft, o.facts);
+        var val = DB.aiValidateResponse(prov.answer, o.facts);
+        var final = val.ok ? prov.answer : draft;
+        var am = saveMsg('assistant', final, { intent: o.intent, tool: (o.tools || []).join(','), input: o.toolInput || null, output: o.toolOutput || null });
+        return { answer: final, facts: o.facts || [], sources: o.tools || [], actions: o.actions || [], follow_up: o.follow_up || null, intent: o.intent, messageId: am.id, userMessageId: um.id, conversationId: conv.id, pendingAction: o.pendingAction || null, factsValid: val.ok };
+      }
+      /* 1. confirmação pendente tem prioridade (só vale p/ a mesma ação). */
+      var pend = DB.aiPendingAction(userId, conv.id);
+      if (pend) {
+        if (/^(sim|confirmo|confirmar|pode|pode sim|ok|isso|isso mesmo|confirmado|vai|manda|fechado)\b/.test(s)) {
+          try {
+            var done = DB.aiConfirmAction(userId, pend.id);
+            return reply(DB.aiExecutedAnswer(userId, done));
+          } catch (e) {
+            return reply({ answer: 'Não consegui concluir: ' + (e.message || 'tente novamente.'), facts: [], tools: [], intent: 'action_error' });
+          }
+        }
+        if (/^(n[aã]o|nao|cancela|cancelar|desiste|esquece|deixa|melhor nao)\b/.test(s)) {
+          DB.aiCancelAction(userId, pend.id);
+          return reply({ answer: 'Ação cancelada. Nada foi alterado.', facts: [], tools: [], intent: 'action_cancelled' });
+        }
+        try { DB.aiCancelAction(userId, pend.id); } catch (e2) { /* segue p/ novo pedido */ }
+      }
+      var det = DB.aiDetectIntent(userId, san.text);
+      if (det.clarification) {
+        return reply({ answer: det.clarification, facts: [], tools: [], intent: det.intent, follow_up: null });
+      }
+      /* 2. ambiguidade relevante: "quanto tenho?" */
+      if (/^quanto (tenho|tem|temos|ha|há)\??$/.test(s) && (det.intent === 'account_balance')) {
+        return reply({ answer: 'Você quer saber quanto tem nas contas ou quanto ainda tem disponível no orçamento?', facts: [], tools: [], intent: 'clarify' });
+      }
+      var def = DB.AI_INTENTS().filter(function (x) { return x.key === det.intent; })[0] || { kind: 'read' };
+      if (def.kind === 'write') return reply(DB.aiPlanAction(userId, conv.id, um.id, det, san.text, opts));
+      return reply(DB.aiAnswerRead(userId, det, san.text));
+    },
+    /* Monta a ação (valida no backend) e devolve o cartão de confirmação. */
+    aiPlanAction: function (userId, convId, messageId, det, rawText, opts) {
+      var e = det.entities || {}, s = DB.aiNorm(rawText);
+      opts = opts || {};
+      var today = now().slice(0, 10);
+      var db = read(), cid = DB.myCoupleId(userId);
+      function needAccountOrCard() {
+        if (e.account_id || e.credit_card_id) return e;
+        var accs = DB.aiFindAccounts(userId, rawText);
+        var cards = DB.aiFindCards(userId, rawText);
+        if (accs.length + cards.length === 1) {
+          if (accs.length) { e.account_id = accs[0].id; e.accountName = accs[0].name; }
+          else { e.credit_card_id = cards[0].id; e.cardName = cards[0].name; }
+          return e;
+        }
+        var all = db.accounts.filter(function (a) { return a.couple_id === cid && a.active; });
+        var allC = db.credit_cards.filter(function (c) { return c.couple_id === cid && c.active; });
+        if (!accs.length && !cards.length && all.length + allC.length === 1) {
+          if (all.length) { e.account_id = all[0].id; e.accountName = all[0].name; }
+          else { e.credit_card_id = allC[0].id; e.cardName = allC[0].name; }
+          return e;
+        }
+        throw { clarification: 'Foi pago por qual conta ou cartão?' };
+      }
+      function needCategory(type) {
+        if (e.category_id) return e;
+        var cats = db.categories.filter(function (c) { return c.couple_id === cid && c.active && (c.type === 'both' || c.type === type); });
+        if (type === 'expense') {
+          var out = cats.filter(function (c) { return DB.aiNorm(c.name) === 'outros'; })[0];
+          if (out) { e.category_id = out.id; e.categoryName = out.name; return e; }
+        }
+        throw { clarification: 'Qual categoria? Ex: ' + cats.slice(0, 4).map(function (c) { return c.name; }).join(', ') + '.' };
+      }
+      /* Subcategoria: pai detectado + filhas existentes + nenhuma filha citada
+         → pergunta (nunca inventa). "só <pai>" confirma o nível principal. */
+      function needSubcategory() {
+        var cur = db.categories.filter(function (c) { return c.id === e.category_id && c.couple_id === cid; })[0];
+        if (!cur || cur.parent_category_id) return e;
+        var kids = db.categories.filter(function (c) { return c.couple_id === cid && c.active && (c.parent_category_id || null) === cur.id; });
+        if (!kids.length) return e;
+        function escRe2(sx) { return String(sx).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+        var mentionsKid = kids.some(function (k) { return new RegExp('\\b' + escRe2(DB.aiNorm(k.name)) + '\\b').test(s); });
+        var parentOnly = /(^|\b)(so|somente|apenas)\b/.test(s);
+        if (mentionsKid || parentOnly) return e;
+        throw { clarification: 'Quer classificar como "' + cur.name + ' → ' + kids[0].name + '"? Diga a subcategoria' + (kids.length > 1 ? ' (' + kids.slice(0, 3).map(function (k) { return k.name; }).join(', ') + ')' : '') + ' ou "só ' + cur.name + '".' };
+      }
+      try {
+        var type, params, label;
+        if (det.intent === 'create_transaction') {
+          var t = /\b(recebi|receita|recebimento|salario|renda)\b/.test(s) ? 'income' : 'expense';
+          e = needAccountOrCard(); e = needCategory(t); e = needSubcategory();
+          var desc = e.categoryName || '';
+          if (!desc) {
+            desc = rawText.replace(/(r\$?\s?[\d.,]+\s?(mil|milhao|milhoes)?\s?(reais|real|r\$)?)/gi, '').replace(/(gastei|recebi|registre|registra|anota|anote|lance|adicione|paguei|nova|novo|criar|cria|despesa|receita|no|na|em|de|para|por|com)\b/gi, '').trim().slice(0, 120) || e.categoryName || 'Lançamento';
+          }
+          params = { type: t, description: desc, amount: e.amount, date: today, category_id: e.category_id, payer_user_id: userId, is_shared: false, account_id: e.account_id || null, credit_card_id: e.credit_card_id || null, notes: '' };
+          if (params.amount == null) throw { clarification: 'Qual o valor?' };
+          label = (t === 'income' ? 'Receita' : 'Despesa') + ' de ' + DB.aiMoney(params.amount) + ' em ' + desc;
+        } else if (det.intent === 'create_transfer') {
+          var accs = DB.aiFindAccounts(userId, rawText);
+          if (accs.length < 2) throw { clarification: accs.length ? 'Para qual conta destino? (origem: ' + accs[0].name + ')' : 'De qual conta para qual conta?' };
+          params = { from_account_id: accs[0].id, to_account_id: accs[1].id, amount: e.amount, date: today, description: '' };
+          if (params.amount == null) throw { clarification: 'Qual o valor da transferência?' };
+          label = 'Transferência de ' + DB.aiMoney(params.amount) + ' de ' + accs[0].name + ' para ' + accs[1].name;
+        } else if (det.intent === 'create_goal') {
+          var nm = (rawText.match(/para\s+(.+)$/i) || [])[1] || '';
+          nm = nm.replace(/(r\$?\s?[\d.,]+\s?(mil|milhao|milhoes)?\s?(reais|real)?)/gi, '').trim().replace(/[?.!]+$/, '').slice(0, 80) || 'Meta';
+          params = { name: nm, target_amount: e.amount };
+          if (params.target_amount == null) throw { clarification: 'Qual o valor objetivo da meta?' };
+          label = 'Meta "' + nm + '" de ' + DB.aiMoney(params.target_amount);
+        } else if (det.intent === 'create_recurring') {
+          var freq = /\b(anual|ano|yearly)\b/.test(s) ? 'yearly' : 'monthly';
+          var dm = s.match(/\bdia\s?(\d{1,2})\b/) || s.match(/\btodo dia\s?(\d{1,2})\b/);
+          e = needCategory(/\b(recebi|receita|renda)\b/.test(s) ? 'income' : 'expense');
+          var rtype = /\b(recebi|receita|renda)\b/.test(s) ? 'income' : 'expense';
+          var rdesc = e.categoryName || rawText.replace(/(crie|cria|nova|novo|recorrente|todo dia \d+|r\$?[\d.,]+)/gi, '').trim().slice(0, 120) || 'Recorrente';
+          params = { description: rdesc, type: rtype, amount: e.amount, category_id: e.category_id, frequency: freq, day_of_month: dm ? dm[1] : '10', start_date: today, payer_user_id: userId, is_shared: false };
+          if (params.amount == null) throw { clarification: 'Qual o valor da recorrente?' };
+          label = 'Recorrente ' + (freq === 'monthly' ? 'mensal' : 'anual') + ' de ' + DB.aiMoney(params.amount) + ' (' + rdesc + ')';
+        } else if (det.intent === 'mark_invoice_paid') {
+          var invs = DB.listInvoices(userId, e.credit_card_id ? { card_id: e.credit_card_id } : {});
+          var open = invs.filter(function (i) { return i.status !== 'paid' && i.status !== 'cancelled'; });
+          if (!open.length) throw { clarification: 'Não há fatura em aberto' + (e.cardName ? ' para ' + e.cardName : '') + '.' };
+          var inv = open.sort(function (x, y) { return (x.due_date + x.id).localeCompare(y.due_date + y.id); })[0];
+          var oust = DB.calculateInvoiceOutstanding(userId, inv.id);
+          var payAcc = e.account_id;
+          if (!payAcc) {
+            var c = DB.getCard(userId, inv.credit_card_id);
+            payAcc = c.payment_account_id || null;
+          }
+          if (!payAcc) throw { clarification: 'De qual conta sai o pagamento de ' + DB.aiMoney(oust) + '?' };
+          params = { invoice_id: inv.id, payment_account_id: payAcc, amount: oust, payment_date: today };
+          label = 'Pagamento de ' + DB.aiMoney(oust) + ' da fatura ' + ('0' + inv.reference_month).slice(-2) + '/' + inv.reference_year + ' (' + DB.cardName(userId, inv.credit_card_id) + ')';
+        } else if (det.intent === 'update_transaction') {
+          var stop = { para: 1, com: 1, por: 1, uma: 1, um: 1, de: 1, da: 1, do: 1, das: 1, dos: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, esse: 1, essa: 1, este: 1, esta: 1, valor: 1, mude: 1, mudar: 1, corrija: 1, corrigir: 1, altere: 1, alterar: 1, edite: 1, editar: 1, para2: 1 };
+          var words = DB.aiNorm(e.categoryName || '').split(' ').filter(function (w) { return w.length >= 4; });
+          DB.aiNorm(rawText).split(' ').forEach(function (w) { if (w.length >= 4 && !stop[w] && words.indexOf(w) < 0) words.push(w); });
+          var cands = DB.listTx(userId, {}).filter(function (t) {
+            if (t.date < DB.dateAddDays(today, -30)) return false;
+            var d = DB.aiNorm(t.description);
+            return words.some(function (w) { return d.indexOf(w) >= 0; }) || (e.amount != null && Math.abs(t.amount - e.amount) < 0.005);
+          });
+          if (cands.length !== 1) throw { clarification: cands.length ? 'Encontrei mais de um lançamento parecido. Qual deles (data e valor)?' : 'Não encontrei o lançamento dos últimos 30 dias. Qual a descrição exata?' };
+          params = { transaction_id: cands[0].id, description: null, amount: e.amount != null ? e.amount : null, category_id: e.category_id || null };
+          label = 'Ajuste no lançamento "' + cands[0].description + '" de ' + DB.aiMoney(cands[0].amount);
+        } else throw new Error('Ação não permitida.');
+        var aopt = {};
+        if (opts.channel && opts.channel !== 'web') {
+          aopt.channel = opts.channel;
+          aopt.externalMessageId = opts.externalMessageId || null;
+          aopt.expiresAt = new Date(Date.now() + DB.WHATSAPP_CONFIG().confirmTimeoutMin * 60000).toISOString();
+        }
+        var row = DB.aiRequestAction(userId, convId, messageId, det.intent, params, aopt);
+        return { answer: 'Vou registrar: ' + label + '. Confirmar?', facts: [{ label: label, value: params.amount != null ? params.amount : null }], tools: [], intent: det.intent, pendingAction: { id: row.id, type: row.action_type, summary: label, params: params }, follow_up: 'Diga "sim" para confirmar ou "não" para cancelar.' };
+      } catch (err) {
+        if (err && err.clarification) return { answer: err.clarification, facts: [], tools: [], intent: det.intent };
+        return { answer: 'Não consegui preparar a ação: ' + ((err && err.message) || 'tente novamente.'), facts: [], tools: [], intent: 'action_error' };
+      }
+    },
+    /* Resposta pós-execução (fatos do resultado oficial). */
+    aiExecutedAnswer: function (userId, action) {
+      var r = action.result_data || {}, p = action.request_data || {};
+      var map = {
+        create_transaction: 'Registrado: ' + (p.type === 'income' ? 'receita' : 'despesa') + ' de ' + DB.aiMoney(p.amount) + ' em ' + (p.description || '') + '.',
+        create_transfer: 'Transferência de ' + DB.aiMoney(p.amount) + ' concluída.',
+        create_goal: 'Meta "' + (p.name || '') + '" de ' + DB.aiMoney(p.target_amount) + ' criada.',
+        create_recurring: 'Recorrente de ' + DB.aiMoney(p.amount) + ' criada.',
+        mark_invoice_paid: 'Fatura paga: ' + DB.aiMoney(p.amount) + '. O pagamento não gera nova despesa.',
+        update_transaction: 'Lançamento atualizado.'
+      };
+      return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed' };
+    },
+    /* Respostas de leitura: tool oficial → texto curto com os números reais. */
+    aiAnswerRead: function (userId, det, rawText) {
+      var e = det.entities || {};
+      var r = e.periodStart && e.periodEnd ? { start: e.periodStart, end: e.periodEnd, label: e.periodLabel || 'período' } : null;
+      function rng() {
+        if (r) return { periodStart: r.start, periodEnd: r.end, periodLabel: r.label };
+        var p = DB.analyticsResolvePeriod('current_month');
+        return { periodStart: p.startDate, periodEnd: p.endDate, periodLabel: 'este mês' };
+      }
+      var R = rng(), facts = [], tools = [], follow = null, answer = '', toolOut = null;
+      function F(label, value) { facts.push({ label: label, value: value }); return value; }
+      var M = DB.aiMoney;
+      if (det.intent === 'financial_summary' || det.intent === 'planning_question' || det.intent === 'expense_analysis' || det.intent === 'income_analysis') {
+        var a = DB.aiRunTool(userId, 'financial_summary', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, view: e.view });
+        tools.push('financial_summary'); toolOut = a;
+        var inc = F('receitas', a.metrics.totalIncome), exp = F('despesas', a.metrics.totalExpenses), res = F('resultado', a.metrics.financialResult);
+        var who = e.view === 'me' ? 'Você teve' : e.view === 'partner' ? 'Seu parceiro teve' : 'Vocês tiveram';
+        answer = R.periodLabel === 'este mês'
+          ? 'Até agora, ' + who.toLowerCase() + ' ' + M(inc) + ' de receitas e ' + M(exp) + ' de despesas, deixando um resultado de ' + M(res) + '.'
+          : 'No período (' + R.periodLabel + '), ' + who.toLowerCase() + ' ' + M(inc) + ' de receitas e ' + M(exp) + ' de despesas, resultado de ' + M(res) + '.';
+        if (a.comparison && a.comparison.expenses.percentageDifference != null) {
+          var p = a.comparison.expenses.percentageDifference;
+          answer += ' As despesas estão ' + Math.abs(p).toLocaleString('pt-BR') + '% ' + (p >= 0 ? 'acima' : 'abaixo') + ' do período anterior.';
+        }
+        if (det.intent === 'planning_question') {
+          var av = DB.calculateAvailableToSpend(userId, { from: R.periodStart.slice(0, 7), to: R.periodEnd.slice(0, 7), vision: e.view === 'me' ? 'me' : e.view === 'partner' ? 'partner' : 'couple' });
+          F('disponível período', av.available);
+          answer += ' Pelo resultado do período, há ' + M(av.available) + ' disponível (receitas menos despesas, sem contar saldo em conta).';
+          follow = 'Quer saber quanto há nas contas ou o orçamento restante?';
+        }
+      } else if (det.intent === 'category_analysis') {
+        var a2 = DB.aiRunTool(userId, 'category_analysis', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, view: e.view, category_id: e.category_id });
+        tools.push('category_analysis'); toolOut = a2;
+        var sel = a2.selected || (e.category_id ? null : a2.top[0]);
+        if (!sel) { answer = 'Não há gastos nessa categoria no período.'; }
+        else {
+          F('categoria', sel.total != null ? sel.total : sel.value);
+          answer = (sel.categoryName || 'Categoria') + ': ' + M(sel.total != null ? sel.total : sel.value) + ' no período' + (sel.transactionCount != null ? ' em ' + sel.transactionCount + ' lançamentos' : '') + '.';
+          follow = 'Quer ver a evolução ou os maiores gastos dessa categoria?';
+        }
+      } else if (det.intent === 'budget_status') {
+        var a3 = DB.aiRunTool(userId, 'budget_status', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, category_id: e.category_id });
+        tools.push('budget_status'); toolOut = a3;
+        var it = a3.selected || null;
+        if (it) {
+          F('orçamento', it.limit); F('gasto', it.spent); F('restante', it.remaining);
+          answer = 'O orçamento de ' + it.name + ' é de ' + M(it.limit) + '. Já foram gastos ' + M(it.spent) + ', então restam ' + M(it.remaining) + ' neste mês.';
+        } else if (!a3.items.length) answer = 'Não há orçamento cadastrado para este mês.';
+        else {
+          F('orçamento total', a3.total); F('gasto total', a3.spent);
+          answer = 'Orçamentos do mês: ' + M(a3.total) + ' previstos, ' + M(a3.spent) + ' gastos. ' + a3.items.slice(0, 3).map(function (i) { return i.name + ' ' + String(i.pct).replace('.', ',') + '%'; }).join(', ') + '.';
+        }
+      } else if (det.intent === 'goal_status') {
+        var a4 = DB.aiRunTool(userId, 'goal_status', {});
+        tools.push('goal_status'); toolOut = a4;
+        if (!a4.length) answer = 'Nenhuma meta cadastrada.';
+        else {
+          var g0 = a4[0];
+          F('meta atual', g0.current); F('meta objetivo', g0.target);
+          answer = a4.slice(0, 3).map(function (g) { return '"' + g.name + '" está em ' + String(g.percentComplete).replace('.', ',') + '% (' + M(g.current) + ' de ' + M(g.target) + ', faltam ' + M(g.remaining) + ')'; }).join('. ') + '.';
+          void g0;
+        }
+      } else if (det.intent === 'account_balance') {
+        var a5 = DB.aiRunTool(userId, 'account_balances', { account_id: e.account_id });
+        tools.push('account_balances'); toolOut = a5;
+        if (a5.selected) {
+          F('saldo conta', a5.selected.balance);
+          answer = 'A conta ' + a5.selected.name + ' tem ' + M(a5.selected.balance) + '.';
+        } else {
+          F('total contas', a5.total);
+          answer = 'Nas contas há ' + M(a5.total) + ' no total' + (a5.accounts.length > 1 ? ' (' + a5.accounts.map(function (x) { return x.name + ': ' + M(x.balance); }).join(', ') + ')' : '') + '. Limite de cartão não entra aqui.';
+        }
+      } else if (det.intent === 'card_status') {
+        var a6 = DB.aiRunTool(userId, 'card_status', { credit_card_id: e.credit_card_id });
+        tools.push('card_status'); toolOut = a6;
+        if (!a6.cards.length) answer = 'Nenhum cartão ativo.';
+        else {
+          var c0 = a6.cards[0];
+          F('limite', c0.limit); F('utilizado', c0.used); F('disponível', c0.available);
+          answer = 'Cartão ' + c0.name + ': limite ' + M(c0.limit) + ', utilizado ' + M(c0.used) + ', disponível ' + M(c0.available) + '.';
+        }
+      } else if (det.intent === 'invoice_status') {
+        var a7 = DB.aiRunTool(userId, 'invoice_status', { credit_card_id: e.credit_card_id });
+        tools.push('invoice_status'); toolOut = a7;
+        if (!a7.length) answer = 'Nenhuma fatura encontrada.';
+        else {
+          var f0 = a7.filter(function (x) { return x.status !== 'paid'; })[0] || a7[0];
+          F('fatura total', f0.total); F('fatura em aberto', f0.outstanding);
+          answer = 'Próxima fatura (' + f0.card + ' ' + f0.ref + '): ' + M(f0.total) + ', em aberto ' + M(f0.outstanding) + ', vence ' + f0.due.split('-').reverse().join('/') + ' (' + f0.status + ').';
+        }
+      } else if (det.intent === 'installment_status') {
+        var a8 = DB.aiRunTool(userId, 'installment_summary', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel });
+        tools.push('installment_summary'); toolOut = a8;
+        F('parcelas pendentes', a8.pendingTotal);
+        answer = 'Há ' + M(a8.pendingTotal) + ' em ' + a8.pendingCount + ' parcelas pendentes' + (a8.next.length ? '. Próxima: ' + a8.next[0].number + ' de ' + M(a8.next[0].amount) + ' em ' + a8.next[0].dueDate.split('-').reverse().join('/') : '') + '. O total já contratado não se repete por mês.';
+      } else if (det.intent === 'recurring_status') {
+        var a9 = DB.aiRunTool(userId, 'recurring_summary', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel });
+        tools.push('recurring_summary'); toolOut = a9;
+        F('recorrentes mês', a9.monthlyEstimate);
+        answer = 'Recorrentes ativas: ' + a9.activeTemplates + ', estimativa mensal de despesas ' + M(a9.monthlyEstimate) + '.';
+      } else if (det.intent === 'settlement_status') {
+        var a10 = DB.aiRunTool(userId, 'settlement_status', {});
+        tools.push('settlement_status'); toolOut = a10;
+        if (a10.mode === 'JOINT') {
+          F('modo', 'tudo junto');
+          answer = 'Vocês administram o dinheiro em conjunto (Tudo junto), então despesas conjuntas não geram acerto automático entre vocês, mesmo que os valores pagos sejam diferentes. Quem pagou continua registrado no histórico.';
+        } else if (!a10.debt) answer = 'Sem acerto pendente entre o casal.';
+        else {
+          F('acerto pendente', a10.debt.amount);
+          answer = 'Há um acerto pendente de ' + M(a10.debt.amount) + ': ' + a10.debt.from + ' para ' + a10.debt.to + '. Acerto não é despesa nova.';
+        }
+      } else if (det.intent === 'cash_flow') {
+        var a11 = DB.aiRunTool(userId, 'financial_summary', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, view: e.view });
+        tools.push('cash_flow'); toolOut = a11.cashFlow;
+        F('entradas', a11.cashFlow.inflow); F('saídas', a11.cashFlow.outflow);
+        answer = 'Entradas ' + M(a11.cashFlow.inflow) + ', saídas ' + M(a11.cashFlow.outflow) + '. Transferências internas (' + M(a11.cashFlow.internal.total) + ') e pagamentos de fatura (' + M(a11.cashFlow.invoicePayments.total) + ') aparecem separados, sem virar despesa.';
+      } else if (det.intent === 'financial_insights') {
+        var a12 = DB.aiRunTool(userId, 'financial_insights', {});
+        tools.push('financial_insights'); toolOut = a12;
+        if (!a12.length) answer = 'Nenhum ponto de atenção no momento.';
+        else answer = 'Encontrei ' + a12.length + ' pontos: ' + a12.slice(0, 3).map(function (x) { return x.title; }).join('; ') + '.';
+      } else if (det.intent === 'transaction_search') {
+        var a13 = DB.aiRunTool(userId, 'search_transactions', { periodStart: e.periodStart, periodEnd: e.periodEnd, category_id: e.category_id, account_id: e.account_id, credit_card_id: e.credit_card_id, search: e.category_id ? '' : DB.aiNorm(rawText).split(' ').filter(function (w) { return w.length >= 4; }).slice(0, 3).join(' ') });
+        tools.push('search_transactions'); toolOut = a13;
+        if (!a13.length) answer = 'Não encontrei lançamentos com esse filtro no período.';
+        else {
+          var tot = Math.round(a13.reduce(function (s, t) { return s + (t.type === 'expense' ? t.amount : 0); }, 0) * 100) / 100;
+          F('total filtrado', tot);
+          answer = a13.length + ' lançamentos (até 10): ' + a13.slice(0, 5).map(function (t) { return t.description + ' ' + M(t.amount) + ' em ' + t.date.split('-').reverse().join('/'); }).join('; ') + '.';
+        }
+      } else if (det.intent === 'report_explanation') {
+        var a14 = DB.aiRunTool(userId, 'financial_summary', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, view: e.view });
+        var ins = DB.aiRunTool(userId, 'financial_insights', {});
+        var cat14 = DB.aiRunTool(userId, 'category_analysis', { periodStart: R.periodStart, periodEnd: R.periodEnd, periodLabel: R.periodLabel, view: e.view });
+        tools.push('financial_summary', 'financial_insights', 'category_analysis'); toolOut = { summary: a14.metrics, insights: ins };
+        F('receitas', a14.metrics.totalIncome); F('despesas', a14.metrics.totalExpenses);
+        answer = 'Fato: receitas ' + M(a14.metrics.totalIncome) + ', despesas ' + M(a14.metrics.totalExpenses) + ', resultado ' + M(a14.metrics.financialResult) + '.';
+        if (cat14.top && cat14.top[0]) { answer += ' A maior categoria foi ' + cat14.top[0].categoryName + ' (' + M(cat14.top[0].total) + ').'; F('maior categoria', cat14.top[0].total); }
+        else if (ins.length) answer += ' ' + ins[0].summary;
+        else answer += ' Os dados não permitem determinar motivo além dos números.';
+      } else if (det.intent === 'openfinance_status' || det.intent === 'openfinance_reconciliation') {
+        if (!DB.ofIsEnabled()) {
+          tools.push('openfinance_status'); toolOut = { disabled: true };
+          answer = 'A integração bancária não está disponível atualmente.';
+          follow = 'Posso ajudar com contas, transações ou conciliação de extratos?';
+        } else {
+        var aof = DB.aiRunTool(userId, 'openfinance_status', {});
+        var aor = DB.aiRunTool(userId, 'openfinance_reconciliation', {});
+        var aop = DB.aiRunTool(userId, 'openfinance_pending', {});
+        tools.push('openfinance_status', 'openfinance_reconciliation', 'openfinance_pending');
+        toolOut = { connections: aof.connections, open: aor.open, pending: aop.count };
+        if (!aof.connections.length) answer = 'Nenhum banco conectado no Open Finance.';
+        else {
+          var c0 = aof.connections[0];
+          F('conexões', aof.connections.length); F('pendências banco', aop.count);
+          answer = aof.connections.length + ' banco(s) conectado(s). ' + c0.institution + ': ' + c0.health + '.' +
+            (aop.count ? ' Há ' + aop.count + ' lançamento(s) do banco aguardando conciliação' + (aor.open ? ' e ' + aor.open + ' pendência(s) para revisão.' : '.') : ' Nada pendente para conciliar.');
+          follow = 'Quer ver a central de conciliação?';
+        }
+        }
+      } else {
+        answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos e insights. O que quer saber?';
+        follow = 'Ex: "Quanto gastamos esse mês?" ou "Quanto falta na fatura?"';
+      }
+      return { answer: answer, facts: facts, tools: tools, toolInput: { intent: det.intent, entities: e }, toolOutput: toolOut, follow_up: follow, intent: det.intent };
+    },
+    /* ============ PROMPT 23: WHATSAPP (canal, sem finanças próprias) ============
+       WhatsApp → Adapter → Intent/Tools do Prompt 22 → Financial Services.
+       Sem provider real acoplado: 'local-sim' registra outbox; 'meta' valida
+       assinatura (sem chamadas externas aqui). Segredos nunca no frontend. */
+    WHATSAPP_CONFIG: function () {
+      return { provider: 'local-sim', phoneNumberId: null, businessAccountId: null, apiVersion: 'v1', webhookSecret: null, accessToken: null, confirmTimeoutMin: 30, ratePerMinute: 30, linkCodeMin: 10 };
+    },
+    /* Hash local p/ índice (produção: SHA-256 no backend; segredo no env). */
+    waHash: function (s) {
+      var h1 = 0x811c9dc5; s = String(s || '');
+      for (var i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619); }
+      return 'h' + (h1 >>> 0).toString(16);
+    },
+    waMask: function (phone) {
+      var d = String(phone || '').replace(/\D/g, '');
+      return d.length >= 4 ? '+.. (***) ****-' + d.slice(-4) : '(oculto)';
+    },
+    waCheckRate: function (phoneHash) {
+      DB._waRate = DB._waRate || {};
+      var nowT = Date.now(), win = (DB._waRate[phoneHash] || []).filter(function (t) { return nowT - t < 60000; });
+      if (win.length >= DB.WHATSAPP_CONFIG().ratePerMinute) throw new Error('Limite de mensagens excedido. Aguarde um minuto.');
+      win.push(nowT); DB._waRate[phoneHash] = win;
+    },
+    /* Provider: local-sim registra outbox (testável); meta só valida.
+       `to` é o telefone, salvo apenas como hash (privacidade). */
+    waSend: function (to, text, opts) {
+      opts = opts || {};
+      var ph = opts.preHashed ? String(to) : DB.waHash(to);
+      var out = { to: opts.toLabel || DB.waMask(opts.preHashed ? '' : to), text: String(text).slice(0, 1500), interactive: opts.interactive || null, ts: now() };
+      DB._waOutbox = DB._waOutbox || [];
+      DB._waOutbox.push(out);
+      var db = read();
+      db.whatsapp_messages.push({ id: id('wm'), couple_id: opts.coupleId || null, user_id: opts.userId || null, direction: 'outbound', provider: opts.provider || 'local-sim', phone_hash: ph, external_message_id: null, text: out.text, status: 'processed', error: null, created_at: now() });
+      logAudit(db, opts.coupleId || null, opts.userId || null, 'whatsapp_message', out.ts, 'sent', { provider: opts.provider || 'local-sim' });
+      write(db);
+      return out;
+    },
+    waVerifyWebhook: function (provider, raw, signature, ts) {
+      if (provider === 'local-sim') return true;
+      if (provider === 'meta') {
+        var cfg = DB.WHATSAPP_CONFIG();
+        if (!cfg.webhookSecret) throw new Error('Webhook não configurado.');
+        if (!ts || Math.abs(Date.now() - Number(ts)) > 300000) throw new Error('Timestamp inválido.');
+        var expect = DB.waHash(cfg.webhookSecret + '|' + raw + '|' + ts);
+        if (signature !== expect) throw new Error('Assinatura inválida.');
+        return true;
+      }
+      throw new Error('Provedor desconhecido.');
+    },
+    /* ---- vínculo ---- */
+    waGenerateLinkCode: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var code = String(Math.floor(100000 + Math.random() * 900000));
+      var exp = new Date(Date.now() + DB.WHATSAPP_CONFIG().linkCodeMin * 60000).toISOString();
+      var row = { id: id('wl'), couple_id: cid, user_id: userId, code_hash: DB.waHash('wa-link:' + code), expires_at: exp, used_at: null, created_at: now() };
+      db.whatsapp_link_codes.push(row);
+      logAudit(db, cid, userId, 'whatsapp_connection', row.id, 'link_created', {});
+      write(db);
+      return { code: code, expires_at: exp };
+    },
+    waConsumeLinkCode: function (phone, code, provider, opts) {
+      var db = read();
+      opts = opts || {};
+      var clean = String(code || '').replace(/\D/g, '').slice(-6);
+      var row = db.whatsapp_link_codes.filter(function (x) { return !x.used_at && x.code_hash === DB.waHash('wa-link:' + clean); })[0] || null;
+      if (!row) throw new Error('Código inválido.');
+      if (row.expires_at < now()) throw new Error('Código expirado.');
+      var ph = opts.preHashed ? String(phone) : DB.waHash(phone);
+      var masked = opts.masked || (opts.preHashed ? null : DB.waMask(phone));
+      var taken = db.whatsapp_connections.filter(function (c) { return c.phone_hash === ph && c.status === 'active' && c.user_id !== row.user_id; })[0];
+      if (taken) {
+        logAudit(db, row.couple_id, row.user_id, 'whatsapp_connection', taken.id, 'link_rejected', {});
+        write(db);
+        throw new Error('Este número já está vinculado a outra conta.');
+      }
+      row.used_at = now();
+      var ex = db.whatsapp_connections.filter(function (c) { return c.phone_hash === ph && c.user_id === row.user_id; })[0] || null;
+      if (ex) { ex.status = 'active'; ex.verified_at = now(); ex.last_seen_at = now(); ex.updated_at = now(); if (masked) ex.phone_masked = masked; }
+      else db.whatsapp_connections.push({ id: id('wc'), couple_id: row.couple_id, user_id: row.user_id, phone_number: null, phone_masked: masked, phone_hash: ph, provider: provider || 'local-sim', provider_user_id: null, status: 'active', verified_at: now(), last_seen_at: now(), created_at: now(), updated_at: now() });
+      logAudit(db, row.couple_id, row.user_id, 'whatsapp_connection', row.id, 'created', {});
+      write(db);
+      return true;
+    },
+    waConnectionFor: function (phone, provider) {
+      var db = read();
+      var c = db.whatsapp_connections.filter(function (x) { return x.phone_hash === DB.waHash(phone) && x.status === 'active' && (!provider || x.provider === provider); })[0] || null;
+      return c;
+    },
+    waRevokeConnection: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.whatsapp_connections.filter(function (c) { return c.couple_id === cid && c.user_id === userId && c.status === 'active'; });
+      if (!rows.length) throw new Error('Sem conexão ativa.');
+      rows.forEach(function (c) { c.status = 'revoked'; c.updated_at = now(); });
+      logAudit(db, cid, userId, 'whatsapp_connection', rows[0].id, 'revoked', {});
+      write(db);
+      return true;
+    },
+    waBlockConnection: function (userId, connId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.whatsapp_connections.find(function (x) { return x.id === connId && x.couple_id === cid; });
+      if (!c) throw new Error('Conexão não encontrada.');
+      c.status = 'blocked'; c.updated_at = now();
+      logAudit(db, cid, userId, 'whatsapp_connection', c.id, 'blocked', {});
+      write(db);
+      return true;
+    },
+    waMyConnection: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      return db.whatsapp_connections.filter(function (c) { return c.couple_id === cid && c.user_id === userId && c.status === 'active'; })[0] || null;
+    },
+    waGetPreferences: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.whatsapp_preferences.filter(function (x) { return x.couple_id === cid && x.user_id === userId; })[0] || null;
+      return p || { enabled: true, allow_proactive_messages: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', insight_notifications: false, invoice_notifications: false, budget_notifications: false, goal_notifications: false };
+    },
+    waSetPreferences: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var p = db.whatsapp_preferences.filter(function (x) { return x.couple_id === cid && x.user_id === userId; })[0] || null;
+      function b(v, d) { return v == null ? d : !!v; }
+      if (!p) {
+        p = { id: id('wp'), couple_id: cid, user_id: userId, enabled: true, allow_proactive_messages: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', insight_notifications: false, invoice_notifications: false, budget_notifications: false, goal_notifications: false, created_at: now(), updated_at: now() };
+        db.whatsapp_preferences.push(p);
+      }
+      ['enabled', 'allow_proactive_messages', 'insight_notifications', 'invoice_notifications', 'budget_notifications', 'goal_notifications'].forEach(function (k) { if (data && data[k] !== undefined) p[k] = !!data[k]; });
+      ['quiet_hours_start', 'quiet_hours_end'].forEach(function (k) { if (data && data[k] !== undefined) p[k] = String(data[k]).slice(0, 5); });
+      p.updated_at = now();
+      logAudit(db, cid, userId, 'whatsapp_connection', p.id, 'preferences', {});
+      write(db);
+      return p;
+    },
+    /* Webhook: valida → persiste evento → responde rápido; processa em seguida
+       (aqui síncrono e barato; pesado vai p/ jobs no futuro). Idempotente. */
+    whatsappWebhookReceive: function (provider, payload, opts) {
+      opts = opts || {};
+      provider = provider || 'local-sim';
+      var raw = opts.raw || JSON.stringify(payload || {});
+      DB.waVerifyWebhook(provider, raw, opts.signature, opts.ts);
+      var p = payload || {};
+      var extId = String(p.messageId || p.id || '');
+      var from = String(p.from || p.phone || '');
+      var text = p.type === 'text' ? String(p.text || p.body || '') : '';
+      if (!extId || !from) throw new Error('Payload inválido.');
+      DB.waCheckRate(DB.waHash(from));
+      var db = read();
+      var dup = db.whatsapp_messages.filter(function (m) { return m.direction === 'inbound' && m.external_message_id === extId && m.provider === provider; })[0] || null;
+      if (dup && dup.status === 'processed') {
+        logAudit(db, dup.couple_id, dup.user_id, 'whatsapp_message', dup.id, 'duplicate_ignored', {});
+        write(db);
+        return { status: 'ignored', reason: 'duplicate' };
+      }
+      var row = dup || { id: id('wm'), couple_id: null, user_id: null, direction: 'inbound', provider: provider, phone_hash: DB.waHash(from), phone_masked: DB.waMask(from), external_message_id: extId, text: text.slice(0, 1000), media_type: p.mediaType || p.media_type || p.type || null, mime_type: p.mime || p.mimeType || null, status: 'received', error: null, created_at: now() };
+      if (!dup) db.whatsapp_messages.push(row);
+      row.status = 'processing';
+      logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'received', { provider: provider });
+      write(db);
+      try {
+        var res;
+        if (p.type !== 'text' || !text.trim()) {
+          res = DB.whatsappHandleMedia(row.id);
+        } else {
+          res = DB.whatsappProcessInbound(row.id, text, row.phone_masked);
+        }
+        return res;
+      } catch (e) {
+        var db2 = read();
+        var r2 = db2.whatsapp_messages.find(function (x) { return x.id === row.id; });
+        if (r2) { r2.status = 'failed'; r2.error = String((e && e.message) || e).slice(0, 300); }
+        db2.whatsapp_message_failures.push({ id: id('wf'), couple_id: r2 ? r2.couple_id : null, user_id: r2 ? r2.user_id : null, external_message_id: extId, provider: provider, phone_hash: DB.waHash(from), attempts: 1, error: String((e && e.message) || e).slice(0, 300), created_at: now() });
+        logAudit(db2, r2 ? r2.couple_id : null, r2 ? r2.user_id : null, 'whatsapp_message', row.id, 'failed', {});
+        write(db2);
+        try { DB.waSend(from, 'Não consegui processar agora. Tente novamente.', { provider: provider }); } catch (e2) { /* sem canal */ }
+        throw e;
+      }
+    },
+    whatsappHandleMedia: function (rowId) {
+      var db = read();
+      var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (!row) throw new Error('Mensagem não encontrada.');
+      if (row.media_type === 'audio' || /audio/i.test(String(row.mime_type || ''))) {
+        write(db);
+        return DB.whatsappAudioInbound(rowId, null, {});
+      }
+      if (row.media_type === 'image' || /image/i.test(String(row.mime_type || ''))) {
+        write(db);
+        return DB.whatsappImageInbound(rowId, null, {});
+      }
+      if (row.media_type === 'document' || /pdf/i.test(String(row.mime_type || ''))) {
+        write(db);
+        return DB.whatsappDocumentInbound(rowId, null, {});
+      }
+      var conn = db.whatsapp_connections.filter(function (c) { return c.phone_hash === row.phone_hash && c.status === 'active'; })[0] || null;
+      row.couple_id = conn ? conn.couple_id : null; row.user_id = conn ? conn.user_id : null;
+      row.status = 'processed';
+      logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'media_rejected', {});
+      write(db);
+      DB.waSendReply(row, conn, 'No momento consigo processar mensagens de texto.');
+      return { status: 'processed', kind: 'media' };
+    },
+    /* Áudio via WhatsApp: mesma FinancialAudioService, mesma verdade.
+       Sem transcrição do provedor → orienta texto (sem inventar). */
+    whatsappAudioInbound: function (rowId, audioRef, opts) {
+      opts = opts || {};
+      var db = read();
+      var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (!row) throw new Error('Mensagem não encontrada.');
+      var conn = db.whatsapp_connections.filter(function (c) { return c.phone_hash === row.phone_hash && c.status === 'active'; })[0] || null;
+      row.couple_id = conn ? conn.couple_id : null; row.user_id = conn ? conn.user_id : null;
+      if (!conn) {
+        row.status = 'processed';
+        write(db);
+        DB.waSendReply(row, null, 'Este número ainda não está vinculado. No app: Ajustes → WhatsApp → gerar código, e me envie o código aqui.');
+        return { status: 'processed', kind: 'unlinked' };
+      }
+      if (!opts.transcript) {
+        row.status = 'processed';
+        logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'audio_no_transcript', {});
+        write(db);
+        DB.waSendReply(row, conn, 'Ainda não consigo ouvir áudios por aqui. Envie sua mensagem por texto.');
+        return { status: 'processed', kind: 'audio_unsupported' };
+      }
+      var audio = DB.audioReceive(conn.user_id, { mime: 'audio/ogg', size: audioRef && audioRef.size ? audioRef.size : 1024, durationSec: audioRef && audioRef.durationSec ? audioRef.durationSec : 10, name: 'whatsapp-audio', storageRef: 'wa:' + row.external_message_id }, { channel: 'whatsapp', source: 'whatsapp_audio' });
+      DB.audioTranscribe(conn.user_id, audio.id, { provider: 'local-sim', transcript: opts.transcript });
+      var db2 = read();
+      var row2 = db2.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (row2) row2.status = 'processed';
+      write(db2);
+      var res = DB.whatsappProcessInboundAudio(conn.user_id, audio.id, row2 || row);
+      return { status: 'processed', kind: 'audio', audioId: audio.id, result: res };
+    },
+    whatsappProcessInboundAudio: function (userId, audioId, row) {
+      var conv = DB.aiCreateConversation(userId, 'WhatsApp', { channel: 'whatsapp', externalId: row.phone_hash });
+      var res = DB.audioToAssistant(userId, audioId, { conversationId: conv.id });
+      DB.waSendReply(row, null, res.answer || 'Entendido.');
+      return res;
+    },
+    /* Imagem via WhatsApp: mesma FinancialImageService, mesma verdade.
+       Sem extração do provedor → orienta texto (sem inventar). */
+    whatsappImageInbound: function (rowId, imageRef, opts) {
+      opts = opts || {};
+      var db = read();
+      var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (!row) throw new Error('Mensagem não encontrada.');
+      var conn = db.whatsapp_connections.filter(function (c) { return c.phone_hash === row.phone_hash && c.status === 'active'; })[0] || null;
+      row.couple_id = conn ? conn.couple_id : null; row.user_id = conn ? conn.user_id : null;
+      if (!conn) {
+        row.status = 'processed';
+        write(db);
+        DB.waSendReply(row, null, 'Este número ainda não está vinculado. No app: Ajustes → WhatsApp → gerar código, e me envie o código aqui.');
+        return { status: 'processed', kind: 'unlinked' };
+      }
+      if (!opts.extraction) {
+        row.status = 'processed';
+        logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'image_no_extraction', {});
+        write(db);
+        DB.waSendReply(row, conn, 'Ainda não consigo ler imagens por aqui. Envie uma foto pelo app ou digite os dados.');
+        return { status: 'processed', kind: 'image_unsupported' };
+      }
+      var img = DB.imageReceive(conn.user_id, { mime: 'image/jpeg', size: imageRef && imageRef.size ? imageRef.size : 2048, width: imageRef && imageRef.width ? imageRef.width : 800, height: imageRef && imageRef.height ? imageRef.height : 600, name: 'whatsapp-img.jpg', storageRef: 'wa:' + row.external_message_id }, { channel: 'whatsapp', source: 'whatsapp_image' });
+      DB.imageProcess(conn.user_id, img.id, { provider: 'local-sim', extraction: opts.extraction });
+      var db2 = read();
+      var row2 = db2.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (row2) row2.status = 'processed';
+      write(db2);
+      var conv = DB.aiCreateConversation(conn.user_id, 'WhatsApp', { channel: 'whatsapp', externalId: row.phone_hash });
+      var res = DB.imageToAssistant(conn.user_id, img.id, { conversationId: conv.id });
+      DB.waSendReply(row2 || row, null, (res.answer || 'Entendido.'));
+      return { status: 'processed', kind: 'image', imageId: img.id, result: res };
+    },
+    /* Documento via WhatsApp: mesma FinancialDocumentService, mesma verdade. */
+    whatsappDocumentInbound: function (rowId, docRef, opts) {
+      opts = opts || {};
+      var db = read();
+      var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (!row) throw new Error('Mensagem não encontrada.');
+      var conn = db.whatsapp_connections.filter(function (c) { return c.phone_hash === row.phone_hash && c.status === 'active'; })[0] || null;
+      row.couple_id = conn ? conn.couple_id : null; row.user_id = conn ? conn.user_id : null;
+      if (!conn) {
+        row.status = 'processed';
+        write(db);
+        DB.waSendReply(row, null, 'Este número ainda não está vinculado. No app: Ajustes → WhatsApp → gerar código, e me envie o código aqui.');
+        return { status: 'processed', kind: 'unlinked' };
+      }
+      if (!opts.extraction) {
+        row.status = 'processed';
+        logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'document_no_extraction', {});
+        write(db);
+        DB.waSendReply(row, conn, 'Ainda não consigo ler documentos por aqui. Envie pelo app ou digite os dados.');
+        return { status: 'processed', kind: 'document_unsupported' };
+      }
+      var doc = DB.receiveDocument(conn.user_id, { mime: 'application/pdf', size: docRef && docRef.size ? docRef.size : 2048, pageCount: docRef && docRef.pages ? docRef.pages : 1, name: 'whatsapp-doc.pdf', storageRef: 'wa:' + row.external_message_id }, { channel: 'whatsapp', source: 'document_upload' });
+      DB.extractDocumentText(conn.user_id, doc.id, { provider: 'local-sim', extraction: opts.extraction });
+      var db2 = read();
+      var row2 = db2.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (row2) row2.status = 'processed';
+      write(db2);
+      var conv = DB.aiCreateConversation(conn.user_id, 'WhatsApp', { channel: 'whatsapp', externalId: row.phone_hash });
+      var d = DB.docGet(conn.user_id, doc.id).structured_data || {};
+      var text = 'Documento (' + (d.documentType || 'documento') + '): ' + [d.merchantName || d.beneficiary, d.totalAmount != null ? 'R$ ' + d.totalAmount : null, d.date || d.dueDate].filter(Boolean).join(', ') + '.';
+      var res = DB.aiProcessMessage(conn.user_id, conv.id, text, { channel: 'whatsapp', documentMessageId: doc.id });
+      DB.waSendReply(row2 || row, null, (res.answer || 'Entendido.'));
+      return { status: 'processed', kind: 'document', docId: doc.id, result: res };
+    },
+    waSendReply: function (row, conn, text, interactive) {
+      var label = '(whatsapp)';
+      if (conn && conn.phone_masked) label = conn.phone_masked;
+      DB.waSend(row.phone_hash, text, { preHashed: true, toLabel: label, provider: row.provider, coupleId: row.couple_id, userId: row.user_id, interactive: interactive || null });
+      var db = read();
+      logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'sent', {});
+      write(db);
+      return true;
+    },
+    /* Núcleo do adapter: identidade → conversa → assistant → resposta. */
+    whatsappProcessInbound: function (rowId, text, masked) {
+      var db = read();
+      var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (!row) throw new Error('Mensagem não encontrada.');
+      var conn = db.whatsapp_connections.filter(function (c) { return c.phone_hash === row.phone_hash && c.status === 'active'; })[0] || null;
+      var userId = conn ? conn.user_id : null;
+      /* vínculo por código (vale mesmo sem conexão ativa) */
+      var codeM = String(text || '').replace(/\D/g, '').slice(-6);
+      if (/conectar|codigo|vincular/i.test(text || '') || (/^\d{4,8}$/.test(String(text || '').trim()) && codeM.length >= 4)) {
+        try {
+          DB.waConsumeLinkCode(row.phone_hash, codeM, row.provider, { preHashed: true, masked: masked || row.phone_masked || null });
+          var dbc = read();
+          var myConn = dbc.whatsapp_connections.filter(function (x) { return x.phone_hash === row.phone_hash && x.status === 'active'; })[0] || null;
+          var rwc = dbc.whatsapp_messages.find(function (x) { return x.id === rowId; });
+          if (rwc) { rwc.status = 'processed'; if (myConn) { rwc.couple_id = myConn.couple_id; rwc.user_id = myConn.user_id; } }
+          write(dbc);
+          DB.waSendReply(row, myConn, 'WhatsApp vinculado com sucesso! Pode me mandar seus gastos e perguntas.');
+          return { status: 'processed', kind: 'linked' };
+        } catch (e) {
+          if (!conn) {
+            row.status = 'processed';
+            var dbU = read();
+            logAudit(dbU, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'rejected', { reason: 'unlinked' });
+            write(dbU);
+            DB.waSendReply(row, null, 'Este número ainda não está vinculado. No app: Ajustes → WhatsApp → gerar código, e me envie o código aqui.');
+            return { status: 'processed', kind: 'unlinked' };
+          }
+          /* era só texto com números: segue como mensagem normal */
+        }
+      }
+      if (!conn) {
+        row.status = 'processed';
+        logAudit(db, row.couple_id, row.user_id, 'whatsapp_message', row.id, 'rejected', { reason: 'unlinked' });
+        write(db);
+        DB.waSendReply(row, null, 'Este número ainda não está vinculado. No app: Ajustes → WhatsApp → gerar código, e me envie o código aqui.');
+        return { status: 'processed', kind: 'unlinked' };
+      }
+      row.couple_id = conn.couple_id; row.user_id = conn.user_id;
+      conn.last_seen_at = now();
+      write(db);
+      userId = conn.user_id;
+      /* atalhos */
+      var t0 = String(text || '').trim();
+      var quick = { '/resumo': 'resumo do mês', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?' };
+      if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
+      /* conversa do canal */
+      var conv = DB.waResolveConversation(userId, row.phone_hash);
+      var s = DB.aiNorm(text);
+      var pend = DB.aiPendingAction(userId, conv.id);
+      /* sem pendência + "sim" solto */
+      if (!pend && /^(sim|confirmo|confirmar|ok|isso)\b/.test(s)) {
+        DB.waFinishInbound(rowId, 'processed');
+        DB.waSendReply(row, conn, 'Não há nenhuma ação aguardando confirmação.');
+        return { status: 'processed', kind: 'no-pending' };
+      }
+      /* editar antes de confirmar: "confirmar, mas foi no Itaú" */
+      if (pend && /^(confirmar|sim|ok|pode)[,.]?\s+(mas|s[oó])\b/.test(s)) {
+        var upd = DB.whatsappEditPending(userId, pend.id, text);
+        DB.waFinishInbound(rowId, 'processed');
+        DB.waSendConfirmation(row, conn, upd);
+        return { status: 'processed', kind: 'edited' };
+      }
+      /* duplicidade semântica: novo pedido idêntico ao rascunho atual? */
+      if (pend) {
+        var same = DB.whatsappSamePending(userId, pend, text);
+        if (same) {
+          DB.waFinishInbound(rowId, 'processed');
+          DB.waSendReply(row, conn, 'Você está se referindo ao mesmo lançamento de ' + DB.aiMoney(same.request_data.amount) + ' que está aguardando confirmação? Responda Confirmar ou Cancelar.');
+          return { status: 'processed', kind: 'semantic-dup' };
+        }
+      }
+      var res = DB.aiProcessMessage(userId, conv.id, text, { channel: 'whatsapp', externalMessageId: row.external_message_id });
+      DB.waTagChannel(userId, conv.id, res, row.external_message_id);
+      DB.waFinishInbound(rowId, 'processed');
+      if (res.pendingAction) {
+        DB.waSendConfirmation(row, conn, res.pendingAction);
+      } else {
+        DB.waSendReply(row, conn, res.answer.slice(0, 1500));
+      }
+      return { status: 'processed', kind: res.pendingAction ? 'confirm' : 'answer', intent: res.intent };
+    },
+    waResolveConversation: function (userId, phoneHash) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var convs = db.ai_conversations.filter(function (x) { return x.couple_id === cid && x.user_id === userId && x.channel === 'whatsapp' && x.status === 'active'; })
+        .sort(function (a, b) { return (b.last_message_at + b.id).localeCompare(a.last_message_at + a.id); });
+      if (convs.length) return convs[0];
+      return DB.aiCreateConversation(userId, 'WhatsApp', { channel: 'whatsapp', externalId: phoneHash });
+    },
+    waTagChannel: function (userId, convId, res, externalId) {
+      if (!res) return;
+      var db = read();
+      [res.userMessageId, res.messageId].forEach(function (mid) {
+        if (!mid) return;
+        var m = db.ai_messages.find(function (x) { return x.id === mid; });
+        if (m) { m.channel = 'whatsapp'; m.external_message_id = externalId; }
+      });
+      write(db);
+    },
+    waFinishInbound: function (rowId, status) {
+      var db = read();
+      var r = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
+      if (r) { r.status = status; }
+      write(db);
+    },
+    /* Revisa o rascunho (conta/cartão) sem criar a transação anterior. */
+    whatsappEditPending: function (userId, actionId, text) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.ai_actions.find(function (x) { return x.id === actionId && x.couple_id === cid && x.user_id === userId; });
+      if (!r || r.status !== 'pending_confirmation') throw new Error('Sem rascunho para editar.');
+      var accs = DB.aiFindAccounts(userId, text);
+      var cards = DB.aiFindCards(userId, text);
+      if (accs.length === 1 && (r.action_type === 'create_transaction' || r.action_type === 'mark_invoice_paid')) {
+        r.request_data.account_id = accs[0].id;
+        if (r.action_type === 'create_transaction') { r.request_data.credit_card_id = null; }
+        if (r.action_type === 'mark_invoice_paid') r.request_data.payment_account_id = accs[0].id;
+      } else if (cards.length === 1 && r.action_type === 'create_transaction') {
+        r.request_data.credit_card_id = cards[0].id; r.request_data.account_id = null;
+      } else throw new Error('Não entendi a alteração. Diga a conta ou cartão.');
+      DB.aiValidateActionParams(userId, r.action_type, r.request_data);
+      r.updated_at = now();
+      logAudit(db, cid, userId, 'ai_action', r.id, 'edited', { type: r.action_type });
+      write(db);
+      var p = r.request_data;
+      var M = DB.aiMoney;
+      var label = r.action_type + ' ' + (p.amount != null ? M(p.amount) : '') + ' ' + (p.description || p.name || '');
+      return { id: r.id, type: r.action_type, summary: ('Atualizado: ' + label + '. Confirmar?').trim(), params: p };
+    },
+    /* Pendente idêntico (tipo+valor+destino) ainda aguardando? Se sim, não
+       cria outro rascunho: pergunta antes (duplicidade semântica). */
+    whatsappSamePending: function (userId, pend, text) {
+      if (!pend || pend.status !== 'pending_confirmation') return null;
+      var det;
+      try { det = DB.aiDetectIntent(userId, text); } catch (e) { return null; }
+      var def = DB.AI_INTENTS().filter(function (x) { return x.key === det.intent; })[0] || null;
+      if (!def || def.kind !== 'write') return null;
+      if (pend.action_type !== det.intent) return null;
+      if (Date.now() - Date.parse(pend.created_at) > 30 * 60000) return null;
+      var p = pend.request_data || {};
+      if (det.entities.amount != null && Number(p.amount) !== Number(det.entities.amount)) return null;
+      if (det.entities.account_id && p.account_id && p.account_id !== det.entities.account_id) return null;
+      if (det.entities.credit_card_id && p.credit_card_id && p.credit_card_id !== det.entities.credit_card_id) return null;
+      return pend;
+    },
+    waSendConfirmation: function (row, conn, pending) {
+      var body = (pending.summary || 'Confirmar?') + '\n\n1. Confirmar\n2. Editar\n3. Cancelar';
+      DB.waSendReply(row, conn, body.slice(0, 1500), { type: 'confirm', actionId: pending.id, buttons: ['Confirmar', 'Editar', 'Cancelar'] });
+    },
+    /* Retry de falha transitória (idempotente: já processado não repete). */
+    whatsappRetryMessage: function (userId, externalId, provider) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var row = db.whatsapp_messages.filter(function (x) { return x.external_message_id === externalId && (!provider || x.provider === provider) && x.direction === 'inbound'; })[0] || null;
+      if (!row) throw new Error('Mensagem não encontrada.');
+      if (row.couple_id && row.couple_id !== cid) throw new Error('Mensagem não encontrada.');
+      if (row.status === 'processed') return { status: 'ignored', reason: 'already-processed' };
+      var fail = db.whatsapp_message_failures.filter(function (x) { return x.external_message_id === externalId; })[0] || null;
+      if (fail) fail.attempts += 1;
+      row.status = 'processing';
+      write(db);
+      try {
+        var res = row.text ? DB.whatsappProcessInbound(row.id, row.text, row.phone_masked) : DB.whatsappHandleMedia(row.id);
+        return res;
+      } catch (e) {
+        var db2 = read();
+        var r2 = db2.whatsapp_messages.find(function (x) { return x.id === row.id; });
+        if (r2) { r2.status = 'failed'; r2.error = String((e && e.message) || e).slice(0, 300); }
+        write(db2);
+        throw e;
+      }
+    },
+    /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
+       Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
+       notifications → deliveries (in_app/whatsapp; email/push futuros).
+       Só eventos operacionais explícitos; insights viram notificação só no
+       Prompt 25. Sem lógica financeira própria (usa status/totais oficiais). */
+    NOTIFICATION_TYPES: function () {
+      return [
+        { key: 'invoice_due_soon', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: true, maxAttempts: 3, route: 'invoices' },
+        { key: 'invoice_overdue', priority: 'important', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 168, retry: true, maxAttempts: 3, route: 'invoices' },
+        { key: 'budget_threshold', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 48, retry: false, maxAttempts: 1, route: 'budget' },
+        { key: 'recurring_due', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 48, retry: false, maxAttempts: 1, route: 'recurring' },
+        { key: 'installment_due', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'installments' },
+        { key: 'goal_deadline', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'goals' },
+        { key: 'reconciliation_pending', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'imports' },
+        { key: 'settlement_pending', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'settlements' },
+        { key: 'automation_error', priority: 'important', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 168, retry: true, maxAttempts: 3, route: 'settings' },
+        { key: 'import_completed', priority: 'info', channels: ['in_app'], cooldownH: 1, expiresInH: 72, retry: false, maxAttempts: 1, route: 'imports' },
+        { key: 'import_failed', priority: 'important', channels: ['in_app', 'whatsapp'], cooldownH: 1, expiresInH: 168, retry: false, maxAttempts: 1, route: 'imports' },
+        { key: 'account_event', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'accounts' },
+        { key: 'card_event', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'cards' },
+        { key: 'category_change', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'reports' },
+        { key: 'spending_change', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'reports' },
+        { key: 'unusual_spending', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'transactions' },
+        { key: 'upcoming_commitments', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'calendar' },
+        { key: 'insight_digest', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'insights' },
+        { key: 'daily_digest', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'notifications' },
+        { key: 'weekly_digest', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 168, retry: false, maxAttempts: 1, route: 'notifications' },
+        { key: 'plan_variance_detected', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'planning' },
+        { key: 'planned_commitment_upcoming', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'planning' },
+        { key: 'projected_cashflow_change', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'planning' },
+        { key: 'plan_item_due', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'planning' },
+        { key: 'goal_plan_variance', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 168, retry: false, maxAttempts: 1, route: 'planning' },
+        { key: 'of_sync_completed', priority: 'info', channels: ['in_app'], cooldownH: 6, expiresInH: 72, retry: false, maxAttempts: 1, route: 'openfinance' },
+        { key: 'of_sync_failed', priority: 'important', channels: ['in_app', 'whatsapp'], cooldownH: 6, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' },
+        { key: 'of_reconciliation_pending', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' },
+        { key: 'of_connection_attention', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' }
+      ];
+    },
+    notifTypeDef: function (type) {
+      return DB.NOTIFICATION_TYPES().filter(function (t) { return t.key === type; })[0] || null;
+    },
+    /* Preferências: ausente = habilitado. Por usuário/casal/canal/tipo. */
+    notifGetPreferences: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.notification_preferences.filter(function (p) { return p.couple_id === cid && (p.user_id === userId || p.user_id === null); });
+    },
+    notifSetPreference: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var type = String((data && data.notification_type) || '');
+      var channel = String((data && data.channel) || 'in_app');
+      if (!DB.notifTypeDef(type)) throw new Error('Tipo inválido.');
+      if (['in_app', 'whatsapp', 'email', 'push'].indexOf(channel) < 0) throw new Error('Canal inválido.');
+      var scope = (data && data.scope) === 'couple' ? null : userId;
+      var ex = db.notification_preferences.filter(function (p) { return p.couple_id === cid && (p.user_id || null) === scope && p.channel === channel && p.notification_type === type; })[0] || null;
+      function b(v, d) { return v == null ? d : !!v; }
+      if (!ex) {
+        ex = { id: id('np'), couple_id: cid, user_id: scope, channel: channel, notification_type: type, enabled: true, quiet_hours_enabled: true, quiet_hours_start: '22:00', quiet_hours_end: '08:00', frequency: 'immediate', digest_enabled: false, created_at: now(), updated_at: now() };
+        db.notification_preferences.push(ex);
+      }
+      if (data.enabled !== undefined) ex.enabled = !!data.enabled;
+      if (data.quiet_hours_enabled !== undefined) ex.quiet_hours_enabled = !!data.quiet_hours_enabled;
+      if (data.quiet_hours_start !== undefined) ex.quiet_hours_start = String(data.quiet_hours_start).slice(0, 5);
+      if (data.quiet_hours_end !== undefined) ex.quiet_hours_end = String(data.quiet_hours_end).slice(0, 5);
+      if (data.frequency !== undefined) ex.frequency = String(data.frequency).slice(0, 20);
+      if (data.digest_enabled !== undefined) ex.digest_enabled = !!data.digest_enabled;
+      ex.updated_at = now();
+      logAudit(db, cid, userId, 'notification_preference', ex.id, 'update', { type: type, channel: channel });
+      write(db);
+      return ex;
+    },
+    notifPrefFor: function (db, cid, userId, type, channel) {
+      var rows = db.notification_preferences.filter(function (p) {
+        return p.couple_id === cid && p.notification_type === type && p.channel === channel && (p.user_id === userId || p.user_id === null);
+      });
+      var mine = rows.filter(function (p) { return p.user_id === userId; })[0];
+      return mine || rows[0] || null;
+    },
+    notifIsEnabled: function (db, cid, userId, type, channel) {
+      var p = DB.notifPrefFor(db, cid, userId, type, channel);
+      return !p || !!p.enabled;
+    },
+    /* Quiet hours com virada de meia-noite (HH:MM). Sem pref = sem silêncio. */
+    notifInQuietHours: function (pref, nowISO) {
+      if (!pref || !pref.quiet_hours_enabled) return false;
+      function mins(s) { var p = String(s || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+      var t = new Date(nowISO || now());
+      var cur = t.getHours() * 60 + t.getMinutes();
+      var s = mins(pref.quiet_hours_start), e = mins(pref.quiet_hours_end);
+      if (s === e) return false;
+      return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
+    },
+    notifQuietEnd: function (pref, nowISO) {
+      var t = new Date(nowISO || now());
+      function mins(s) { var p = String(s || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+      var e = mins(pref.quiet_hours_end);
+      var d = new Date(t);
+      d.setHours(Math.floor(e / 60), e % 60, 0, 0);
+      if (d <= t) d.setDate(d.getDate() + 1);
+      return d.toISOString();
+    },
+    /* Decisão central: habilitado? cooldown? duplicado? (quiet avalia no envio). */
+    notifShouldCreate: function (db, cid, userId, type, idempotencyKey, cooldownH) {
+      if (!DB.notifTypeDef(type)) return { ok: false, reason: 'tipo inválido' };
+      function ent(key) { var p = String(key || '').split('|'); if (p.length < 4) return 'raw:' + String(key); return (p[2] || '-') + ':' + (p[3] || '-') + ':' + (p[4] || ''); }
+      var dup = db.notifications.filter(function (n) {
+        return n.couple_id === cid && n.idempotency_key === idempotencyKey && ['pending', 'scheduled', 'processing', 'sent', 'delivered', 'read'].indexOf(n.status) >= 0;
+      })[0] || null;
+      if (dup) return { ok: false, reason: 'duplicate', existing: dup };
+      var since = Date.now() - cooldownH * 3600000;
+      var cool = db.notifications.filter(function (n) {
+        return n.couple_id === cid && n.type === type && n.idempotency_key !== idempotencyKey &&
+          ent(n.idempotency_key) === ent(idempotencyKey) && Date.parse(n.created_at) >= since &&
+          ['pending', 'scheduled', 'processing', 'sent', 'delivered', 'read', 'dismissed'].indexOf(n.status) >= 0;
+      })[0] || null;
+      if (cool) return { ok: false, reason: 'cooldown', existing: cool };
+      return { ok: true };
+    },
+    /* Cria + decide canais + agenda/entrega. Idempotente por chave. */
+    notifCreate: function (userId, data, opts) {
+      opts = opts || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var def = DB.notifTypeDef(data.type);
+      if (!def) throw new Error('Tipo inválido.');
+      var target = data.user_id || userId;
+      if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === target; })) throw new Error('Destinatário inválido.');
+      var key = String(data.idempotency_key || [data.type, cid, data.related_entity_type || '-', data.related_entity_id || '-', data.event_id || '-'].join('|'));
+      var dec = DB.notifShouldCreate(db, cid, userId, data.type, key, def.cooldownH);
+      if (!dec.ok && dec.existing) return dec.existing;
+      if (!dec.ok) throw new Error('Notificação suprimida (' + dec.reason + ').');
+      var n = {
+        id: id('nt'), couple_id: cid, user_id: target, type: data.type, channel: 'multi', origin: data.origin || 'operational',
+        title: String(data.title || def.key).slice(0, 140), body: String(data.body || '').slice(0, 500),
+        status: 'pending', priority: data.priority || def.priority,
+        related_entity_type: data.related_entity_type || null, related_entity_id: data.related_entity_id || null,
+        event_id: data.event_id || null, scheduled_for: data.scheduled_for || null,
+        sent_at: null, read_at: null, dismissed_at: null,
+        expires_at: data.expires_at || new Date(Date.now() + def.expiresInH * 3600000).toISOString(),
+        idempotency_key: key, payload: data.payload || {}, created_at: now(), updated_at: now()
+      };
+      db.notifications.push(n);
+      logAudit(db, cid, userId, 'notification', n.id, 'created', { type: n.type });
+      write(db);
+      DB.notifEvaluate(n.id, opts);
+      return DB.notifGet(userId, n.id);
+    },
+    notifGet: function (userId, notifId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n || !DB.notifVisible(db, cid, userId, n)) throw new Error('Notificação não encontrada.');
+      return n;
+    },
+    notifVisible: function (db, cid, userId, n) {
+      return n.couple_id === cid && (n.user_id === userId || n.user_id === null);
+    },
+    /* Avalia canais: prefs → quiet (reagenda) → cria deliveries → entrega. */
+    notifEvaluate: function (notifId, opts) {
+      opts = opts || {};
+      var db = read();
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n) throw new Error('Notificação não encontrada.');
+      if (['cancelled', 'expired', 'dismissed', 'read'].indexOf(n.status) >= 0) return n;
+      var def = DB.notifTypeDef(n.type);
+      var nowISO = opts.nowISO || now();
+      var channels = (opts.channels || def.channels).filter(function (ch) {
+        return DB.notifIsEnabled(db, n.couple_id, n.user_id, n.type, ch);
+      });
+      if (!channels.length) {
+        n.status = 'cancelled'; n.updated_at = now();
+        logAudit(db, n.couple_id, n.user_id, 'notification', n.id, 'cancelled', { reason: 'disabled' });
+        write(db);
+        return n;
+      }
+      var deliverNow = [], deliverLater = null;
+      channels.forEach(function (ch) {
+        var pref = DB.notifPrefFor(db, n.couple_id, n.user_id, n.type, ch);
+        if (DB.notifInQuietHours(pref, nowISO) && n.priority !== 'important') {
+          var end = DB.notifQuietEnd(pref, nowISO);
+          if (!deliverLater || end < deliverLater) deliverLater = end;
+          return;
+        }
+        deliverNow.push(ch);
+      });
+      if (!deliverNow.length && deliverLater) {
+        n.status = 'scheduled'; n.scheduled_for = deliverLater; n.updated_at = now();
+        logAudit(db, n.couple_id, n.user_id, 'notification', n.id, 'scheduled', { reason: 'quiet_hours' });
+        write(db);
+        return n;
+      }
+      n.status = 'processing'; n.updated_at = now();
+      write(db);
+      var anySent = false, anyFail = false;
+      deliverNow.forEach(function (ch) {
+        var d = DB.notifCreateDelivery(n.id, ch);
+        try {
+          DB.notifDeliver(d.id, opts);
+          anySent = true;
+        } catch (e) { anyFail = true; }
+      });
+      var db2 = read();
+      var n2 = db2.notifications.find(function (x) { return x.id === notifId; });
+      if (n2) {
+        n2.status = anySent ? 'sent' : (deliverLater ? 'scheduled' : (anyFail ? 'failed' : n2.status));
+        if (deliverLater && !anySent) n2.scheduled_for = deliverLater;
+        if (anySent && !n2.sent_at) n2.sent_at = now();
+        n2.updated_at = now();
+        logAudit(db2, n2.couple_id, n2.user_id, 'notification', n2.id, anySent ? 'sent' : (deliverLater ? 'scheduled' : 'failed'), {});
+        write(db2);
+      }
+      return DB.notifGetAny(notifId);
+    },
+    notifGetAny: function (notifId) {
+      var db = read();
+      return db.notifications.find(function (x) { return x.id === notifId; });
+    },
+    notifCreateDelivery: function (notifId, channel) {
+      var db = read();
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n) throw new Error('Notificação não encontrada.');
+      var ex = db.notification_deliveries.filter(function (d) { return d.notification_id === notifId && d.channel === channel; })[0] || null;
+      if (ex) return ex;
+      var d = { id: id('nd'), notification_id: notifId, couple_id: n.couple_id, user_id: n.user_id, channel: channel, provider: channel === 'whatsapp' ? DB.WHATSAPP_CONFIG().provider : (channel === 'in_app' ? 'in-app' : channel), status: 'pending', attempt_count: 0, last_error: null, provider_message_id: null, sent_at: null, delivered_at: null, read_at: null, created_at: now(), updated_at: now() };
+      db.notification_deliveries.push(d);
+      write(db);
+      return d;
+    },
+    /* Entrega por canal. in_app = imediato; whatsapp via adapter P23;
+       email/push sem provider → erro explícito (sem simular envio). */
+    notifDeliver: function (deliveryId, opts) {
+      opts = opts || {};
+      var db = read();
+      var d = db.notification_deliveries.find(function (x) { return x.id === deliveryId; });
+      if (!d) throw new Error('Entrega não encontrada.');
+      if (d.status === 'sent' || d.status === 'delivered' || d.status === 'read') return d;
+      var n = db.notifications.find(function (x) { return x.id === d.notification_id; });
+      if (!n) throw new Error('Notificação não encontrada.');
+      var def = DB.notifTypeDef(n.type);
+      d.status = 'processing'; d.attempt_count += 1; d.updated_at = now();
+      write(db);
+      try {
+        if (d.channel === 'in_app') {
+          d.status = 'delivered'; d.delivered_at = now(); d.sent_at = d.sent_at || now();
+        } else if (d.channel === 'whatsapp') {
+          DB.notifDeliverWhatsapp(d.id);
+          d.status = 'sent'; d.sent_at = now();
+        } else if (d.channel === 'email' || d.channel === 'push') {
+          throw new Error('Canal sem provedor configurado.');
+        } else throw new Error('Canal desconhecido.');
+        d.updated_at = now();
+        logAudit(db, d.couple_id, d.user_id, 'notification_delivery', d.id, 'sent', { channel: d.channel });
+        write(db);
+        return d;
+      } catch (e) {
+        var db2 = read();
+        var r2 = db2.notification_deliveries.find(function (x) { return x.id === deliveryId; });
+        r2.last_error = String((e && e.message) || e).slice(0, 200);
+        var max = (def && def.maxAttempts) || 1;
+        r2.status = r2.attempt_count >= max ? 'failed' : 'pending';
+        r2.updated_at = now();
+        logAudit(db2, r2.couple_id, r2.user_id, 'notification_delivery', r2.id, 'failed', { channel: r2.channel });
+        write(db2);
+        throw new Error(r2.last_error);
+      }
+    },
+    /* Canal WhatsApp: só entrega, sem lógica financeira. Falha registrada,
+       sem bloquear o in-app. */
+    notifDeliverWhatsapp: function (deliveryId) {
+      var db = read();
+      var d = db.notification_deliveries.find(function (x) { return x.id === deliveryId; });
+      var n = d && db.notifications.find(function (x) { return x.id === d.notification_id; });
+      if (!d || !n) throw new Error('Entrega não encontrada.');
+      if (DB._waNotifFail) throw new Error('Provedor indisponível.');
+      var conn = db.whatsapp_connections.filter(function (c) { return c.couple_id === n.couple_id && c.user_id === n.user_id && c.status === 'active'; })[0] || null;
+      if (!conn) throw new Error('WhatsApp não conectado.');
+      var text = n.title + (n.body ? '\n' + n.body : '');
+      DB.waSend(conn.phone_hash, text.slice(0, 1500), { preHashed: true, toLabel: conn.phone_masked || '(whatsapp)', provider: conn.provider, coupleId: n.couple_id, userId: n.user_id });
+      return true;
+    },
+    notifRetry: function (userId, deliveryId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var d = db.notification_deliveries.find(function (x) { return x.id === deliveryId; });
+      if (!d || d.couple_id !== cid) throw new Error('Entrega não encontrada.');
+      if (['sent', 'delivered', 'read'].indexOf(d.status) >= 0) return d;
+      var n = db.notifications.find(function (x) { return x.id === d.notification_id; });
+      if (n && n.status === 'expired') throw new Error('Notificação expirada.');
+      var def = n && DB.notifTypeDef(n.type);
+      var max = (def && def.maxAttempts) || 1;
+      if (d.attempt_count >= max) throw new Error('Limite de tentativas.');
+      d.status = 'pending'; d.updated_at = now();
+      write(db);
+      DB.notifDeliver(deliveryId, {});
+      return DB.notifGetDelivery(userId, deliveryId);
+    },
+    notifGetDelivery: function (userId, deliveryId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var d = db.notification_deliveries.find(function (x) { return x.id === deliveryId; });
+      if (!d || d.couple_id !== cid) throw new Error('Entrega não encontrada.');
+      return d;
+    },
+    notifCancel: function (userId, notifId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n || !DB.notifVisible(db, cid, userId, n)) throw new Error('Notificação não encontrada.');
+      n.status = 'cancelled'; n.updated_at = now();
+      db.notification_deliveries.forEach(function (d) {
+        if (d.notification_id === notifId && ['pending', 'processing'].indexOf(d.status) >= 0) { d.status = 'cancelled'; d.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'notification', n.id, 'cancelled', {});
+      write(db);
+      return n;
+    },
+    notifExpireDue: function () {
+      var db = read(), n = 0;
+      var t = now();
+      db.notifications.forEach(function (x) {
+        if (['pending', 'scheduled', 'processing', 'sent', 'delivered'].indexOf(x.status) >= 0 && x.expires_at && x.expires_at < t) {
+          x.status = 'expired'; x.updated_at = now(); n++;
+          logAudit(db, x.couple_id, x.user_id, 'notification', x.id, 'expired', {});
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    notifRead: function (userId, notifId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n || !DB.notifVisible(db, cid, userId, n)) throw new Error('Notificação não encontrada.');
+      if (n.status !== 'read') { n.status = 'read'; n.read_at = now(); n.updated_at = now(); }
+      db.notification_deliveries.forEach(function (d) {
+        if (d.notification_id === notifId && ['sent', 'delivered'].indexOf(d.status) >= 0) { d.status = 'read'; d.read_at = now(); d.updated_at = now(); }
+      });
+      logAudit(db, cid, userId, 'notification', n.id, 'read', {});
+      write(db);
+      return n;
+    },
+    notifDismiss: function (userId, notifId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = db.notifications.find(function (x) { return x.id === notifId; });
+      if (!n || !DB.notifVisible(db, cid, userId, n)) throw new Error('Notificação não encontrada.');
+      n.status = 'dismissed'; n.dismissed_at = now(); n.updated_at = now();
+      logAudit(db, cid, userId, 'notification', n.id, 'dismissed', {});
+      write(db);
+      return n;
+    },
+    notifMarkAllRead: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = 0;
+      db.notifications.forEach(function (x) {
+        if (x.couple_id === cid && (x.user_id === userId || x.user_id === null) && ['sent', 'delivered'].indexOf(x.status) >= 0) {
+          x.status = 'read'; x.read_at = now(); x.updated_at = now(); n++;
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    notifList: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.notifications.filter(function (n) {
+        if (!DB.notifVisible(db, cid, userId, n)) return false;
+        if (f.unread && ['sent', 'delivered'].indexOf(n.status) < 0) return false;
+        if (f.important && n.priority !== 'important') return false;
+        if (f.type && n.type !== f.type) return false;
+        if (f.status && n.status !== f.status) return false;
+        return true;
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 100);
+    },
+    notifUnreadCount: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return 0;
+      var n = 0;
+      db.notifications.forEach(function (x) {
+        if (x.couple_id === cid && (x.user_id === userId || x.user_id === null) && ['sent', 'delivered'].indexOf(x.status) >= 0) n++;
+      });
+      return n;
+    },
+    /* Deep link validado: entidade precisa pertencer ao casal. */
+    notifDeepLink: function (userId, notifId) {
+      var n = DB.notifGet(userId, notifId);
+      var routes = { invoices: '#/invoices', budget: '#/budget', installments: '#/installments', goals: '#/goals', settlements: '#/settlements', imports: '#/imports', settings: '#/settings', accounts: '#/accounts', cards: '#/cards', recurring: '#/calendar', planning: '#/planning', openfinance: '#/openfinance' };
+      var def = DB.notifTypeDef(n.type);
+      var base = routes[(def && def.route) || ''] || '#/dashboard';
+      if (!n.related_entity_id) return base;
+      var db = read(), cid = DB.myCoupleId(userId);
+      var tables = { invoice: 'invoices', import: 'import_batches', goal: 'goals', plan: 'financial_plans' };
+      var tname = tables[n.related_entity_type];
+      if (tname) {
+        var ok = (db[tname] || []).some(function (x) { return x.id === n.related_entity_id && x.couple_id === cid; });
+        if (!ok) throw new Error('Acesso negado.');
+        if (n.related_entity_type === 'invoice') return '#/invoices';
+        if (n.related_entity_type === 'import') return '#/imports/' + n.related_entity_id;
+        if (n.related_entity_type === 'goal') return '#/goals';
+        if (n.related_entity_type === 'plan') return '#/planning/' + n.related_entity_id;
+      }
+      return base;
+    },
+    /* Varredura determinística: lê o estado oficial e cria o que falta.
+       Também expira o que perdeu a condição (fatura paga, etc.). */
+    notifScan: function (userId, opt) {
+      opt = opt || {};
+      var types = opt.types || DB.NOTIFICATION_TYPES().map(function (t) { return t.key; });
+      var made = [];
+      function emit(type, data) {
+        try {
+          data.type = type;
+          var r = DB.notifCreate(userId, data, { channels: opt.channels, nowISO: opt.nowISO });
+          if (r && r.id) made.push(r.id);
+        } catch (e) { /* suprimida (dup/cooldown/desabilitada): segue */ }
+      }
+      if (types.indexOf('invoice_due_soon') >= 0 || types.indexOf('invoice_overdue') >= 0) {
+        DB.listInvoices(userId, {}).forEach(function (i) {
+          var full = DB.getInvoice(userId, i.id);
+          if (full.status === 'paid' || full.status === 'cancelled') return;
+          var out = DB.calculateInvoiceOutstanding(userId, full.id);
+          if (!(out > 0)) return;
+          var label = ('0' + full.reference_month).slice(-2) + '/' + full.reference_year;
+          if (full.status === 'overdue' && types.indexOf('invoice_overdue') >= 0) {
+            emit('invoice_overdue', { title: 'Fatura vencida', body: 'Fatura ' + label + ' (' + DB.aiMoney(out) + ') em aberto.', priority: 'important', related_entity_type: 'invoice', related_entity_id: full.id, idempotency_key: ['invoice_overdue', DB.myCoupleId(userId), 'invoice', full.id, full.due_date].join('|'), payload: { ref: label } });
+          } else if ((full.status === 'open' || full.status === 'closed') && types.indexOf('invoice_due_soon') >= 0) {
+            var dd = Math.round((Date.parse(full.due_date) - Date.parse((opt.nowISO || now()).slice(0, 10))) / 864e5);
+            if (dd >= 0 && dd <= 7) {
+              emit('invoice_due_soon', { title: 'Fatura próxima do vencimento', body: 'Fatura ' + label + ' (' + DB.aiMoney(out) + ') vence em ' + dd + (dd === 1 ? ' dia.' : ' dias.'), related_entity_type: 'invoice', related_entity_id: full.id, idempotency_key: ['invoice_due_soon', DB.myCoupleId(userId), 'invoice', full.id, full.due_date].join('|'), payload: { ref: label, days: dd } });
+            }
+          }
+        });
+      }
+      if (types.indexOf('budget_threshold') >= 0) {
+        var ym = (opt.nowISO || now()).slice(0, 7);
+        var bs = DB.budgetSummary(userId, ym);
+        bs.items.forEach(function (it) {
+          [80, 90, 100].forEach(function (th) {
+            if (it.pct >= th) {
+              emit('budget_threshold', { title: it.pct >= 100 ? 'Orçamento excedido' : 'Orçamento próximo do limite', body: it.name + ': ' + DB.aiMoney(it.spent) + ' de ' + DB.aiMoney(it.limit) + ' (' + String(it.pct).replace('.', ',') + '%).', priority: it.pct >= 100 ? 'important' : 'attention', related_entity_type: 'category', related_entity_id: it.category_id, idempotency_key: ['budget_threshold', DB.myCoupleId(userId), it.category_id, ym, th].join('|'), payload: { pct: it.pct, threshold: th } });
+            }
+          });
+        });
+      }
+      if (types.indexOf('recurring_due') >= 0) {
+        var t0 = (opt.nowISO || now()).slice(0, 10);
+        DB.listOccurrences(userId, t0, DB.dateAddDays(t0, 7), true).slice(0, 10).forEach(function (o) {
+          emit('recurring_due', { title: 'Recorrente próxima', body: (o.rec ? o.rec.description : 'Conta') + ' (' + DB.aiMoney(o.amount) + ') vence ' + o.due_date.split('-').reverse().join('/') + '.', related_entity_type: 'recurring', related_entity_id: o.recurring_transaction_id, idempotency_key: ['recurring_due', DB.myCoupleId(userId), o.recurring_transaction_id, o.due_date].join('|'), payload: { due: o.due_date } });
+        });
+      }
+      if (types.indexOf('installment_due') >= 0) {
+        var t1 = (opt.nowISO || now()).slice(0, 10);
+        var aI = DB.analyzeFinancialPeriod(userId, { periodStart: t1.slice(0, 7) + '-01', periodEnd: t1.slice(0, 7) + '-28', view: 'couple' });
+        (aI.data.installments.next || []).filter(function (r) { return r.dueDate <= DB.dateAddDays(t1, 7); }).forEach(function (r) {
+          emit('installment_due', { title: 'Parcela próxima', body: 'Parcela ' + r.number + ' (' + DB.aiMoney(r.amount) + ') vence ' + r.dueDate.split('-').reverse().join('/') + '.', related_entity_type: 'installment', related_entity_id: r.id, idempotency_key: ['installment_due', DB.myCoupleId(userId), r.id].join('|'), payload: { due: r.dueDate } });
+        });
+      }
+      if (types.indexOf('goal_deadline') >= 0) {
+        var t2 = (opt.nowISO || now()).slice(0, 10);
+        DB.listGoals(userId, false).filter(function (g) { return g.status === 'active' && g.deadline; }).forEach(function (g) {
+          var dl = Math.round((Date.parse(g.deadline) - Date.parse(t2)) / 864e5);
+          if (dl >= 0 && dl <= 30) {
+            emit('goal_deadline', { title: 'Meta próxima do prazo', body: '"' + g.name + '" vence ' + g.deadline.split('-').reverse().join('/') + ' (' + DB.aiMoney(g.target_amount - g.current_amount) + ' restantes).', related_entity_type: 'goal', related_entity_id: g.id, idempotency_key: ['goal_deadline', DB.myCoupleId(userId), g.id, g.deadline].join('|'), payload: { deadline: g.deadline } });
+          }
+          if (g.status === 'completed' || g.current_amount >= g.target_amount) {
+            emit('goal_deadline', { title: 'Meta atingida', body: '"' + g.name + '" chegou a ' + DB.aiMoney(g.current_amount) + '.', priority: 'info', related_entity_type: 'goal', related_entity_id: g.id, idempotency_key: ['goal_done', DB.myCoupleId(userId), g.id].join('|'), payload: {} });
+          }
+        });
+      }
+      if (types.indexOf('settlement_pending') >= 0 && DB.moneyMode(userId) !== 'JOINT') {
+        var st = DB.settle(userId);
+        if (st.debt && st.debt.amount >= 10) {
+          emit('settlement_pending', { title: 'Acerto pendente', body: 'Existe um acerto de ' + DB.aiMoney(st.debt.amount) + ' entre vocês.', related_entity_type: null, related_entity_id: null, idempotency_key: ['settlement_pending', DB.myCoupleId(userId), Math.round(st.debt.amount * 100)].join('|'), payload: {} });
+        }
+      }
+      if (types.indexOf('reconciliation_pending') >= 0) {
+        var db = read(), cid = DB.myCoupleId(userId);
+        var pend = db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.status === 'valid'; }).length;
+        if (pend >= 5) {
+          emit('reconciliation_pending', { title: 'Conciliação pendente', body: pend + ' movimentações importadas aguardam conciliação.', related_entity_type: null, related_entity_id: null, idempotency_key: ['reconciliation_pending', cid, pend].join('|'), payload: { count: pend } });
+        }
+      }
+      if (types.indexOf('automation_error') >= 0) {
+        var st2 = DB.automationStatus(userId);
+        if (st2.failed > 0) {
+          emit('automation_error', { title: 'Automação com falha', body: st2.failed + ' execução(ões) de automação falharam. Veja os detalhes.', priority: 'important', related_entity_type: null, related_entity_id: null, idempotency_key: ['automation_error', DB.myCoupleId(userId), st2.failed].join('|'), payload: { failed: st2.failed } });
+        }
+      }
+      if (types.indexOf('import_completed') >= 0 || types.indexOf('import_failed') >= 0) {
+        DB.listImportBatches(userId, {}).slice(0, 5).forEach(function (b) {
+          if (b.status === 'completed' && types.indexOf('import_completed') >= 0) {
+            emit('import_completed', { title: 'Importação concluída', body: (b.file_name || 'Arquivo') + ': ' + b.imported_rows + ' lançamentos importados.', priority: 'info', related_entity_type: 'import', related_entity_id: b.id, idempotency_key: ['import_completed', DB.myCoupleId(userId), b.id].join('|'), payload: {} });
+          } else if (b.status === 'failed' && types.indexOf('import_failed') >= 0) {
+            emit('import_failed', { title: 'Importação com erro', body: (b.file_name || 'Arquivo') + ' não pôde ser concluída. Revise os itens.', priority: 'important', related_entity_type: 'import', related_entity_id: b.id, idempotency_key: ['import_failed', DB.myCoupleId(userId), b.id].join('|'), payload: {} });
+          }
+        });
+      }
+      DB.notifExpireStale(userId, types, opt);
+      return made;
+    },
+    /* Expira ativas cuja condição sumiu (fatura paga, etc.). */
+    notifExpireStale: function (userId, types, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      function expire(n, why) {
+        if (['pending', 'scheduled', 'processing', 'sent', 'delivered'].indexOf(n.status) < 0) return;
+        n.status = 'expired'; n.updated_at = now();
+        logAudit(db, cid, userId, 'notification', n.id, 'expired', { why: why });
+      }
+      db.notifications.forEach(function (n) {
+        if (n.couple_id !== cid || types.indexOf(n.type) < 0) return;
+        if (['pending', 'scheduled', 'processing', 'sent', 'delivered'].indexOf(n.status) < 0) return;
+        if (n.type === 'invoice_due_soon' || n.type === 'invoice_overdue') {
+          var inv = n.related_entity_id ? db.invoices.find(function (i) { return i.id === n.related_entity_id; }) : null;
+          if (!inv || inv.status === 'paid' || inv.status === 'cancelled') expire(n, 'fatura paga');
+          else if (toCents(inv.paid_amount) >= toCents(DB.calculateInvoiceTotal(userId, inv.id))) expire(n, 'fatura paga');
+        } else if (n.type === 'settlement_pending') {
+          var st = DB.settle(userId);
+          if (!st.debt || st.debt.amount < 10) expire(n, 'sem pendência');
+        } else if (n.type === 'reconciliation_pending') {
+          var pend = db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.status === 'valid'; }).length;
+          if (pend < 5) expire(n, 'sem pendência');
+        } else if (n.type === 'goal_deadline') {
+          var g = n.related_entity_id ? db.goals.find(function (x) { return x.id === n.related_entity_id; }) : null;
+          if (!g || g.status !== 'active') expire(n, 'meta concluída');
+        } else if (n.type === 'installment_due') {
+          var ins = n.related_entity_id ? db.installments.find(function (x) { return x.id === n.related_entity_id; }) : null;
+          if (!ins || ins.status !== 'pending' || ins.deleted_at) expire(n, 'parcela resolvida');
+        } else if (n.type === 'recurring_due') {
+          var occ = db.recurring_occurrences.filter(function (x) { return x.couple_id === cid && x.status === 'pending'; });
+          if (!occ.length) expire(n, 'sem pendência');
+        }
+      });
+      write(db);
+    },
+    /* Entrada por evento financeiro (FinancialEventService/Automation). */
+    notifProcessEvent: function (userId, event) {
+      var t = String((event && (event.event_type || event.type)) || '');
+      var map = [
+        { match: ['invoice'], types: ['invoice_due_soon', 'invoice_overdue'] },
+        { match: ['budget'], types: ['budget_threshold'] },
+        { match: ['recurring', 'occurrence'], types: ['recurring_due'] },
+        { match: ['installment'], types: ['installment_due'] },
+        { match: ['goal'], types: ['goal_deadline'] },
+        { match: ['settlement'], types: ['settlement_pending'] },
+        { match: ['import', 'reconciliation'], types: ['reconciliation_pending', 'import_completed', 'import_failed'] },
+        { match: ['automation', 'job'], types: ['automation_error'] },
+        { match: ['transaction', 'transfer'], types: ['budget_threshold', 'settlement_pending'] }
+      ];
+      var types = [];
+      map.forEach(function (m) {
+        if (m.match.some(function (p) { return t === p || t.indexOf(p + '.') === 0 || t.indexOf(p + '_') === 0; })) types = types.concat(m.types);
+      });
+      if (!types.length) return [];
+      return DB.notifScan(userId, { types: types });
+    },
+    /* ============ PROMPT 25: NOTIFICAÇÕES INTELIGENTES (decisão, sem IA) ============
+       Eventos/insights → relevância/urgência determinísticas → decisão
+       (notificar/agrupar/digest/adiar/suprimir) → NotificationEngine (P24)
+       entrega. Sem score financeiro, sem julgamento, sem LLM. */
+    INTEL_POLICIES: function () {
+      return [
+        { rule: 'category_change', type: 'category_change', enabled: true, minRelevance: 0.5, minPct: 20, minAbs: 100, historyMonths: 3, minHistoryPoints: 3, cooldownH: 72, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'spending_change', type: 'spending_change', enabled: true, minRelevance: 0.5, minPct: 15, minAbs: 200, historyMonths: 3, minHistoryPoints: 3, cooldownH: 72, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'unusual_spending', type: 'unusual_spending', enabled: true, minRelevance: 0.55, minPct: 0, minAbs: 0, historyMonths: 12, minHistoryPoints: 4, cooldownH: 72, frequency: 'immediate', digest: false, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'budget_cross', type: 'budget_threshold', enabled: true, minRelevance: 0.4, minPct: 0, minAbs: 0, historyMonths: 1, minHistoryPoints: 1, cooldownH: 24, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'invoice_due', type: 'invoice_due_soon', enabled: true, minRelevance: 0.35, minPct: 0, minAbs: 50, historyMonths: 1, minHistoryPoints: 1, cooldownH: 24, frequency: 'immediate', digest: false, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'invoice_overdue', type: 'invoice_overdue', enabled: true, minRelevance: 0.3, minPct: 0, minAbs: 1, historyMonths: 1, minHistoryPoints: 1, cooldownH: 24, frequency: 'immediate', digest: false, preferredChannels: ['in_app', 'whatsapp'], priority: 'important' },
+        { rule: 'commitments', type: 'upcoming_commitments', enabled: true, minRelevance: 0.4, minPct: 0, minAbs: 200, historyMonths: 1, minHistoryPoints: 1, cooldownH: 24, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'reconciliation', type: 'reconciliation_pending', enabled: true, minRelevance: 0.35, minPct: 0, minAbs: 0, historyMonths: 1, minHistoryPoints: 1, cooldownH: 24, frequency: 'digest_only', digest: true, preferredChannels: ['in_app'], priority: 'attention' },
+        { rule: 'goal', type: 'goal_deadline', enabled: true, minRelevance: 0.4, minPct: 0, minAbs: 100, historyMonths: 1, minHistoryPoints: 1, cooldownH: 72, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'cashflow', type: 'spending_change', enabled: true, minRelevance: 0.5, minPct: 15, minAbs: 300, historyMonths: 3, minHistoryPoints: 3, cooldownH: 72, frequency: 'immediate', digest: true, preferredChannels: ['in_app', 'whatsapp'], priority: 'attention' },
+        { rule: 'settlement', type: 'settlement_pending', enabled: true, minRelevance: 0.35, minPct: 0, minAbs: 10, historyMonths: 1, minHistoryPoints: 1, cooldownH: 72, frequency: 'digest_only', digest: true, preferredChannels: ['in_app'], priority: 'attention' }
+      ];
+    },
+    intelPolicy: function (rule) {
+      return DB.INTEL_POLICIES().filter(function (p) { return p.rule === rule; })[0] || null;
+    },
+    /* Pesos centrais (nada espalhado): relevância 0..1. */
+    INTEL_WEIGHTS: function () {
+      return { magnitude: 0.45, urgency: 0.3, absolute: 0.15, context: 0.1, repeatPenalty: 0.25, cooldownPenalty: 0.2 };
+    },
+    /* Urgência 0..1 só pelo tempo até agir (vencido = 1). */
+    intelUrgency: function (daysToEvent) {
+      if (daysToEvent == null) return 0.1;
+      if (daysToEvent <= 0) return 1;
+      if (daysToEvent <= 1) return 1;
+      if (daysToEvent <= 3) return 0.8;
+      if (daysToEvent <= 7) return 0.6;
+      if (daysToEvent <= 15) return 0.4;
+      if (daysToEvent <= 30) return 0.2;
+      return 0.1;
+    },
+    /* Relevância = magnitude + urgência + valor absoluto + contexto − repetição.
+       Técnica, interna, nunca exibida como nota. */
+    intelRelevance: function (o) {
+      o = o || {};
+      var W = DB.INTEL_WEIGHTS();
+      function clamp(x) { return Math.max(0, Math.min(1, x)); }
+      var mag = clamp((o.changePct || 0) / 100);
+      var urg = clamp(o.urgency != null ? o.urgency : 0.1);
+      var abs = clamp((o.absValue || 0) / 5000);
+      var ctx = clamp(o.context != null ? o.context : 0.5);
+      var rep = o.repeated ? W.repeatPenalty : 0;
+      var cool = o.inCooldown ? W.cooldownPenalty : 0;
+      return Math.round((W.magnitude * mag + W.urgency * urg + W.absolute * abs + W.context * ctx - rep - cool) * 100) / 100;
+    },
+    /* Candidatos determinísticos (analytics + insights com evidência válida).
+       Períodos equivalentes: mês parcial compara taxa diária (explícito). */
+    intelCandidates: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var per = opt.periodStart && opt.periodEnd
+        ? DB.analyticsResolvePeriod('custom', { start: opt.periodStart, end: opt.periodEnd })
+        : DB.analyticsResolvePeriod(opt.preset || 'current_month');
+      var a = DB.analyzeFinancialPeriod(userId, { periodStart: per.startDate, periodEnd: per.endDate, view: 'couple', filters: opt.filters });
+      var bStartYm = shiftMonth(per.startDate.slice(0, 7), -3);
+      var bEndYm = shiftMonth(per.startDate.slice(0, 7), -1);
+      var base = DB.analyzeFinancialPeriod(userId, { periodStart: bStartYm + '-01', periodEnd: bEndYm + '-' + dim(+bEndYm.slice(0, 4), +bEndYm.slice(5, 7)), view: 'couple', filters: opt.filters });
+      var cands = [];
+      function rateAware(curTotal, baseTotal, days, baseDays, label) {
+        if (!per.isCurrentPeriod || days >= 27) return { cur: curTotal, ref: baseTotal / 3, rateBased: false, label: label };
+        var cur = days > 0 ? curTotal / days : 0, ref = baseDays > 0 ? baseTotal / baseDays : 0;
+        return { cur: curTotal, ref: ref * days, rateBased: true, label: label + ' (taxa diária, mês em andamento)' };
+      }
+      /* 1-2. categoria e gasto total (inclui filhas com contexto do pai) */
+      var bc = {};
+      base.data.categoryAnalysis.forEach(function (c) {
+        bc[c.categoryId] = c.total / 3;
+        (c.children || []).forEach(function (k) { bc[k.categoryId] = k.total / 3; });
+      });
+      function pushCatCand(c, dispName) {
+        var r = rateAware(c.total, (bc[c.categoryId] || 0) * 3, per.days, 90, 'média 3 meses');
+        if ((bc[c.categoryId] || 0) <= 0 || c.total < 100) return;
+        var pct = r.ref > 0 ? (r.cur - r.ref) / r.ref * 100 : 0;
+        if (Math.abs(pct) < 20) return;
+        cands.push({ rule: 'category_change', relevance: DB.intelRelevance({ changePct: Math.abs(pct), urgency: 0.1, absValue: c.total, context: 0.6 }), urgency: 0.1,
+          evidence: { metric: 'category_expense_change', category: dispName, current_value: Math.round(c.total * 100) / 100, reference_value: Math.round(r.ref * 100) / 100, change_percentage: Math.round(pct * 100) / 100, reference_period: r.label, rate_based: r.rateBased },
+          entityType: 'category', entityId: c.categoryId, groupKey: 'spending:' + per.startDate.slice(0, 7), period: per });
+      }
+      a.data.categoryAnalysis.slice(0, 8).forEach(function (c) {
+        pushCatCand(c, c.categoryName);
+        (c.children || []).forEach(function (k) { pushCatCand(k, k.parentName + ' → ' + k.categoryName); });
+      });
+      var rb = rateAware(a.data.metrics.totalExpenses, base.data.metrics.totalExpenses, per.days, 90, 'média 3 meses');
+      if (rb.ref > 0 && a.data.metrics.totalExpenses >= 200) {
+        var p = (rb.cur - rb.ref) / rb.ref * 100;
+        if (Math.abs(p) >= 15) {
+          cands.push({ rule: 'spending_change', relevance: DB.intelRelevance({ changePct: Math.abs(p), urgency: 0.1, absValue: a.data.metrics.totalExpenses, context: 0.6 }), urgency: 0.1,
+            evidence: { metric: 'spending_change', current_value: a.data.metrics.totalExpenses, reference_value: Math.round(rb.ref * 100) / 100, change_percentage: Math.round(p * 100) / 100, reference_period: rb.label, rate_based: rb.rateBased },
+            entityType: null, entityId: null, groupKey: 'spending:' + per.startDate.slice(0, 7), period: per });
+        }
+      }
+      var cf = a.data.comparison.result;
+      if (a.data.metrics.totalIncome > 0 && Math.abs(cf.absoluteDifference) >= a.data.metrics.totalIncome * 0.1 && a.data.monthlyTrend.length >= 3) {
+        cands.push({ rule: 'cashflow', relevance: DB.intelRelevance({ changePct: Math.abs(cf.absoluteDifference) / a.data.metrics.totalIncome * 100, urgency: 0.2, absValue: Math.abs(cf.absoluteDifference), context: 0.6 }), urgency: 0.2,
+          evidence: { metric: 'cashflow_change', current_value: a.data.metrics.financialResult, reference_value: cf.previousValue, change_percentage: null, reference_period: 'período anterior equivalente' },
+          entityType: null, entityId: null, groupKey: 'spending:' + per.startDate.slice(0, 7), period: per });
+      }
+      /* 3. fora do padrão (só com histórico suficiente) */
+      (a.data.unusualExpenses || []).slice(0, 3).forEach(function (u) {
+        cands.push({ rule: 'unusual_spending', relevance: DB.intelRelevance({ changePct: Math.min(200, (u.score || 2) * 50), urgency: 0.2, absValue: u.actualValue, context: 0.7 }), urgency: 0.2,
+          evidence: { metric: 'unusual_expense', transaction_id: u.transactionId, actual_value: u.actualValue, baseline: u.baseline, difference: u.difference, score: u.score },
+          entityType: 'transaction', entityId: u.transactionId, groupKey: 'spending:' + per.startDate.slice(0, 7), period: per });
+      });
+      /* 4. orçamento: transição relevante (cruza threshold p/ cima) */
+      var bl = a.data.budget && a.data.budget.latest;
+      if (bl && bl.month) {
+        (bl.items || []).forEach(function (it) {
+          [80, 90, 100].forEach(function (th) {
+            if (it.pct >= th) {
+              cands.push({ rule: 'budget_cross', relevance: DB.intelRelevance({ changePct: it.pct - th + 10, urgency: it.pct >= 100 ? 0.8 : 0.4, absValue: it.spent, context: 0.7 }), urgency: it.pct >= 100 ? 0.8 : 0.4,
+                evidence: { metric: 'budget_cross', category: it.name, usage: it.pct, threshold: th, limit: it.limit, spent: it.spent },
+                entityType: 'category', entityId: it.category_id, threshold: th, groupKey: 'budget:' + bl.month, period: per });
+            }
+          });
+        });
+      }
+      /* 5-6. faturas (status oficial) */
+      (a.data.invoices || []).forEach(function (inv) {
+        if (inv.outstanding <= 0) return;
+        var today = (opt.nowISO || now()).slice(0, 10);
+        var dd = Math.round((Date.parse(inv.dueDate) - Date.parse(today)) / 864e5);
+        if (inv.status === 'overdue') {
+          cands.push({ rule: 'invoice_overdue', relevance: DB.intelRelevance({ changePct: 100, urgency: 1, absValue: inv.outstanding, context: 0.9 }), urgency: 1,
+            evidence: { metric: 'invoice_overdue', outstanding: inv.outstanding, total: inv.total, due_date: inv.dueDate, status: inv.status },
+            entityType: 'invoice', entityId: inv.invoiceId, groupKey: 'commitments:' + today, period: per });
+        } else if ((inv.status === 'open' || inv.status === 'closed') && dd >= 0 && dd <= 7) {
+          cands.push({ rule: 'invoice_due', relevance: DB.intelRelevance({ changePct: Math.max(10, 100 - dd * 10), urgency: DB.intelUrgency(dd), absValue: inv.outstanding, context: 0.7 }), urgency: DB.intelUrgency(dd),
+            evidence: { metric: 'invoice_due', outstanding: inv.outstanding, total: inv.total, due_date: inv.dueDate, days_to_due: dd },
+            entityType: 'invoice', entityId: inv.invoiceId, groupKey: 'commitments:' + today, period: per });
+        }
+      });
+      /* 7. compromissos próximos */
+      var cal = (a.data.calendar || []).filter(function (e) { return e.kind !== 'goal'; });
+      var tnow = (opt.nowISO || now()).slice(0, 10);
+      var c15 = cal.filter(function (e) { return e.date >= tnow && e.date <= DB.dateAddDays(tnow, 15); });
+      var ctot = Math.round(c15.reduce(function (s, e) { return s + e.amount; }, 0) * 100) / 100;
+      if (ctot >= 200) {
+        cands.push({ rule: 'commitments', relevance: DB.intelRelevance({ changePct: Math.min(100, ctot / 50), urgency: 0.5, absValue: ctot, context: 0.7 }), urgency: 0.5,
+          evidence: { metric: 'upcoming_commitments', total: ctot, count: c15.length, horizon_days: 15 },
+          entityType: null, entityId: null, groupKey: 'commitments:' + tnow, period: per });
+      }
+      /* 8. conciliação (qtd + idade) */
+      var pendRows = db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.status === 'valid'; });
+      if (pendRows.length >= 5) {
+        var oldest = pendRows.map(function (r) { return r.created_at; }).sort()[0] || tnow;
+        var ageD = Math.max(0, Math.round((Date.parse(tnow) - Date.parse(oldest)) / 864e5));
+        cands.push({ rule: 'reconciliation', relevance: DB.intelRelevance({ changePct: Math.min(100, pendRows.length * 10), urgency: 0.3, absValue: pendRows.length * 50, context: 0.5 }), urgency: 0.3,
+          evidence: { metric: 'reconciliation_pending', count: pendRows.length, oldest_days: ageD },
+          entityType: null, entityId: null, groupKey: 'reconciliation', period: per });
+      }
+      /* 9. metas (prazo + restante relevante) */
+      (a.data.goals || []).forEach(function (g) {
+        if (g.status === 'active' && g.deadline) {
+          var dl = Math.round((Date.parse(g.deadline) - Date.parse(tnow)) / 864e5);
+          if (dl >= 0 && dl <= 30 && g.remaining >= 100) {
+            cands.push({ rule: 'goal', relevance: DB.intelRelevance({ changePct: 60, urgency: DB.intelUrgency(dl), absValue: g.remaining, context: 0.6 }), urgency: DB.intelUrgency(dl),
+              evidence: { metric: 'goal_deadline', goal: g.name, remaining: g.remaining, deadline: g.deadline, days_left: dl },
+              entityType: 'goal', entityId: g.id, groupKey: 'goals', period: per });
+          }
+        }
+      });
+      /* 10. acerto */
+      var debt = a.data.settlement && a.data.settlement.debt;
+      if (debt && debt.amount >= 10) {
+        cands.push({ rule: 'settlement', relevance: DB.intelRelevance({ changePct: 40, urgency: 0.3, absValue: debt.amount, context: 0.5 }), urgency: 0.3,
+          evidence: { metric: 'settlement_pending', amount: debt.amount, from: debt.fromName, to: debt.toName },
+          entityType: null, entityId: null, groupKey: 'settlement', period: per });
+      }
+      return { period: per, summaryId: true, candidates: cands };
+    },
+    /* Decide: política → relevância → frequência → cooldown contextual →
+       agrupamento/digest/imediato/supressão. Tudo auditado em decisões. */
+    intelDecide: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var pack = DB.intelCandidates(userId, opt);
+      var out = [];
+      pack.candidates.forEach(function (cd) {
+        var pol = DB.intelPolicy(cd.rule);
+        var d = { rule: cd.rule, relevance: cd.relevance, urgency: cd.urgency, should_notify: false, mode: 'suppressed', reason: 'unknown', priority: pol ? pol.priority : 'attention', channel: 'in_app', evidence: cd.evidence, entityType: cd.entityType, entityId: cd.entityId, groupKey: cd.groupKey };
+        function suppress(reason) {
+          d.should_notify = false; d.mode = (reason === 'digest_only' || reason === 'low_relevance_digest') ? 'digest' : 'suppressed'; d.reason = reason;
+          d.decisionId = DB.intelLogDecision(db, cid, userId, d, cd);
+          out.push(d);
+        }
+        if (!pol || !pol.enabled) return suppress('disabled');
+        var fpBase = [cd.rule, cid, cd.entityType || '-', cd.entityId || '-', cd.threshold != null ? cd.threshold : '-', pack.period.startDate + '_' + pack.period.endDate].join('|');
+        d.fpBase = fpBase;
+        if (cd.relevance < pol.minRelevance) {
+          if (pol.digest && cd.relevance >= pol.minRelevance - 0.15) {
+            d.should_notify = false; d.mode = 'digest'; d.reason = 'borderline_digest';
+            d.decisionId = DB.intelLogDecision(db, cid, userId, d, cd);
+            out.push(d); return;
+          }
+          return suppress('below_threshold');
+        }
+        /* mudança material p/ cooldown contextual: só re-notifica o mesmo
+           grupo com ≥10% de diferença (ou novo período/entidade). Baseado
+           em NOTIFICAÇÕES enviadas, nunca em avaliações (decide puro não
+           pode envenenar o cooldown). */
+        var recentN = db.notifications.filter(function (x) {
+          if (x.couple_id !== cid || x.origin !== 'intelligent') return false;
+          if (['pending', 'scheduled', 'processing', 'sent', 'delivered', 'read'].indexOf(x.status) < 0) return false;
+          if (Date.now() - Date.parse(x.created_at) >= pol.cooldownH * 3600000) return false;
+          var pr = (x.payload && x.payload.rule) || null;
+          var msm = (x.payload && x.payload.members) || [];
+          var ruleMatch = pr === cd.rule || msm.some(function (m) { return m.rule === cd.rule && (m.entityId || null) === (cd.entityId || null); });
+          if (!ruleMatch) return false;
+          if ((x.related_entity_id || null) === (cd.entityId || null)) return true;
+          return msm.some(function (m) { return (m.entityId || null) === (cd.entityId || null); });
+        }).sort(function (a, b) { return b.created_at.localeCompare(a.created_at); })[0] || null;
+        if (recentN) {
+          var oldV = DB.intelNotifiedValue(recentN, cd.entityId);
+          var newV = DB.intelEvidenceValue(cd.evidence);
+          var material = false;
+          if (oldV != null && newV != null && oldV > 0) material = Math.abs(newV - oldV) / oldV >= 0.1;
+          if (!material) return suppress('cooldown');
+          d.materialChange = true;
+        }
+        /* frequência */
+        if (pol.frequency === 'digest_only') return suppress('digest_only');
+        /* preferência do usuário (notification_preferences do P24) */
+        var mapped = { category_change: 'category_change', spending_change: 'spending_change', unusual_spending: 'unusual_spending', budget_cross: 'budget_threshold', invoice_due: 'invoice_due_soon', invoice_overdue: 'invoice_overdue', commitments: 'upcoming_commitments', reconciliation: 'reconciliation_pending', goal: 'goal_deadline', cashflow: 'spending_change', settlement: 'settlement_pending' }[cd.rule];
+        if (mapped) {
+          var chans = (pol.preferredChannels || ['in_app']).filter(function (ch) { return DB.notifIsEnabled(db, cid, userId, mapped, ch); });
+          if (!chans.length) return suppress('user_disabled');
+          d.channel = chans[0];
+        }
+        d.should_notify = true;
+        if (pol.frequency === 'digest_only') { d.mode = 'digest'; d.reason = 'digest_only'; return suppress(d.reason); }
+        d.mode = 'immediate'; d.reason = d.materialChange ? 'material_change' : 'threshold_reached';
+        d.priority = cd.urgency >= 0.9 || (cd.evidence && cd.evidence.usage >= 100) ? 'important' : pol.priority;
+        d.channel = (pol.preferredChannels || ['in_app'])[0];
+        d.decisionId = DB.intelLogDecision(db, cid, userId, d, cd);
+        out.push(d);
+      });
+      write(db);
+      return { period: pack.period, decisions: out };
+    },
+    intelLogDecision: function (db, cid, userId, d, cd) {
+      var row = {
+        id: id('nd2'), couple_id: cid, user_id: userId, rule_key: d.rule, notification_type: (DB.intelPolicy(d.rule) || {}).type || d.rule,
+        relevance: d.relevance, urgency: d.urgency, should_notify: !!d.should_notify, mode: d.mode, reason: d.reason,
+        priority: d.priority, channel: d.channel, group_key: d.groupKey || null, group_id: null,
+        evidence: d.evidence || {}, created_at: now(), consumed_in_digest: null
+      };
+      db.notification_decisions.push(row);
+      logAudit(db, cid, userId, 'notification_decision', d.rule, d.should_notify ? 'created' : 'suppressed', { reason: d.reason });
+      void cd;
+      return row.id;
+    },
+    intelNotifiedValue: function (n, entityId) {
+      var p = (n && n.payload) || {};
+      if ((n.related_entity_id || null) === (entityId || null) && p.evidence) {
+        return DB.intelEvidenceValue(p.evidence);
+      }
+      var ms = p.members || [];
+      for (var i = 0; i < ms.length; i++) {
+        if ((ms[i].entityId || null) === (entityId || null)) {
+          if (ms[i].value != null) return ms[i].value;
+        }
+      }
+      return null;
+    },
+    /* Valor comparável da evidência (por regra: current/total/outstanding/...). */
+    intelEvidenceValue: function (e) {
+      e = e || {};
+      if (e.current_value != null) return e.current_value;
+      if (e.total != null) return e.total;
+      if (e.outstanding != null) return e.outstanding;
+      if (e.spent != null) return e.spent;
+      if (e.amount != null) return e.amount;
+      if (e.remaining != null) return e.remaining;
+      return null;
+    },
+    intelGroupNotify: function (userId, decisions, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var groups = {};
+      decisions.filter(function (d) { return d.should_notify && d.mode === 'immediate'; }).forEach(function (d) {
+        (groups[d.groupKey || 'misc'] = groups[d.groupKey || 'misc'] || []).push(d);
+      });
+      var ids = [];
+      Object.keys(groups).forEach(function (gk) {
+        var g = groups[gk];
+        var first = g[0];
+        var pol = DB.intelPolicy(first.rule) || {};
+        var title, body, type = pol.type || 'upcoming_commitments', entityType = null, entityId = null;
+        if (g.length === 1) {
+          var ev = first.evidence || {};
+          title = DB.intelTitleFor(first.rule, ev);
+          body = DB.intelBodyFor(first.rule, ev);
+          entityType = first.entityType; entityId = first.entityId;
+        } else {
+          title = 'Você tem ' + g.length + ' pontos de atenção';
+          body = g.slice(0, 4).map(function (x) { return '• ' + DB.intelTitleFor(x.rule, x.evidence || {}); }).join('\n');
+        }
+        var sig = g.map(function (x) { return x.rule + ':' + (x.entityId || '-'); }).sort().join(',');
+        var key = ['intel', cid, gk, sig].join('|');
+        var n = DB.notifCreate(userId, { type: type, title: title, body: body, priority: first.priority, related_entity_type: entityType, related_entity_id: entityId, idempotency_key: key, origin: 'intelligent', payload: { rule: first.rule, group: gk, count: g.length, evidence: first.evidence, members: g.map(function (x) { return { rule: x.rule, entityType: x.entityType, entityId: x.entityId, value: DB.intelEvidenceValue(x.evidence) }; }) } }, {});
+        ids.push(n.id);
+        var db2 = read();
+        var want = {};
+        g.forEach(function (x) { if (x.decisionId) want[x.decisionId] = true; });
+        db2.notification_decisions.forEach(function (x) {
+          if (want[x.id]) x.group_id = n.id;
+        });
+        logAudit(db2, cid, userId, 'notification_decision', first.rule, g.length > 1 ? 'grouped' : 'created', { notification: n.id });
+        write(db2);
+      });
+      return ids;
+    },
+    intelTitleFor: function (rule, ev) {
+      ev = ev || {};
+      var M = DB.aiMoney;
+      if (rule === 'category_change') return 'Gastos com ' + (ev.category || 'categoria') + ' aumentaram';
+      if (rule === 'spending_change' || rule === 'cashflow') return 'Mudança relevante nos gastos';
+      if (rule === 'unusual_spending') return 'Despesa acima do padrão recente';
+      if (rule === 'budget_cross') return 'Orçamento ' + (ev.category || '') + ' em ' + (ev.usage != null ? String(ev.usage).replace('.', ',') + '%' : 'atenção');
+      if (rule === 'invoice_due') return 'Fatura vence em breve';
+      if (rule === 'invoice_overdue') return 'Fatura vencida';
+      if (rule === 'commitments') return 'Compromissos próximos';
+      if (rule === 'reconciliation') return 'Conciliação pendente';
+      if (rule === 'goal') return 'Meta com prazo próximo';
+      if (rule === 'settlement') return 'Acerto pendente';
+      return 'Ponto de atenção';
+    },
+    intelBodyFor: function (rule, ev) {
+      ev = ev || {};
+      var M = DB.aiMoney;
+      if (rule === 'category_change') return 'Vocês gastaram ' + M(ev.current_value || 0) + ' com ' + (ev.category || 'a categoria') + ' neste período, contra média de ' + M(ev.reference_value || 0) + '.' + (ev.rate_based ? ' (Comparação por taxa diária, mês em andamento.)' : '');
+      if (rule === 'budget_cross') return (ev.category || '') + ': ' + M(ev.spent || 0) + ' de ' + M(ev.limit || 0) + '.';
+      if (rule === 'invoice_due' || rule === 'invoice_overdue') return M(ev.outstanding || 0) + ' em aberto, vencimento ' + (ev.due_date || '').split('-').reverse().join('/') + '.';
+      if (rule === 'commitments') return M(ev.total || 0) + ' em ' + (ev.count || 0) + ' compromissos nos próximos dias.';
+      if (rule === 'reconciliation') return (ev.count || 0) + ' movimentações aguardando conciliação.';
+      if (rule === 'goal') return '"' + (ev.goal || 'Meta') + '": faltam ' + M(ev.remaining || 0) + ', vence ' + (ev.deadline || '').split('-').reverse().join('/') + '.';
+      if (rule === 'settlement') return 'Acerto de ' + M(ev.amount || 0) + ' entre vocês.';
+      if (rule === 'unusual_spending') return 'Despesa de ' + M(ev.actual_value || 0) + ' acima do padrão recente.';
+      if (rule === 'spending_change' || rule === 'cashflow') return 'Total de ' + M(ev.current_value || 0) + ' no período.';
+      return 'Há uma mudança relevante nos seus dados.';
+    },
+    /* Digest diário/semanal: só itens relevantes, não resolvidos, ainda não
+       enviados individualmente. Nunca vazio, nunca duplicando o individual. */
+    intelDigest: function (userId, kind, opt) {
+      opt = opt || {};
+      kind = kind === 'weekly' ? 'weekly' : 'daily';
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var res = DB.intelDecide(userId, opt);
+      var eligible = res.decisions.filter(function (d) { return d.mode === 'digest'; }).slice(0, 6);
+      if (!eligible.length) return { status: 'empty', items: [] };
+      var type = kind === 'weekly' ? 'weekly_digest' : 'daily_digest';
+      var title = kind === 'weekly' ? 'Resumo financeiro da semana' : 'Resumo financeiro de hoje';
+      var body = eligible.map(function (d, i) { return (i + 1) + '. ' + DB.intelTitleFor(d.rule, d.evidence || {}); }).join('\n');
+      var key = [kind + '_digest', cid, (opt.periodStart || '') + '_' + (opt.periodEnd || '')].join('|');
+      var n = DB.notifCreate(userId, { type: type, title: title, body: body, priority: 'info', origin: 'intelligent', idempotency_key: key, payload: { kind: kind, items: eligible.map(function (d) { return { rule: d.rule, title: DB.intelTitleFor(d.rule, d.evidence || {}), evidence: d.evidence }; }) } }, {});
+      var db2 = read();
+      var wantIds = {};
+      eligible.forEach(function (d) { if (d.decisionId) wantIds[d.decisionId] = true; });
+      db2.notification_decisions.forEach(function (x) {
+        if (wantIds[x.id]) x.consumed_in_digest = n.id;
+      });
+      logAudit(db2, cid, userId, 'notification_decision', kind, 'digested', { notification: n.id, items: eligible.length });
+      write(db2);
+      return { status: 'created', id: n.id, items: eligible.length };
+    },
+    /* Resolução: ação resolve a causa → expira notificações inteligentes. */
+    intelOnAction: function (userId, action, entityId) {
+      var map = { invoice_paid: ['invoice_due_soon', 'invoice_overdue'], budget_updated: ['budget_threshold'], settlement_created: ['settlement_pending'], reconciliation_completed: ['reconciliation_pending'], goal_updated: ['goal_deadline'] };
+      var types = map[action] || [];
+      if (!types.length) return 0;
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = 0;
+      db.notifications.forEach(function (x) {
+        if (x.couple_id !== cid || x.origin !== 'intelligent') return;
+        if (types.indexOf(x.type) < 0) return;
+        if (['pending', 'scheduled', 'processing', 'sent', 'delivered'].indexOf(x.status) < 0) return;
+        if (entityId && x.related_entity_id && x.related_entity_id !== entityId) {
+          var members = (x.payload && x.payload.members) || [];
+          var hit = members.some(function (m) { return m.entityId === entityId; });
+          if (!hit) return;
+        }
+        x.status = 'expired'; x.updated_at = now(); n++;
+        logAudit(db, cid, userId, 'notification', x.id, 'expired', { why: action });
+      });
+      if (n) write(db);
+      return n;
+    },
+    /* Expira resolvidos (job): reavalia condições das inteligentes ativas. */
+    intelExpireResolved: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var res = DB.intelDecide(userId, opt);
+      var live = {};
+      res.decisions.forEach(function (d) {
+        if (d.should_notify) live[d.rule + '|' + (d.entityId || '-') + '|' + (d.groupKey || '-')] = true;
+      });
+      var n = 0;
+      var PERIOD_RULES = ['category_change', 'spending_change', 'cashflow', 'commitments', 'upcoming_commitments'];
+      var curYm = now().slice(0, 7);
+      db.notifications.forEach(function (x) {
+        if (x.couple_id !== cid || x.origin !== 'intelligent') return;
+        if (['pending', 'scheduled', 'processing', 'sent', 'delivered'].indexOf(x.status) < 0) return;
+        var rule = (x.payload && x.payload.rule) || null;
+        if (rule && PERIOD_RULES.indexOf(rule) >= 0 && x.created_at.slice(0, 7) < curYm) {
+          x.status = 'expired'; x.updated_at = now(); n++;
+          logAudit(db, cid, userId, 'notification', x.id, 'expired', { why: 'new_period' });
+          return;
+        }
+        var gk = (x.payload && x.payload.group) || null;
+        var key = (rule || '?') + '|' + (x.related_entity_id || '-') + '|' + (gk || '-');
+        var stillLive = live[key] || (rule && res.decisions.some(function (d) { return d.should_notify && d.rule === rule; }));
+        if (!stillLive) {
+          x.status = 'expired'; x.updated_at = now(); n++;
+          logAudit(db, cid, userId, 'notification', x.id, 'expired', { why: 'resolved' });
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    /* Entrada dos jobs (idempotente, reexecutável). */
+    intelEvaluateAll: function (userId, opt) {
+      opt = opt || {};
+      var res = DB.intelDecide(userId, opt);
+      var ids = DB.intelGroupNotify(userId, res.decisions, opt);
+      return ids;
+    },
+    /* Métricas técnicas (produto/engenharia; nunca score do usuário). */
+    intelMetrics: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return {};
+      var m = { evaluated: 0, notified: 0, suppressed: {}, grouped: 0, digests: 0, read: 0, dismissed: 0, failed: 0, duplicates: 0 };
+      db.notification_decisions.forEach(function (d) {
+        if (d.couple_id !== cid) return;
+        m.evaluated++;
+        if (d.should_notify) m.notified++;
+        else m.suppressed[d.reason || 'unknown'] = (m.suppressed[d.reason || 'unknown'] || 0) + 1;
+        if (d.group_id) m.grouped++;
+        if (d.consumed_in_digest) m.digests++;
+      });
+      db.notifications.forEach(function (n) {
+        if (n.couple_id !== cid || n.origin !== 'intelligent') return;
+        if (n.status === 'read') m.read++;
+        if (n.status === 'dismissed') m.dismissed++;
+        if (n.status === 'failed') m.failed++;
+      });
+      m.duplicates = m.suppressed.cooldown || 0;
+      return m;
+    },
+    /* ============ PROMPT 26 (V3): PLANEJAMENTO FINANCEIRO ============
+       Camada de interpretação/simulação sobre a verdade financeira. NUNCA cria,
+       edita ou apaga transações, contas, faturas, parcelas, orçamentos, metas
+       ou recorrentes. Reutiliza centrais: dashboardCalc (realizado),
+       calculateAccountsSummary (saldo), calculateAvailableToSpend (inalterado),
+       calculateProjectedBalance, budgetSummary, goalProgress, settle,
+       calculateInvoiceTotal/Outstanding, installments pendentes, occurrences,
+       calculateCardUsedLimit/Available. Dinheiro em centavos; soma fecha. */
+    PLAN_STATUSES: ['draft', 'active', 'archived', 'completed'],
+    PLAN_ITEM_TYPES: ['income', 'expense', 'saving', 'goal_contribution', 'commitment', 'adjustment'],
+    PLAN_ITEM_SOURCES: ['manual', 'recurring', 'budget', 'goal', 'installment', 'invoice', 'insight', 'forecast', 'existing_transaction'],
+    PLAN_ITEM_FREQUENCIES: ['once', 'monthly', 'yearly'],
+    PLAN_SCENARIO_STATUS: ['draft', 'active', 'archived'],
+    PLAN_SCENARIO_TYPES: ['baseline', 'conservative', 'custom'],
+    PLAN_ADJUST_TYPES: ['none', 'fixed', 'percentage'],
+    planGetPlan: function (userId, planId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      return p;
+    },
+    planValidatePeriod: function (startISO, endISO) {
+      var s = cleanDate(startISO), e = cleanDate(endISO);
+      if (s > e) throw new Error('Período inválido: início após o fim.');
+      var n = (parseInt(e.slice(0, 4), 10) - parseInt(s.slice(0, 4), 10)) * 12 + (parseInt(e.slice(5, 7), 10) - parseInt(s.slice(5, 7), 10)) + 1;
+      if (n > 36) throw new Error('Período muito longo (máx 36 meses).');
+      return { start: s, end: e, months: monthsBetween(s.slice(0, 7), e.slice(0, 7)) };
+    },
+    listPlans: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.financial_plans.filter(function (p) {
+        return p.couple_id === cid && (!f.status || p.status === f.status);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+    },
+    getPlan: function (userId, planId) { return DB.planGetPlan(userId, planId); },
+    createPlan: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para o plano.');
+      var per = DB.planValidatePeriod(data.period_start, data.period_end);
+      var base = data.base_date ? cleanDate(data.base_date) : now().slice(0, 10);
+      var p = { id: id('fp'), couple_id: cid, name: name.slice(0, 80), description: String((data && data.description) || '').slice(0, 500), status: 'draft', period_start: per.start, period_end: per.end, base_date: base, currency: 'BRL', created_by: userId, created_at: now(), updated_at: now(), archived_at: null };
+      db.financial_plans.push(p);
+      var sc = { id: id('fs'), couple_id: cid, plan_id: p.id, name: 'Base', description: 'Cenário base: valores do plano sem ajustes.', status: 'active', scenario_type: 'baseline', created_by: userId, created_at: now(), updated_at: now() };
+      db.financial_plan_scenarios.push(sc);
+      logAudit(db, cid, userId, 'plan', p.id, 'create', { months: per.months.length });
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.created', entity_type: 'plan', entity_id: p.id, metadata: {} });
+      return p;
+    },
+    updatePlan: function (userId, planId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      if (p.status === 'archived' || p.status === 'completed') throw new Error('Plano arquivado ou concluído não pode ser editado.');
+      if (data.name != null) {
+        var name = String(data.name).trim();
+        if (name.length < 2) throw new Error('Dê um nome para o plano.');
+        p.name = name.slice(0, 80);
+      }
+      if (data.description != null) p.description = String(data.description).slice(0, 500);
+      if (data.period_start != null || data.period_end != null || data.base_date != null) {
+        if (p.status !== 'draft') throw new Error('Período só pode mudar enquanto o plano é rascunho.');
+        var per = DB.planValidatePeriod(data.period_start != null ? data.period_start : p.period_start, data.period_end != null ? data.period_end : p.period_end);
+        p.period_start = per.start; p.period_end = per.end;
+        if (data.base_date != null) p.base_date = cleanDate(data.base_date);
+      }
+      p.updated_at = now();
+      logAudit(db, cid, userId, 'plan', p.id, 'update', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.updated', entity_type: 'plan', entity_id: p.id, metadata: {} });
+      return p;
+    },
+    activatePlan: function (userId, planId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      if (p.status !== 'draft') throw new Error('Só rascunhos podem ser ativados.');
+      p.status = 'active'; p.updated_at = now();
+      logAudit(db, cid, userId, 'plan', p.id, 'activate', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.activated', entity_type: 'plan', entity_id: p.id, metadata: {} });
+      return p;
+    },
+    archivePlan: function (userId, planId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      if (p.status === 'archived') throw new Error('Plano já arquivado.');
+      p.status = 'archived'; p.archived_at = now(); p.updated_at = now();
+      logAudit(db, cid, userId, 'plan', p.id, 'archive', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.archived', entity_type: 'plan', entity_id: p.id, metadata: {} });
+      return p;
+    },
+    duplicatePlan: function (userId, planId, name) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      var np = { id: id('fp'), couple_id: cid, name: String(name || ('Cópia de ' + p.name)).slice(0, 80), description: p.description, status: 'draft', period_start: p.period_start, period_end: p.period_end, base_date: p.base_date, currency: 'BRL', created_by: userId, created_at: now(), updated_at: now(), archived_at: null };
+      db.financial_plans.push(np);
+      var idMap = {};
+      db.financial_plan_items.filter(function (i) { return i.plan_id === planId && !i.deleted_at; }).forEach(function (i) {
+        var c = JSON.parse(JSON.stringify(i));
+        idMap[i.id] = id('fi');
+        c.id = idMap[i.id]; c.plan_id = np.id; c.created_by = userId; c.created_at = now(); c.updated_at = now();
+        db.financial_plan_items.push(c);
+      });
+      db.financial_plan_scenarios.filter(function (s) { return s.plan_id === planId; }).forEach(function (s) {
+        var ns = JSON.parse(JSON.stringify(s));
+        var newSid = id('fs');
+        ns.id = newSid; ns.plan_id = np.id; ns.status = s.scenario_type === 'baseline' ? 'active' : 'draft'; ns.created_by = userId; ns.created_at = now(); ns.updated_at = now();
+        db.financial_plan_scenarios.push(ns);
+        db.financial_plan_scenario_items.filter(function (x) { return x.scenario_id === s.id; }).forEach(function (x) {
+          var nx = JSON.parse(JSON.stringify(x));
+          nx.id = id('fx'); nx.scenario_id = newSid;
+          if (nx.source_plan_item_id && idMap[nx.source_plan_item_id]) nx.source_plan_item_id = idMap[nx.source_plan_item_id];
+          nx.created_at = now(); nx.updated_at = now();
+          db.financial_plan_scenario_items.push(nx);
+        });
+      });
+      logAudit(db, cid, userId, 'plan', np.id, 'duplicate', { from: planId });
+      write(db);
+      return np;
+    },
+    planValidateItem: function (userId, planId, data, isUpdate, itemId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      var type = data.item_type || (isUpdate ? undefined : 'expense');
+      if (type !== undefined && DB.PLAN_ITEM_TYPES.indexOf(type) < 0) throw new Error('Tipo de item inválido.');
+      var effType = type !== undefined ? type : null;
+      if (effType === null && isUpdate) {
+        var cur = db.financial_plan_items.find(function (x) { return x.id === itemId && x.couple_id === cid; });
+        if (cur) effType = cur.item_type;
+      }
+      var amount;
+      if (data.amount !== undefined || !isUpdate) {
+        if (effType === 'adjustment') {
+          var rawA = String(data.amount == null ? '' : data.amount).replace(/R\$\s?/gi, '').trim();
+          if (rawA === '') throw new Error('Informe um valor válido.');
+          if (/,/.test(rawA)) rawA = rawA.replace(/\./g, '').replace(',', '.');
+          var nA = Math.round(parseFloat(rawA) * 100) / 100;
+          if (!isFinite(nA)) throw new Error('Informe um valor válido.');
+          amount = nA;
+        } else {
+          amount = parseAmount(data.amount);
+        }
+      }
+      var freq = data.frequency !== undefined ? data.frequency : (isUpdate ? undefined : 'once');
+      if (freq !== undefined && DB.PLAN_ITEM_FREQUENCIES.indexOf(freq) < 0) throw new Error('Frequência inválida.');
+      var pd = data.planned_date !== undefined ? cleanDate(data.planned_date) : undefined;
+      var sd = data.start_date !== undefined && data.start_date ? cleanDate(data.start_date) : undefined;
+      var ed = data.end_date !== undefined && data.end_date ? cleanDate(data.end_date) : undefined;
+      if (sd && ed && sd > ed) throw new Error('Data inicial após a final.');
+      function own(table, idv, label) {
+        if (idv == null || idv === '') return null;
+        var row = db[table].find(function (x) { return x.id === idv && x.couple_id === cid; });
+        if (!row) throw new Error(label + ' inválido para este casal.');
+        return row.id;
+      }
+      var catId = data.category_id !== undefined ? own('categories', data.category_id, 'Categoria') : undefined;
+      if (catId) {
+        var cat = db.categories.find(function (x) { return x.id === catId; });
+        var t = effType || 'expense';
+        if ((t === 'income' && cat.type === 'expense') || ((t === 'expense' || t === 'saving' || t === 'goal_contribution') && cat.type === 'income')) throw new Error('Categoria incompatível com o tipo do item.');
+      }
+      var accId = data.account_id !== undefined ? own('accounts', data.account_id, 'Conta') : undefined;
+      var userRef = null;
+      if (data.user_id !== undefined && data.user_id !== null && data.user_id !== '') {
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === data.user_id; })) throw new Error('Pessoa inválida.');
+        userRef = data.user_id;
+      } else if (data.user_id !== undefined) userRef = null;
+      var src = data.source_type !== undefined ? data.source_type : (isUpdate ? undefined : 'manual');
+      if (src !== undefined && DB.PLAN_ITEM_SOURCES.indexOf(src) < 0) throw new Error('Origem inválida.');
+      var prio = data.priority !== undefined ? String(data.priority).slice(0, 20) : undefined;
+      return { plan: p, type: type, amount: amount, freq: freq, planned_date: pd, start_date: sd, end_date: ed, category_id: catId, account_id: accId, user_id: userRef, source_type: src, priority: prio === undefined ? 'normal' : (prio || 'normal') };
+    },
+    addPlanItem: function (userId, planId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var v = DB.planValidateItem(userId, planId, data, false);
+      if (v.plan.status === 'archived' || v.plan.status === 'completed') throw new Error('Plano arquivado ou concluído não aceita itens.');
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para o item.');
+      var it = { id: id('fi'), couple_id: cid, plan_id: planId, item_type: v.type, name: name.slice(0, 80), description: String((data && data.description) || '').slice(0, 500), amount: v.amount, frequency: v.freq, category_id: v.category_id || null, account_id: v.account_id || null, user_id: v.user_id, planned_date: v.planned_date, start_date: v.start_date || v.planned_date, end_date: v.end_date || v.plan.period_end, source_type: v.source_type, source_id: data.source_id != null ? String(data.source_id).slice(0, 60) : null, priority: v.priority, active: true, notes: String((data && data.notes) || '').slice(0, 500), created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      db.financial_plan_items.push(it);
+      logAudit(db, cid, userId, 'plan_item', it.id, 'create', { plan: planId, type: it.item_type, amount: it.amount });
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.item_changed', entity_type: 'plan', entity_id: planId, metadata: { item: it.id } });
+      return it;
+    },
+    updatePlanItem: function (userId, itemId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var it = db.financial_plan_items.find(function (x) { return x.id === itemId && x.couple_id === cid && !x.deleted_at; });
+      if (!it) throw new Error('Item não encontrado.');
+      var p = db.financial_plans.find(function (x) { return x.id === it.plan_id && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      if (p.status === 'archived' || p.status === 'completed') throw new Error('Plano arquivado ou concluído não aceita alterações.');
+      var v = DB.planValidateItem(userId, it.plan_id, data, true, itemId);
+      if (data.name !== undefined) {
+        var name = String(data.name).trim();
+        if (name.length < 2) throw new Error('Dê um nome para o item.');
+        it.name = name.slice(0, 80);
+      }
+      if (v.type !== undefined && v.type !== null) it.item_type = v.type;
+      if (v.amount !== undefined) it.amount = v.amount;
+      if (v.freq !== undefined && v.freq !== null) it.frequency = v.freq;
+      if (v.planned_date !== undefined) it.planned_date = v.planned_date;
+      if (v.start_date !== undefined && v.start_date) it.start_date = v.start_date;
+      if (v.end_date !== undefined && v.end_date) it.end_date = v.end_date;
+      if (it.start_date > it.end_date) throw new Error('Data inicial após a final.');
+      if (v.category_id !== undefined) it.category_id = v.category_id;
+      if (v.account_id !== undefined) it.account_id = v.account_id;
+      if (data.user_id !== undefined) it.user_id = v.user_id;
+      if (data.description !== undefined) it.description = String(data.description).slice(0, 500);
+      if (data.notes !== undefined) it.notes = String(data.notes).slice(0, 500);
+      if (data.priority !== undefined) it.priority = String(data.priority).slice(0, 20) || 'normal';
+      if (data.active !== undefined) it.active = !!data.active;
+      if (v.source_type !== undefined && v.source_type !== null) it.source_type = v.source_type;
+      it.updated_at = now();
+      logAudit(db, cid, userId, 'plan_item', it.id, 'update', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.item_changed', entity_type: 'plan', entity_id: p.id, metadata: { item: it.id } });
+      return it;
+    },
+    removePlanItem: function (userId, itemId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var it = db.financial_plan_items.find(function (x) { return x.id === itemId && x.couple_id === cid && !x.deleted_at; });
+      if (!it) throw new Error('Item não encontrado.');
+      it.deleted_at = now(); it.active = false; it.updated_at = now();
+      logAudit(db, cid, userId, 'plan_item', it.id, 'remove', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.item_changed', entity_type: 'plan', entity_id: it.plan_id, metadata: { item: it.id } });
+      return it;
+    },
+    listPlanItems: function (userId, planId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      return db.financial_plan_items.filter(function (i) {
+        return i.plan_id === planId && !i.deleted_at && (!f.activeOnly || i.active) && (!f.type || i.item_type === f.type);
+      }).sort(function (a, b) { return (a.planned_date + a.id).localeCompare(b.planned_date + b.id); });
+    },
+    /* Baseline: recorrências + metas + acerto pendente. Sem itens de orçamento
+       (teto de referência, não gasto), sem parcelas/faturas como itens
+       (vão para compromissos). Não cria transações reais. */
+    generateBaselinePlan: function (userId, data) {
+      data = data || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var per, base;
+      if (data.period_start && data.period_end) {
+        per = DB.planValidatePeriod(data.period_start, data.period_end);
+        base = per.start;
+      } else {
+        var n = parseInt(data.months, 10);
+        if (![1, 3, 6, 12].includes(n)) n = 3;
+        var b0 = data.base_date ? cleanDate(data.base_date) : now().slice(0, 10);
+        var endYm = shiftMonth(b0.slice(0, 7), n - 1);
+        per = DB.planValidatePeriod(b0, endYm + '-' + dim(parseInt(endYm.slice(0, 4), 10), parseInt(endYm.slice(5, 7), 10)));
+        base = b0;
+      }
+      var p = DB.createPlan(userId, { name: data.name || ('Planejamento ' + per.months[0].slice(5, 7) + '/' + per.months[0].slice(0, 4) + (per.months.length > 1 ? ' +' + (per.months.length - 1) + 'm' : '')), description: 'Gerado a partir de recorrências, metas e acertos. Valores projetados, não garantias.', period_start: per.start, period_end: per.end, base_date: base });
+      db = read();
+      DB.ensureOccurrences(userId, per.months[0], per.months[per.months.length - 1]);
+      db = read();
+      var made = 0;
+      function addItem(o) {
+        o.plan_id = p.id;
+        try { DB.addPlanItem(userId, p.id, o); made++; } catch (e) { /* item inválido: pula sem quebrar o lote */ }
+      }
+      db.recurring_transactions.forEach(function (r) {
+        if (r.couple_id !== cid || !r.active) return;
+        per.months.forEach(function (ym) {
+          if (ym < r.start_date.slice(0, 7)) return;
+          if (r.end_date && ym > r.end_date.slice(0, 7)) return;
+          if (r.frequency === 'yearly' && ym.slice(5, 7) !== r.start_date.slice(5, 7)) return;
+          addItem({ item_type: r.type === 'income' ? 'income' : 'expense', name: r.description, amount: r.amount, frequency: 'once', category_id: r.category_id, account_id: null, user_id: r.is_shared ? null : r.payer_user_id, planned_date: ym + '-' + ('0' + Math.min(r.day_of_month, dim(parseInt(ym.slice(0, 4), 10), parseInt(ym.slice(5, 7), 10)))).slice(-2), source_type: 'recurring', source_id: r.id });
+        });
+      });
+      db.goals.forEach(function (g) {
+        if (g.couple_id !== cid || g.status !== 'active') return;
+        var remaining = Math.round((g.target_amount - g.current_amount) * 100) / 100;
+        if (!(remaining > 0)) return;
+        var horizon = per.months.slice();
+        if (g.deadline) {
+          var dlYm = g.deadline.slice(0, 7);
+          horizon = per.months.filter(function (ym) { return ym <= dlYm; });
+          if (!horizon.length) return;
+        }
+        var totC = toCents(remaining), acc = 0;
+        horizon.forEach(function (ym, i) {
+          var v = (i === horizon.length - 1) ? totC - acc : Math.floor(totC / horizon.length);
+          acc += v;
+          if (v > 0) addItem({ item_type: 'goal_contribution', name: 'Meta: ' + g.name, amount: fromCents(v), frequency: 'once', category_id: null, account_id: null, user_id: null, planned_date: ym + '-' + dim(parseInt(ym.slice(0, 4), 10), parseInt(ym.slice(5, 7), 10)), source_type: 'goal', source_id: g.id });
+        });
+      });
+      var eng = DB.settle(userId);
+      if (eng.debt && eng.debt.amount > 0) {
+        addItem({ item_type: 'commitment', name: 'Acerto pendente', amount: eng.debt.amount, frequency: 'once', category_id: null, account_id: null, user_id: null, planned_date: base, source_type: 'manual', description: 'Saldo de acertos. Acerto não é despesa nova.' });
+      }
+      logAudit(read(), cid, userId, 'plan', p.id, 'baseline', { items: made });
+      DB.emitEvent(userId, { event_type: 'plan.baseline_generated', entity_type: 'plan', entity_id: p.id, metadata: { items: made } });
+      return DB.getPlan(userId, p.id);
+    },
+    /* Expansão de itens em buckets mensais (centavos). Commitment não entra
+       no fluxo (informativo); adjustment soma assinado. */
+    planExpandItems: function (items, months, rangeStart, rangeEnd) {
+      var out = {};
+      months.forEach(function (ym) { out[ym] = { income: 0, expense: 0, saving: 0, goal: 0, adjust: 0 }; });
+      function inMonth(it, ym) {
+        var s = (it.start_date || it.planned_date).slice(0, 7), e = (it.end_date || it.planned_date).slice(0, 7);
+        if (ym < s || ym > e) return false;
+        if (it.frequency === 'once') return it.planned_date.slice(0, 7) === ym;
+        if (it.frequency === 'yearly') return it.planned_date.slice(5, 7) === ym.slice(5, 7);
+        return true; // monthly
+      }
+      (items || []).forEach(function (it) {
+        if (!it.active) return;
+        var c = toCents(it.amount);
+        months.forEach(function (ym) {
+          if (!inMonth(it, ym)) return;
+          var b = out[ym];
+          if (it.item_type === 'income') b.income += c;
+          else if (it.item_type === 'expense') b.expense += c;
+          else if (it.item_type === 'saving') b.saving += c;
+          else if (it.item_type === 'goal_contribution') b.goal += c;
+          else if (it.item_type === 'adjustment') b.adjust += c;
+        });
+      });
+      return out;
+    },
+    planVisionIds: function (userId, vision) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ids = orderedMemberIds(db, cid);
+      if (vision === 'me') return { ids: ids, focus: userId };
+      if (vision === 'partner') return { ids: ids, focus: ids.find(function (x) { return x !== userId; }) || null };
+      return { ids: ids, focus: null };
+    },
+    planFilterVision: function (items, vision, focus) {
+      if (!vision || vision === 'couple' || !focus) {
+        if (vision === 'partner' && !focus) return [];
+        if (!vision || vision === 'couple') return items;
+      }
+      return items.filter(function (i) { return !i.user_id || i.user_id === focus; });
+    },
+    /* Compromissos futuros sem duplicação: cada parcela 1x; fatura conta só o
+       descoberto (outstanding − parcelas pendentes vinculadas); ocorrências
+       pendentes; acerto pendente 1x. Metas NÃO são compromisso. */
+    calculateFutureCommitments: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var from = opt.from ? cleanDate(opt.from) : now().slice(0, 10);
+      var to = opt.to ? cleanDate(opt.to) : '2999-12-31';
+      if (from > to) throw new Error('Período inválido.');
+      var items = [], total = 0;
+      function push(kind, ref, label, cents, date, extra) {
+        if (!(cents > 0)) return;
+        items.push(Object.assign({ kind: kind, ref: ref, label: label, amount: fromCents(cents), date: date }, extra || {}));
+        total += cents;
+      }
+      db.installments.forEach(function (r) {
+        if (r.couple_id !== cid || r.deleted_at || r.status !== 'pending') return;
+        if (r.due_date < from || r.due_date > to) return;
+        var p = db.installment_purchases.find(function (x) { return x.id === r.installment_purchase_id; });
+        push('installment', r.id, 'Parcela ' + r.installment_number + '/' + r.total_installments + ' • ' + ((p && p.description) || 'Parcelada'), toCents(r.amount), r.due_date, { purchase_id: r.installment_purchase_id, credit_card_id: r.credit_card_id });
+      });
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'cancelled' || i.status === 'paid') return;
+        var out = toCents(DB.calculateInvoiceOutstanding(userId, i.id));
+        if (!(out > 0)) return;
+        var linked = 0;
+        db.installments.forEach(function (r) {
+          if (r.couple_id === cid && !r.deleted_at && r.status === 'pending' && (r.invoice_id || null) === i.id) linked += toCents(r.amount);
+        });
+        var uncovered = out - linked;
+        var due = i.due_date || to;
+        if (uncovered > 0 && (due <= to || due < from)) push('invoice', i.id, 'Fatura ' + i.reference_month + '/' + i.reference_year + ' (descoberto)', uncovered, due < from ? from : due, { credit_card_id: i.credit_card_id });
+      });
+      db.recurring_occurrences.forEach(function (o) {
+        if (o.couple_id !== cid || o.status !== 'pending') return;
+        if (o.due_date < from || o.due_date > to) return;
+        var r = db.recurring_transactions.find(function (x) { return x.id === o.recurring_transaction_id; });
+        push('recurring', o.id, (r ? r.description : 'Recorrente') + ' • vencimento', toCents(o.amount), o.due_date, { recurring_id: o.recurring_transaction_id, type: r ? r.type : 'expense' });
+      });
+      var eng = DB.settle(userId);
+      if (eng.debt && eng.debt.amount > 0) push('settlement', 'debt', 'Acerto pendente', toCents(eng.debt.amount), from, { from: eng.debt.from, to: eng.debt.to });
+      items.sort(function (a, b) { return (a.date + a.kind).localeCompare(b.date + b.kind); });
+      return { from: from, to: to, items: items, count: items.length, total: fromCents(total) };
+    },
+    /* Núcleo de cálculo (leitura pura): itens (+cenário) → buckets mensais,
+       realizado via dashboardCalc, variância, compromissos, metas, orçamentos.
+       Soma em centavos; soma dos itens = total planejado. */
+    planCompute: function (userId, plan, items, scenItems, vision) {
+      var months = monthsBetween(plan.period_start.slice(0, 7), plan.period_end.slice(0, 7));
+      var bySource = {};
+      (scenItems || []).forEach(function (s) { if (s.active && s.source_plan_item_id) bySource[s.source_plan_item_id] = s; });
+      var extra = (scenItems || []).filter(function (s) { return s.active && !s.source_plan_item_id; });
+      var eff = items.filter(function (i) { return i.active && !i.deleted_at; }).map(function (i) {
+        var adj = bySource[i.id];
+        var amount = i.amount;
+        if (adj) {
+          if (adj.adjustment_type === 'fixed') amount = adj.adjustment_value;
+          else if (adj.adjustment_type === 'percentage') amount = Math.round(i.amount * (1 + adj.adjustment_value / 100) * 100) / 100;
+        }
+        var c = JSON.parse(JSON.stringify(i));
+        c.amount = amount; c._adjusted = !!adj;
+        return c;
+      });
+      extra.forEach(function (s) {
+        eff.push({ id: s.id, plan_id: plan.id, item_type: s.item_type, name: s.name, amount: s.amount, frequency: 'once', category_id: null, account_id: null, user_id: null, planned_date: s.planned_date, start_date: s.planned_date, end_date: s.planned_date, source_type: 'manual', source_id: null, active: true });
+      });
+      var exp = DB.planExpandItems(eff, months, plan.period_start, plan.period_end);
+      var accS = DB.calculateAccountsSummary(userId);
+      var opening = accS.totalBalance;
+      var mrows = [], cum = 0;
+      months.forEach(function (ym) {
+        var b = exp[ym];
+        var net = b.income - b.expense - b.saving - b.goal + b.adjust;
+        cum = Math.round((cum + net) * 100) / 100;
+        var real = DB.dashboardCalc(userId, { from: ym, to: ym, vision: vision });
+        function variance(planned, actual) {
+          var v = Math.round((actual - planned) * 100) / 100;
+          return { planned: planned, actual: actual, variance: v, pct: planned !== 0 ? Math.round(v / planned * 1000) / 10 : null };
+        }
+        mrows.push({
+          ym: ym, start: ym + '-01', end: ym + '-' + dim(parseInt(ym.slice(0, 4), 10), parseInt(ym.slice(5, 7), 10)),
+          income: fromCents(b.income), expenses: fromCents(b.expense), savings: fromCents(b.saving), goalContributions: fromCents(b.goal),
+          adjustments: fromCents(b.adjust), net: fromCents(net), ending: fromCents(toCents(opening) + cum),
+          realized: { income: real.income, expense: real.expense },
+          variance: { income: variance(fromCents(b.income), real.income), expense: variance(fromCents(b.expense), real.expense) }
+        });
+      });
+      function money2(c) { return Math.round(c) / 100; }
+      var t = { income: 0, expense: 0, saving: 0, goal: 0, adjust: 0 };
+      months.forEach(function (ym) { var b = exp[ym]; t.income += b.income; t.expense += b.expense; t.saving += b.saving; t.goal += b.goal; t.adjust += b.adjust; });
+      var netT = t.income - t.expense - t.saving - t.goal + t.adjust;
+      function money2(c) { return Math.round(c) / 100; }
+      var t = { income: 0, expense: 0, saving: 0, goal: 0, adjust: 0 };
+      months.forEach(function (ym) { var b = exp[ym]; t.income += b.income; t.expense += b.expense; t.saving += b.saving; t.goal += b.goal; t.adjust += b.adjust; });
+      var netT = t.income - t.expense - t.saving - t.goal + t.adjust;
+      return {
+        months: mrows,
+        totals: { income: money2(t.income), expenses: money2(t.expense), savings: money2(t.saving), goalContributions: money2(t.goal), adjustments: money2(t.adjust), net: money2(netT), ending: money2(toCents(opening) + netT) },
+        opening: opening, itemCount: eff.length
+      };
+    },
+    planResolveScenario: function (userId, planId, scenarioId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      var sc = null;
+      if (scenarioId) {
+        sc = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.plan_id === planId && x.couple_id === cid; });
+        if (!sc) throw new Error('Cenário não encontrado.');
+      } else {
+        sc = db.financial_plan_scenarios.filter(function (x) { return x.plan_id === planId && x.couple_id === cid && x.scenario_type === 'baseline' && x.status !== 'archived'; })[0] || null;
+      }
+      var items = sc ? db.financial_plan_scenario_items.filter(function (x) { return x.scenario_id === sc.id && x.couple_id === cid && x.active; }) : [];
+      return { plan: p, scenario: sc, scenarioItems: items };
+    },
+    calculatePlan: function (userId, planId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var r = DB.planResolveScenario(userId, planId, opt.scenarioId);
+      var vision = opt.vision || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(vision) < 0) throw new Error('Visão inválida.');
+      var ids = orderedMemberIds(db, cid);
+      var focus = vision === 'me' ? userId : (vision === 'partner' ? ids.find(function (x) { return x !== userId; }) || null : null);
+      var items = DB.listPlanItems(userId, planId, {}).filter(function (i) { return i.active && !i.deleted_at; });
+      items = DB.planFilterVision(items, vision, focus);
+      var calc = DB.planCompute(userId, r.plan, items, r.scenarioItems, vision);
+      var comm = DB.calculateFutureCommitments(userId, { from: r.plan.period_start, to: r.plan.period_end });
+      var catMap = {};
+      db.categories.forEach(function (c) { if (c.couple_id === cid) catMap[c.id] = c; });
+      var perCat = {};
+      items.forEach(function (i) {
+        if (i.item_type !== 'expense' || !i.category_id) return;
+        var k = i.category_id;
+        perCat[k] = perCat[k] || { planned: 0, months: {} };
+        var months = monthsBetween(r.plan.period_start.slice(0, 7), r.plan.period_end.slice(0, 7));
+        months.forEach(function (ym) {
+          var s = (i.start_date || i.planned_date).slice(0, 7), e = (i.end_date || i.planned_date).slice(0, 7);
+          var hit = ym >= s && ym <= e && (i.frequency !== 'once' || i.planned_date.slice(0, 7) === ym) && (i.frequency !== 'yearly' || i.planned_date.slice(5, 7) === ym.slice(5, 7));
+          if (!hit) return;
+          var c = toCents(DB.planScenarioAmount(i, r.scenarioItems));
+          perCat[k].planned += c;
+          perCat[k].months[ym] = (perCat[k].months[ym] || 0) + c;
+        });
+      });
+      var real = DB.dashboardCalc(userId, { from: r.plan.period_start.slice(0, 7), to: r.plan.period_end.slice(0, 7), vision: vision });
+      var realByCat = {};
+      real.byCat.forEach(function (c) { realByCat[c.id] = c.value; });
+      var categories = Object.keys(perCat).map(function (k) {
+        var planned = Math.round(perCat[k].planned) / 100;
+        var actual = realByCat[k] || 0;
+        var v = Math.round((actual - planned) * 100) / 100;
+        var cat = catMap[k] || { name: 'Categoria', icon: '🏷️' };
+        return { category_id: k, name: cat.name, icon: cat.icon, planned: planned, actual: actual, variance: v, pct: planned !== 0 ? Math.round(v / planned * 1000) / 10 : null };
+      }).sort(function (a, b) { return b.planned - a.planned; });
+      var goals = DB.listGoals(userId, false).filter(function (g) { return g.status === 'active'; }).map(function (g) {
+        var pr = DB.goalProgress(g);
+        var planned = 0;
+        items.forEach(function (i) {
+          if (i.item_type !== 'goal_contribution' || i.source_type !== 'goal' || i.source_id !== g.id || !i.active) return;
+          var months = monthsBetween(r.plan.period_start.slice(0, 7), r.plan.period_end.slice(0, 7));
+          months.forEach(function (ym) {
+            var s = (i.start_date || i.planned_date).slice(0, 7), e = (i.end_date || i.planned_date).slice(0, 7);
+            if (ym >= s && ym <= e && (i.frequency !== 'once' || i.planned_date.slice(0, 7) === ym)) planned += toCents(DB.planScenarioAmount(i, r.scenarioItems));
+          });
+        });
+        planned = Math.round(planned) / 100;
+        return { id: g.id, name: g.name, target: g.target_amount, current: g.current_amount, remaining: pr.remaining, pct: pr.pct, deadline: g.deadline, plannedContributions: planned, shortfall: Math.round((pr.remaining - planned) * 100) / 100 };
+      });
+      var budgets = monthsBetween(r.plan.period_start.slice(0, 7), r.plan.period_end.slice(0, 7)).map(function (ym) {
+        var bs = DB.budgetSummary(userId, ym);
+        var planned = 0;
+        items.forEach(function (i) {
+          if (i.item_type !== 'expense' || !i.category_id || !i.active) return;
+          if (!bs.items.some(function (b) { return b.category_id === i.category_id; })) return;
+          var s = (i.start_date || i.planned_date).slice(0, 7), e = (i.end_date || i.planned_date).slice(0, 7);
+          if (ym >= s && ym <= e && (i.frequency !== 'once' || i.planned_date.slice(0, 7) === ym) && (i.frequency !== 'yearly' || i.planned_date.slice(5, 7) === ym.slice(5, 7))) planned += toCents(DB.planScenarioAmount(i, r.scenarioItems));
+        });
+        return { ym: ym, limit: bs.total, planned: Math.round(planned) / 100, spent: bs.spent, pctUsed: bs.pct };
+      });
+      return {
+        plan: r.plan, scenario: r.scenario ? { id: r.scenario.id, name: r.scenario.name, scenario_type: r.scenario.scenario_type, status: r.scenario.status } : { id: null, name: 'Base', scenario_type: 'baseline', status: 'active' },
+        vision: vision, opening: calc.opening, months: calc.months, totals: calc.totals, itemCount: calc.itemCount,
+        commitments: comm, goals: goals, budgets: budgets, categories: categories,
+        insights: DB.getActiveInsights(userId, {}).slice(0, 3).map(function (x) { return { id: x.id, title: x.title, severity: x.severity }; })
+      };
+    },
+    /* Valor efetivo de um item sob os ajustes do cenário (sem alterar o item). */
+    planScenarioAmount: function (item, scenItems) {
+      var adj = (scenItems || []).filter(function (s) { return s.active && s.source_plan_item_id === item.id; })[0];
+      if (!adj) return item.amount;
+      if (adj.adjustment_type === 'fixed') return adj.adjustment_value;
+      if (adj.adjustment_type === 'percentage') return Math.round(item.amount * (1 + adj.adjustment_value / 100) * 100) / 100;
+      return item.amount;
+    },
+    calculatePlannedCashFlow: function (userId, planId, opt) {
+      var c = DB.calculatePlan(userId, planId, opt);
+      return { plan: { id: c.plan.id, name: c.plan.name, period_start: c.plan.period_start, period_end: c.plan.period_end }, scenario: c.scenario, vision: c.vision, opening: c.opening, months: c.months.map(function (m) { return { ym: m.ym, income: m.income, expenses: m.expenses, savings: m.savings, goalContributions: m.goalContributions, adjustments: m.adjustments, net: m.net, ending: m.ending }; }), totals: c.totals, ending: c.totals.ending };
+    },
+    calculatePlanVariance: function (userId, planId, opt) {
+      var c = DB.calculatePlan(userId, planId, opt);
+      return {
+        plan: { id: c.plan.id, name: c.plan.name }, scenario: c.scenario, vision: c.vision,
+        months: c.months.map(function (m) { return { ym: m.ym, income: m.variance.income, expense: m.variance.expense }; }),
+        categories: c.categories, totals: c.totals
+      };
+    },
+    /* Visão de planejamento: considerado − compromissos − saídas planejadas.
+       Projeção explícita; não é saldo, não altera contas. */
+    calculateSafeAvailableAmount: function (userId, planId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var r = DB.planResolveScenario(userId, planId, opt.scenarioId);
+      var c = DB.calculatePlan(userId, planId, { scenarioId: r.scenario ? r.scenario.id : undefined, vision: opt.vision });
+      var horizonEnd = r.plan.period_end;
+      var invOut = 0;
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'cancelled' || i.status === 'paid') return;
+        if (i.due_date > horizonEnd) return;
+        invOut += toCents(DB.calculateInvoiceOutstanding(userId, i.id));
+      });
+      var instPend = 0;
+      db.installments.forEach(function (x) {
+        if (x.couple_id !== cid || x.deleted_at || x.status !== 'pending') return;
+        if (x.due_date < r.plan.period_start || x.due_date > horizonEnd) return;
+        instPend += toCents(x.amount);
+      });
+      var plannedOut = toCents(c.totals.expenses) + toCents(c.totals.savings) + toCents(c.totals.goalContributions);
+      var adj = toCents(c.totals.adjustments);
+      var safe = toCents(c.opening) + toCents(c.totals.income) - plannedOut - adj - invOut - instPend;
+      return {
+        opening: c.opening, plannedIncome: c.totals.income, plannedOutflows: fromCents(plannedOut + adj),
+        invoiceOutstanding: fromCents(invOut), installmentsPending: fromCents(instPend),
+        safe: fromCents(safe), horizon: { from: r.plan.period_start, to: horizonEnd },
+        notes: ['Projeção baseada nos dados atuais.', 'Não representa saldo bancário.', 'Limite de cartão não incluído.']
+      };
+    },
+    listScenarios: function (userId, planId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      return db.financial_plan_scenarios.filter(function (s) { return s.plan_id === planId && s.couple_id === cid; })
+        .sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+    },
+    createScenario: function (userId, planId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var p = db.financial_plans.find(function (x) { return x.id === planId && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      if (p.status === 'archived' || p.status === 'completed') throw new Error('Plano arquivado ou concluído não aceita cenários.');
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para o cenário.');
+      var type = (data && data.scenario_type) || 'custom';
+      if (DB.PLAN_SCENARIO_TYPES.indexOf(type) < 0) throw new Error('Tipo de cenário inválido.');
+      if (type === 'baseline' && db.financial_plan_scenarios.some(function (s) { return s.plan_id === planId && s.couple_id === cid && s.scenario_type === 'baseline' && s.status !== 'archived'; })) throw new Error('Já existe um cenário base ativo.');
+      var s = { id: id('fs'), couple_id: cid, plan_id: planId, name: name.slice(0, 80), description: String((data && data.description) || '').slice(0, 500), status: 'draft', scenario_type: type, created_by: userId, created_at: now(), updated_at: now() };
+      db.financial_plan_scenarios.push(s);
+      logAudit(db, cid, userId, 'plan_scenario', s.id, 'create', { plan: planId, type: type });
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.scenario_changed', entity_type: 'plan', entity_id: planId, metadata: { scenario: s.id } });
+      return s;
+    },
+    updateScenario: function (userId, scenarioId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      if (s.status === 'archived') throw new Error('Cenário arquivado não pode ser editado.');
+      if (data.name !== undefined) {
+        var name = String(data.name).trim();
+        if (name.length < 2) throw new Error('Dê um nome para o cenário.');
+        s.name = name.slice(0, 80);
+      }
+      if (data.description !== undefined) s.description = String(data.description).slice(0, 500);
+      if (data.status !== undefined) {
+        if (DB.PLAN_SCENARIO_STATUS.indexOf(data.status) < 0) throw new Error('Status inválido.');
+        s.status = data.status;
+      }
+      if (data.scenario_type !== undefined && data.scenario_type !== s.scenario_type) {
+        if (DB.PLAN_SCENARIO_TYPES.indexOf(data.scenario_type) < 0) throw new Error('Tipo de cenário inválido.');
+        if (data.scenario_type === 'baseline' && db.financial_plan_scenarios.some(function (x) { return x.plan_id === s.plan_id && x.couple_id === cid && x.id !== s.id && x.scenario_type === 'baseline' && x.status !== 'archived'; })) throw new Error('Já existe um cenário base ativo.');
+        s.scenario_type = data.scenario_type;
+      }
+      s.updated_at = now();
+      logAudit(db, cid, userId, 'plan_scenario', s.id, 'update', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.scenario_changed', entity_type: 'plan', entity_id: s.plan_id, metadata: { scenario: s.id } });
+      return s;
+    },
+    archiveScenario: function (userId, scenarioId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      if (s.scenario_type === 'baseline' && s.status !== 'archived') {
+        var others = db.financial_plan_scenarios.filter(function (x) { return x.plan_id === s.plan_id && x.couple_id === cid && x.id !== s.id && x.status !== 'archived'; });
+        if (others.length) throw new Error('Arquive ou ative outro cenário como base antes.');
+      }
+      s.status = 'archived'; s.updated_at = now();
+      logAudit(db, cid, userId, 'plan_scenario', s.id, 'archive', {});
+      write(db);
+      return s;
+    },
+    duplicateScenario: function (userId, scenarioId, name) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      var ns = { id: id('fs'), couple_id: cid, plan_id: s.plan_id, name: String(name || ('Cópia de ' + s.name)).slice(0, 80), description: s.description, status: 'draft', scenario_type: 'custom', created_by: userId, created_at: now(), updated_at: now() };
+      db.financial_plan_scenarios.push(ns);
+      db.financial_plan_scenario_items.filter(function (x) { return x.scenario_id === scenarioId && x.couple_id === cid; }).forEach(function (x) {
+        var nx = JSON.parse(JSON.stringify(x));
+        nx.id = id('fx'); nx.scenario_id = ns.id; nx.created_at = now(); nx.updated_at = now();
+        db.financial_plan_scenario_items.push(nx);
+      });
+      logAudit(db, cid, userId, 'plan_scenario', ns.id, 'duplicate', { from: scenarioId });
+      write(db);
+      return ns;
+    },
+    listScenarioItems: function (userId, scenarioId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      return db.financial_plan_scenario_items.filter(function (x) { return x.scenario_id === scenarioId && x.couple_id === cid && x.active; })
+        .sort(function (a, b) { return (a.planned_date + a.id).localeCompare(b.planned_date + b.id); });
+    },
+    addScenarioItem: function (userId, scenarioId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      if (s.status === 'archived') throw new Error('Cenário arquivado não aceita itens.');
+      var p = db.financial_plans.find(function (x) { return x.id === s.plan_id && x.couple_id === cid; });
+      if (!p) throw new Error('Plano não encontrado.');
+      var src = null;
+      if (data.source_plan_item_id != null && data.source_plan_item_id !== '') {
+        src = db.financial_plan_items.find(function (x) { return x.id === data.source_plan_item_id && x.plan_id === s.plan_id && x.couple_id === cid && !x.deleted_at; });
+        if (!src) throw new Error('Item do plano inválido.');
+      }
+      var at = data.adjustment_type || 'none';
+      if (DB.PLAN_ADJUST_TYPES.indexOf(at) < 0) throw new Error('Tipo de ajuste inválido.');
+      var av = 0;
+      if (at === 'fixed') {
+        if (data.adjustment_value == null || String(data.adjustment_value).trim() === '') throw new Error('Informe o valor fixo.');
+        av = parseZeroPlus(data.adjustment_value, 'O valor fixo');
+      } else if (at === 'percentage') {
+        av = Number(String(data.adjustment_value == null ? '' : data.adjustment_value).replace(',', '.'));
+        if (!isFinite(av) || av < -100 || av > 1000) throw new Error('Percentual precisa estar entre -100 e 1000.');
+        av = Math.round(av * 100) / 100;
+      }
+      var type = data.item_type || (src ? src.item_type : 'expense');
+      if (DB.PLAN_ITEM_TYPES.indexOf(type) < 0) throw new Error('Tipo de item inválido.');
+      var name = String((data && data.name) || (src ? src.name : '')).trim();
+      if (name.length < 2) throw new Error('Dê um nome para o item.');
+      var pd = data.planned_date ? cleanDate(data.planned_date) : (src ? src.planned_date : p.period_start);
+      var amt = src ? src.amount : null;
+      if (!src) {
+        if (data.amount == null || String(data.amount).trim() === '') throw new Error('Informe o valor.');
+        amt = parseAmount(data.amount);
+      }
+      var row = { id: id('fx'), couple_id: cid, scenario_id: scenarioId, source_plan_item_id: src ? src.id : null, item_type: type, name: name.slice(0, 80), amount: amt, adjustment_type: at, adjustment_value: av, planned_date: pd, active: true, created_at: now(), updated_at: now() };
+      db.financial_plan_scenario_items.push(row);
+      logAudit(db, cid, userId, 'plan_scenario_item', row.id, 'create', { scenario: scenarioId });
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.scenario_changed', entity_type: 'plan', entity_id: p.id, metadata: { scenario: scenarioId } });
+      return row;
+    },
+    updateScenarioItem: function (userId, itemId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var x = db.financial_plan_scenario_items.find(function (r) { return r.id === itemId && r.couple_id === cid; });
+      if (!x) throw new Error('Item de cenário não encontrado.');
+      if (data.adjustment_type !== undefined) {
+        if (DB.PLAN_ADJUST_TYPES.indexOf(data.adjustment_type) < 0) throw new Error('Tipo de ajuste inválido.');
+        x.adjustment_type = data.adjustment_type;
+        if (data.adjustment_type === 'fixed') x.adjustment_value = parseZeroPlus(data.adjustment_value, 'O valor fixo');
+        else if (data.adjustment_type === 'percentage') {
+          var av = Number(String(data.adjustment_value == null ? '' : data.adjustment_value).replace(',', '.'));
+          if (!isFinite(av) || av < -100 || av > 1000) throw new Error('Percentual precisa estar entre -100 e 1000.');
+          x.adjustment_value = Math.round(av * 100) / 100;
+        } else x.adjustment_value = 0;
+      } else if (data.adjustment_value !== undefined) {
+        if (x.adjustment_type === 'fixed') x.adjustment_value = parseZeroPlus(data.adjustment_value, 'O valor fixo');
+        else if (x.adjustment_type === 'percentage') {
+          var av2 = Number(String(data.adjustment_value).replace(',', '.'));
+          if (!isFinite(av2) || av2 < -100 || av2 > 1000) throw new Error('Percentual precisa estar entre -100 e 1000.');
+          x.adjustment_value = Math.round(av2 * 100) / 100;
+        }
+      }
+      if (data.name !== undefined) {
+        var name = String(data.name).trim();
+        if (name.length < 2) throw new Error('Dê um nome para o item.');
+        x.name = name.slice(0, 80);
+      }
+      if (data.item_type !== undefined) {
+        if (DB.PLAN_ITEM_TYPES.indexOf(data.item_type) < 0) throw new Error('Tipo de item inválido.');
+        x.item_type = data.item_type;
+      }
+      if (data.amount !== undefined && !x.source_plan_item_id) x.amount = parseAmount(data.amount);
+      if (data.planned_date !== undefined) x.planned_date = cleanDate(data.planned_date);
+      if (data.active !== undefined) x.active = !!data.active;
+      x.updated_at = now();
+      logAudit(db, cid, userId, 'plan_scenario_item', x.id, 'update', {});
+      write(db);
+      DB.emitEvent(userId, { event_type: 'plan.scenario_changed', entity_type: 'plan', entity_id: (db.financial_plan_scenarios.find(function (s) { return s.id === x.scenario_id; }) || {}).plan_id, metadata: { scenario: x.scenario_id } });
+      return x;
+    },
+    removeScenarioItem: function (userId, itemId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var x = db.financial_plan_scenario_items.find(function (r) { return r.id === itemId && r.couple_id === cid; });
+      if (!x) throw new Error('Item de cenário não encontrado.');
+      x.active = false; x.updated_at = now();
+      logAudit(db, cid, userId, 'plan_scenario_item', x.id, 'remove', {});
+      write(db);
+      return x;
+    },
+    simulateScenario: function (userId, scenarioId, opt) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var s = db.financial_plan_scenarios.find(function (x) { return x.id === scenarioId && x.couple_id === cid; });
+      if (!s) throw new Error('Cenário não encontrado.');
+      var c = DB.calculatePlan(userId, s.plan_id, Object.assign({}, opt, { scenarioId: scenarioId }));
+      logAudit(read(), cid, userId, 'plan_scenario', scenarioId, 'simulate', {});
+      DB.emitEvent(userId, { event_type: 'plan.scenario_changed', entity_type: 'plan', entity_id: s.plan_id, metadata: { scenario: scenarioId, action: 'simulate' } });
+      return c;
+    },
+    compareScenario: function (userId, planId, scenarioIdA, scenarioIdB) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var list = db.financial_plan_scenarios.filter(function (x) { return x.plan_id === planId && x.couple_id === cid && x.status !== 'archived'; });
+      var a = scenarioIdA ? list.find(function (x) { return x.id === scenarioIdA; }) : list.find(function (x) { return x.scenario_type === 'baseline'; });
+      if (!a) throw new Error('Cenário base não encontrado.');
+      var b = scenarioIdB ? list.find(function (x) { return x.id === scenarioIdB; }) : null;
+      if (scenarioIdB && !b) throw new Error('Cenário não encontrado.');
+      if (!b) {
+        b = list.filter(function (x) { return x.id !== a.id; })[0] || null;
+        if (!b) throw new Error('Crie outro cenário para comparar.');
+      }
+      if (a.id === b.id) throw new Error('Escolha dois cenários diferentes.');
+      var ca = DB.calculatePlan(userId, planId, { scenarioId: a.id });
+      var cb = DB.calculatePlan(userId, planId, { scenarioId: b.id });
+      function diff(x, y) { return Math.round((y - x) * 100) / 100; }
+      var months = ca.months.map(function (m, i) {
+        var o = cb.months[i] || {};
+        return { ym: m.ym, a: { ending: m.ending, net: m.net }, b: { ending: o.ending, net: o.net }, dEnding: diff(m.ending, o.ending || 0), dNet: diff(m.net, o.net || 0), dIncome: diff(m.income, o.income || 0), dExpenses: diff(m.expenses, o.expenses || 0) };
+      });
+      return {
+        a: { id: a.id, name: a.name, scenario_type: a.scenario_type }, b: { id: b.id, name: b.name, scenario_type: b.scenario_type },
+        months: months,
+        totals: { income: diff(ca.totals.income, cb.totals.income), expenses: diff(ca.totals.expenses, cb.totals.expenses), net: diff(ca.totals.net, cb.totals.net), ending: diff(ca.totals.ending, cb.totals.ending) }
+      };
+    },
+    /* Varredura de planejamento: variância, compromissos, itens, metas.
+       Emite eventos + notificações via motor P24 (idempotência por chave). */
+    planScan: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var today = (opt.today || now().slice(0, 10)).slice(0, 10);
+      var made = [];
+      function notify(type, planId, title, body, entityId, keySuffix, priority) {
+        try {
+          var n = DB.notifCreate(userId, { type: type, title: title, body: body, priority: priority, related_entity_type: 'plan', related_entity_id: planId, event_id: entityId || null, idempotency_key: ['plan26', cid, type, planId, keySuffix || today].join('|'), origin: 'operational', payload: { plan_id: planId } }, {});
+          made.push(n.id);
+        } catch (e) { /* suprimida por cooldown/idempotência/prefs: segue */ }
+      }
+      var plans = db.financial_plans.filter(function (p) {
+        return p.couple_id === cid && p.status === 'active' && (!opt.planId || p.id === opt.planId);
+      });
+      plans.forEach(function (p) {
+        var c;
+        try { c = DB.calculatePlan(userId, p.id, {}); } catch (e) { return; }
+        var curYm = today.slice(0, 7);
+        var cur = c.months.filter(function (m) { return m.ym === curYm; })[0];
+        if (cur) {
+          [['Receitas', cur.variance.income], ['Despesas', cur.variance.expense]].forEach(function (pair) {
+            var v = pair[1];
+            if (v.planned > 0 && Math.abs(v.variance) >= 100 && v.pct != null && Math.abs(v.pct) >= 10) {
+              DB.emitEvent(userId, { event_type: 'plan.variance_detected', entity_type: 'plan', entity_id: p.id, metadata: { month: curYm, kind: pair[0] === 'Receitas' ? 'income' : 'expense', variance: v.variance } });
+              notify('plan_variance_detected', p.id, 'Planejado x realizado: ' + pair[0], 'Planejado: ' + DB.aiMoney(v.planned) + ' • Realizado: ' + DB.aiMoney(v.actual) + ' • Diferença: ' + DB.aiMoney(v.variance) + ' (' + curYm + ').', null, curYm + ':' + (pair[0] === 'Receitas' ? 'income' : 'expense'));
+            }
+          });
+        }
+        var soon = DB.dateAddDays(today, 7);
+        var comm = (c.commitments.items || []).filter(function (it) { return it.date >= today && it.date <= soon && it.amount > 0; });
+        if (comm.length) {
+          var tot = Math.round(comm.reduce(function (a, it) { return a + it.amount; }, 0) * 100) / 100;
+          DB.emitEvent(userId, { event_type: 'plan.commitment_upcoming', entity_type: 'plan', entity_id: p.id, metadata: { count: comm.length, total: tot } });
+          notify('planned_commitment_upcoming', p.id, comm.length + (comm.length === 1 ? ' compromisso' : ' compromissos') + ' nos próximos 7 dias', 'Total: ' + DB.aiMoney(tot) + '. Compromissos já contratados, não são gastos novos.', null, today);
+        }
+        if (c.totals.ending < 0) {
+          DB.emitEvent(userId, { event_type: 'plan.cashflow_negative', entity_type: 'plan', entity_id: p.id, metadata: { ending: c.totals.ending } });
+          notify('projected_cashflow_change', p.id, 'Saldo final projetado negativo', 'Projeção: ' + DB.aiMoney(c.totals.ending) + ' ao fim do período. Estimativa, não saldo.', null, today);
+        }
+        (c.goals || []).forEach(function (g) {
+          if (g.shortfall > 0 && g.deadline) {
+            notify('goal_plan_variance', p.id, 'Meta "' + g.name + '" abaixo do planejado', 'Faltam ' + DB.aiMoney(g.remaining) + ' • Planejado no período: ' + DB.aiMoney(g.plannedContributions) + ' • Diferença: ' + DB.aiMoney(g.shortfall) + '.', g.id, g.id);
+          }
+        });
+        DB.listPlanItems(userId, p.id, { activeOnly: true }).forEach(function (it) {
+          if (it.item_type === 'commitment') return;
+          if (it.planned_date >= today && it.planned_date <= soon) {
+            notify('plan_item_due', p.id, 'Item planejado próximo: ' + it.name, DB.aiMoney(it.amount) + ' em ' + it.planned_date.split('-').reverse().join('/') + '.', it.id, it.id);
+          }
+        });
+      });
+      return made;
+    },
+    /* ============ PROMPT 27 (V3): CALENDÁRIO FINANCEIRO 2.0 ============
+       Camada de VISUALIZAÇÃO temporal. Geração dinâmica (sem tabela nova),
+       sempre via serviços oficiais. Nunca cria/altera dado real; nunca
+       duplica: compra+parcela+fatura+pagamento são eventos distintos;
+       pagamento/transferência/acerto nunca viram receita/despesa.
+       Datas são strings YYYY-MM-DD (sem conversão de timezone). */
+    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight'],
+    CALENDAR_STATES: ['realizado', 'previsto', 'planejado', 'pendente', 'vencido', 'pago', 'concluído', 'cancelado', 'pulado', 'info'],
+    calValidateFilters: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var vision = opt.vision || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(vision) < 0) throw new Error('Visão inválida.');
+      function own(table, idv, label) {
+        if (idv == null || idv === '') return null;
+        var row = db[table].find(function (x) { return x.id === idv && x.couple_id === cid; });
+        if (!row) throw new Error(label + ' inválido para este casal.');
+        return row.id;
+      }
+      var acc = null, accs = null;
+      if (opt.account_id) acc = own('accounts', opt.account_id, 'Conta');
+      if (opt.account_ids) { accs = opt.account_ids.map(function (a) { return own('accounts', a, 'Conta'); }); }
+      var card = null, cards = null;
+      if (opt.credit_card_id) card = own('credit_cards', opt.credit_card_id, 'Cartão');
+      if (opt.card_ids) { cards = opt.card_ids.map(function (a) { return own('credit_cards', a, 'Cartão'); }); }
+      var cat = opt.category_id ? own('categories', opt.category_id, 'Categoria') : null;
+      var person = null;
+      if (opt.person === 'me') person = userId;
+      else if (opt.person === 'partner') {
+        var ids = orderedMemberIds(db, cid);
+        person = ids.find(function (x) { return x !== userId; }) || null;
+        if (!person) throw new Error('Parceiro ainda não entrou no casal.');
+      } else if (opt.person && opt.person !== 'couple') {
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === opt.person; })) throw new Error('Pessoa inválida.');
+        person = opt.person;
+      }
+      var from = opt.from ? cleanDate(opt.from) : null, to = opt.to ? cleanDate(opt.to) : null;
+      if (from && to && from > to) throw new Error('Período inválido.');
+      var types = null;
+      if (opt.types) {
+        types = (Array.isArray(opt.types) ? opt.types : String(opt.types).split(',')).map(function (s) { return String(s).trim(); }).filter(Boolean);
+        types.forEach(function (t) { if (DB.CALENDAR_TYPES.indexOf(t) < 0) throw new Error('Tipo de evento inválido: ' + t); });
+      }
+      var states = null;
+      if (opt.states) {
+        states = (Array.isArray(opt.states) ? opt.states : String(opt.states).split(',')).map(function (s) { return String(s).trim(); }).filter(Boolean);
+        states.forEach(function (s) { if (DB.CALENDAR_STATES.indexOf(s) < 0) throw new Error('Estado inválido: ' + s); });
+      }
+      return { vision: vision, account_id: acc, account_ids: accs, credit_card_id: card, card_ids: cards, category_id: cat, person: person, from: from, to: to, types: types, states: states, search: String(opt.search || '').trim().toLowerCase(), plan_id: opt.plan_id || null, scenarioId: opt.scenarioId || null, today: (opt.today || now().slice(0, 10)).slice(0, 10) };
+    },
+    calVisionFocus: function (userId, vision) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ids = orderedMemberIds(db, cid);
+      if (vision === 'me') return userId;
+      if (vision === 'partner') return ids.find(function (x) { return x !== userId; }) || null;
+      return null;
+    },
+    /* Núcleo: 1 leitura + centrais. Retorna eventos normalizados ordenados. */
+    getCalendarEvents: function (userId, opt) {
+      var f = DB.calValidateFilters(userId, opt || {});
+      var db = read(), cid = DB.myCoupleId(userId);
+      var focus = DB.calVisionFocus(userId, f.vision);
+      var from = f.from || '0000-01-01', to = f.to || '9999-12-31';
+      var evs = [];
+      function passCommon(e) {
+        if (f.types && f.types.indexOf(e.event_type) < 0) return false;
+        if (f.states && f.states.indexOf(e.status) < 0) return false;
+        if (f.account_id && (e.account_id || null) !== f.account_id) return false;
+        if (f.account_ids && f.account_ids.indexOf(e.account_id || null) < 0) return false;
+        if (f.credit_card_id && (e.credit_card_id || null) !== f.credit_card_id) return false;
+        if (f.card_ids && f.card_ids.indexOf(e.credit_card_id || null) < 0) return false;
+        if (f.category_id && (e.category_id || null) !== f.category_id && !DB.catInFilter(db, cid, e.category_id, f.category_id)) return false;
+        if (f.person && (e.user_id || null) !== null && (e.user_id || null) !== f.person) {
+          if (!(e.user_id === null)) return false;
+        }
+        if (f.search && ((e.title + ' ' + (e.description || '')).toLowerCase().indexOf(f.search) < 0)) return false;
+        return true;
+      }
+      function push(e) {
+        if (e.event_date < from || e.event_date > to) return;
+        if (!passCommon(e)) return;
+        evs.push(e);
+      }
+      function mk(o) {
+        return Object.assign({ id: '', couple_id: cid, event_type: 'expense', source_type: '', source_id: '', title: '', description: '', event_date: f.today, due_date: null, amount: 0, currency: 'BRL', status: 'info', visibility: f.vision, user_id: null, account_id: null, credit_card_id: null, category_id: null, plan_id: null, related_entity_type: null, related_entity_id: null, is_recurring: false, is_projected: false, is_planned: false, is_realized: false, priority: 'normal', metadata: {}, route: '#/dashboard' }, o);
+      }
+      var catMap = {}, accMap = {}, cardMap = {};
+      db.categories.forEach(function (c) { if (c.couple_id === cid) catMap[c.id] = c; });
+      db.accounts.forEach(function (a) { if (a.couple_id === cid) accMap[a.id] = a; });
+      db.credit_cards.forEach(function (c) { if (c.couple_id === cid) cardMap[c.id] = c; });
+      function txVisible(t) {
+        if (f.vision === 'couple') return true;
+        if (!focus) return false;
+        if (t.type === 'income') return t.payer_user_id === focus;
+        if (t.is_shared) return true;
+        return t.payer_user_id === focus;
+      }
+      /* 1. Transações realizadas (1x cada; cartão ≠ saída de conta). */
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (!txVisible(t)) return;
+        if (f.person && t.payer_user_id !== f.person && !(t.is_shared)) return;
+        push(mk({ id: 'tx:' + t.id, event_type: t.type, source_type: 'transaction', source_id: t.id, title: t.description, description: (t.is_shared ? 'Compartilhada' : 'Individual') + ' • ' + (catMap[t.category_id] ? catMap[t.category_id].name : ''), event_date: t.date, amount: t.amount, status: 'realizado', user_id: t.payer_user_id, account_id: t.account_id || null, credit_card_id: t.credit_card_id || null, category_id: t.category_id || null, is_realized: true, related_entity_type: 'transaction', related_entity_id: t.id, metadata: { is_shared: !!t.is_shared, cash_impact: t.credit_card_id ? 0 : (t.type === 'income' ? t.amount : -t.amount) }, route: '#/transactions' }));
+      });
+      /* 2. Transferências realizadas (neutras: nunca receita/despesa). */
+      db.transfers.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at) return;
+        if (f.vision !== 'couple' && focus) {
+          var fa = accMap[t.from_account_id], ta = accMap[t.to_account_id];
+          var mine = function (a) { return a && (a.owner_type === 'joint' || a.owner_user_id === focus); };
+          if (!mine(fa) && !mine(ta)) return;
+        }
+        push(mk({ id: 'tr:' + t.id, event_type: 'transfer', source_type: 'transfer', source_id: t.id, title: 'Transferência • ' + (accMap[t.from_account_id] ? accMap[t.from_account_id].name : '') + ' → ' + (accMap[t.to_account_id] ? accMap[t.to_account_id].name : ''), description: t.description || 'Move dinheiro entre contas; não altera resultado.', event_date: t.date, amount: t.amount, status: 'realizado', account_id: t.from_account_id, is_realized: true, related_entity_type: 'transfer', related_entity_id: t.id, metadata: { from: t.from_account_id, to: t.to_account_id, cash_impact: 0 }, route: '#/accounts' }));
+      });
+      /* 3. Faturas: fechamento (info) + vencimento (previsto/pendente/vencido). */
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'cancelled') return;
+        if (f.vision !== 'couple' && focus) {
+          var cc = cardMap[i.credit_card_id];
+          if (cc && cc.owner_type === 'individual' && cc.owner_user_id !== focus) return;
+        }
+        var out = 0;
+        try { out = DB.calculateInvoiceOutstanding(userId, i.id); } catch (e) { out = 0; }
+        var st = 'previsto';
+        try { st = DB.calculateInvoiceStatus(userId, i.id, f.today); } catch (e) {}
+        var mapSt = st === 'paid' ? 'pago' : st === 'overdue' ? 'vencido' : st === 'closed' ? 'pendente' : st === 'open' ? 'previsto' : 'info';
+        var nm = cardMap[i.credit_card_id] ? cardMap[i.credit_card_id].name : 'Cartão';
+        push(mk({ id: 'inv-close:' + i.id, event_type: 'invoice', source_type: 'invoice', source_id: i.id, title: 'Fechamento • ' + nm + ' ' + ('0' + i.reference_month).slice(-2) + '/' + i.reference_year, description: 'Fechamento não é despesa.', event_date: i.closing_date, amount: out, status: 'info', credit_card_id: i.credit_card_id, is_projected: mapSt !== 'pago', related_entity_type: 'invoice', related_entity_id: i.id, metadata: { kind: 'closing' }, route: '#/invoices' }));
+        if (mapSt !== 'pago' || out > 0) push(mk({ id: 'inv-due:' + i.id, event_type: 'invoice', source_type: 'invoice', source_id: i.id, title: 'Vencimento • ' + nm + ' • ' + DB.aiMoney(out), description: 'Obrigação de pagamento; pagar não cria despesa nova.', event_date: i.due_date, due_date: i.due_date, amount: out, status: mapSt, credit_card_id: i.credit_card_id, is_projected: mapSt !== 'pago', priority: mapSt === 'vencido' ? 'high' : 'normal', related_entity_type: 'invoice', related_entity_id: i.id, metadata: { kind: 'due', outstanding: out }, route: '#/invoices' }));
+      });
+      /* 4. Pagamentos de fatura (saída de caixa, nunca despesa). */
+      db.invoice_payments.forEach(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return;
+        var inv = db.invoices.find(function (x) { return x.id === p.invoice_id; });
+        if (f.vision !== 'couple' && focus && inv) {
+          var cc2 = cardMap[inv.credit_card_id];
+          if (cc2 && cc2.owner_type === 'individual' && cc2.owner_user_id !== focus) return;
+        }
+        push(mk({ id: 'pay:' + p.id, event_type: 'invoice_payment', source_type: 'invoice_payment', source_id: p.id, title: 'Pagamento de fatura • ' + DB.aiMoney(p.amount), description: 'Saída da conta; não é despesa nova.', event_date: p.payment_date, amount: p.amount, status: 'pago', account_id: p.payment_account_id || null, credit_card_id: inv ? inv.credit_card_id : null, is_realized: true, related_entity_type: 'invoice', related_entity_id: p.invoice_id, metadata: { cash_impact: -p.amount }, route: '#/invoices' }));
+      });
+      /* 5. Parcelas: 1 evento por vencimento (nunca o total como saída mensal). */
+      var actIds = {};
+      db.installment_purchases.forEach(function (p) { if (p.couple_id === cid && !p.deleted_at && p.status === 'active') actIds[p.id] = true; });
+      db.installments.forEach(function (r) {
+        if (r.couple_id !== cid || r.deleted_at || !actIds[r.installment_purchase_id]) return;
+        var p = db.installment_purchases.find(function (x) { return x.id === r.installment_purchase_id; });
+        if (!p) return;
+        if (f.vision !== 'couple' && focus) {
+          var cc3 = cardMap[r.credit_card_id];
+          if (cc3 && cc3.owner_type === 'individual' && cc3.owner_user_id !== focus) return;
+          if (!p.is_shared && p.payer_user_id !== focus) return;
+        }
+        if (f.person && !p.is_shared && p.payer_user_id !== f.person) return;
+        var rst = r.status === 'paid' ? 'pago' : r.status === 'cancelled' ? 'cancelado' : (r.due_date < f.today ? 'vencido' : 'previsto');
+        push(mk({ id: 'inst:' + r.id, event_type: 'installment', source_type: 'installment', source_id: r.id, title: p.description + ' • ' + r.installment_number + '/' + r.total_installments, description: 'Parcela ' + r.installment_number + ' de ' + r.total_installments + ' (total ' + DB.aiMoney(p.total_amount) + ').', event_date: r.due_date, due_date: r.due_date, amount: r.amount, status: rst, user_id: p.is_shared ? null : p.payer_user_id, credit_card_id: r.credit_card_id, category_id: p.category_id || null, is_recurring: false, is_projected: rst === 'previsto' || rst === 'vencido', priority: rst === 'vencido' ? 'high' : 'normal', related_entity_type: 'installment', related_entity_id: r.id, metadata: { purchase_id: p.id, n: r.installment_number, total: r.total_installments }, route: '#/installments' }));
+      });
+      /* 6. Recorrências (ocorrências materializadas = verdade; sem criar nada). */
+      var recMap = {};
+      db.recurring_transactions.forEach(function (r) { if (r.couple_id === cid) recMap[r.id] = r; });
+      db.recurring_occurrences.forEach(function (o) {
+        if (o.couple_id !== cid) return;
+        var r = recMap[o.recurring_transaction_id];
+        if (!r) return;
+        if (f.vision !== 'couple' && focus) {
+          if (!r.is_shared && r.payer_user_id !== focus) return;
+        }
+        if (f.person && !r.is_shared && r.payer_user_id !== f.person) return;
+        if (f.category_id && r.category_id !== f.category_id && !DB.catInFilter(db, cid, r.category_id, f.category_id)) return;
+        var st2 = o.status === 'paid' ? 'pago' : o.status === 'cancelled' ? 'cancelado' : o.status === 'skipped' ? 'pulado' : (o.due_date < f.today ? 'vencido' : 'pendente');
+        push(mk({ id: 'rec:' + o.id, event_type: 'recurring', source_type: 'recurring', source_id: o.id, title: r.description, description: (r.type === 'income' ? 'Receita' : 'Despesa') + ' recorrente • vencimento.', event_date: o.due_date, due_date: o.due_date, amount: o.amount, status: st2, user_id: r.is_shared ? null : r.payer_user_id, category_id: r.category_id || null, is_recurring: true, is_projected: st2 === 'pendente' || st2 === 'vencido', priority: st2 === 'vencido' ? 'high' : 'normal', related_entity_type: 'occurrence', related_entity_id: o.id, metadata: { recurring_id: r.id, tx_type: r.type }, route: '#/calendar' }));
+      });
+      /* 7. Metas: prazo + conclusão (nunca altera current_amount). */
+      db.goals.forEach(function (g) {
+        if (g.couple_id !== cid || g.status === 'archived') return;
+        if (g.deadline) {
+          var gst = g.status === 'completed' ? 'concluído' : (g.deadline < f.today ? 'vencido' : 'previsto');
+          push(mk({ id: 'goal-due:' + g.id, event_type: 'goal', source_type: 'goal', source_id: g.id, title: 'Prazo da meta • ' + g.name, description: DB.aiMoney(g.current_amount) + ' de ' + DB.aiMoney(g.target_amount) + '. Contribuição planejada ≠ realizada.', event_date: g.deadline, due_date: g.deadline, amount: Math.max(0, Math.round((g.target_amount - g.current_amount) * 100) / 100), status: gst, is_projected: gst !== 'concluído', priority: gst === 'vencido' ? 'high' : 'normal', related_entity_type: 'goal', related_entity_id: g.id, metadata: { kind: 'deadline' }, route: '#/goals' }));
+        }
+        if (g.status === 'completed') push(mk({ id: 'goal-done:' + g.id, event_type: 'goal', source_type: 'goal', source_id: g.id, title: 'Meta concluída • ' + g.name, description: 'Objetivo: ' + DB.aiMoney(g.target_amount) + '.', event_date: g.updated_at.slice(0, 10), amount: g.target_amount, status: 'concluído', related_entity_type: 'goal', related_entity_id: g.id, metadata: { kind: 'completed' }, route: '#/goals' }));
+      });
+      db.goal_events.forEach(function (e) {
+        if (e.couple_id !== cid) return;
+        push(mk({ id: 'goal-ev:' + e.id, event_type: 'goal', source_type: 'goal', source_id: e.goal_id, title: 'Aporte • ' + DB.aiMoney(e.amount), description: e.note || 'Contribuição realizada.', event_date: e.date, amount: e.amount, status: 'realizado', is_realized: true, related_entity_type: 'goal', related_entity_id: e.goal_id, metadata: { kind: 'contribution' }, route: '#/goals' }));
+      });
+      /* 8. Orçamentos: marco mensal (teto de referência, nunca transação). */
+      var yms = {};
+      for (var d = from.slice(0, 7); d <= to.slice(0, 7) && Object.keys(yms).length < 37; d = shiftMonth(d, 1)) yms[d] = true;
+      Object.keys(yms).forEach(function (ym) {
+        var bs = null;
+        try { bs = DB.budgetSummary(userId, ym); } catch (e) { bs = null; }
+        if (!bs || !bs.items.length) return;
+        var over = bs.items.some(function (it) { return it.status.key === 'over'; });
+        var warn = !over && bs.items.some(function (it) { return it.status.key === 'warn'; });
+        push(mk({ id: 'bud:' + ym, event_type: 'budget', source_type: 'budget', source_id: ym, title: 'Orçamento • ' + ym.slice(5, 7) + '/' + ym.slice(0, 4) + ' • ' + DB.aiMoney(bs.spent) + ' de ' + DB.aiMoney(bs.total), description: 'Teto de referência; não é transação.', event_date: ym + '-01', amount: bs.total, status: over ? 'vencido' : warn ? 'pendente' : 'info', related_entity_type: 'budget', related_entity_id: ym, metadata: { kind: 'period', spent: bs.spent }, route: '#/budget' }));
+      });
+      /* 9. Acertos: realizados + pendente (acerto nunca é despesa). */
+      db.settlements.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        if (f.vision !== 'couple' && focus && s.from_user_id !== focus && s.to_user_id !== focus) return;
+        if (f.person && s.from_user_id !== f.person && s.to_user_id !== f.person) return;
+        var nm = db.users.find(function (u) { return u.id === s.from_user_id; });
+        var nm2 = db.users.find(function (u) { return u.id === s.to_user_id; });
+        push(mk({ id: 'set:' + s.id, event_type: 'settlement', source_type: 'settlement', source_id: s.id, title: 'Acerto • ' + (nm ? nm.nome.split(' ')[0] : '') + ' → ' + (nm2 ? nm2.nome.split(' ')[0] : ''), description: 'Acerto financeiro; não é despesa nova.', event_date: s.date, amount: s.amount, status: 'realizado', user_id: s.from_user_id, is_realized: true, related_entity_type: 'settlement', related_entity_id: s.id, metadata: { cash_impact: 0 }, route: '#/settlements' }));
+      });
+      try {
+        var eng = DB.settle(userId);
+        var cp38b = db.couples.filter(function (x) { return x.id === cid; })[0];
+        if (eng.debt && eng.debt.amount > 0 && (!cp38b || cp38b.money_management_mode !== 'JOINT')) {
+          var showDebt = f.vision === 'couple' || !focus || eng.debt.from === focus || eng.debt.to === focus;
+          if (showDebt && (!f.person || eng.debt.from === f.person || eng.debt.to === f.person)) {
+            var dn1 = db.users.find(function (u) { return u.id === eng.debt.from; });
+            var dn2 = db.users.find(function (u) { return u.id === eng.debt.to; });
+            push(mk({ id: 'set:pending', event_type: 'settlement', source_type: 'settlement', source_id: 'pending', title: 'Acerto pendente • ' + (dn1 ? dn1.nome.split(' ')[0] : '') + ' → ' + (dn2 ? dn2.nome.split(' ')[0] : ''), description: 'Saldo de acertos; resolver não cria despesa.', event_date: f.today, due_date: f.today, amount: eng.debt.amount, status: 'pendente', user_id: eng.debt.from, is_projected: true, related_entity_type: 'settlement', related_entity_id: 'pending', metadata: { kind: 'pending' }, route: '#/settlements' }));
+          }
+        }
+      } catch (e) {}
+      /* 10. Planejamento P26: itens planejados (só cenário visualizado). */
+      try {
+        var plans = DB.listPlans(userId, {}).filter(function (p) { return p.status !== 'archived' && (!f.plan_id || p.id === f.plan_id); });
+        plans.forEach(function (p) {
+          var items = [];
+          try { items = DB.listPlanItems(userId, p.id, { activeOnly: true }); } catch (e2) { items = []; }
+          var scenItems = [];
+          if (f.scenarioId) {
+            try {
+              scenItems = (read().financial_plan_scenario_items || []).filter(function (x) { return x.scenario_id === f.scenarioId && x.couple_id === cid && x.active; });
+            } catch (e3) { scenItems = []; }
+          }
+          items.forEach(function (it) {
+            if (it.item_type === 'commitment') return;
+            if (f.vision !== 'couple' && focus && it.user_id && it.user_id !== focus) return;
+            if (f.person && it.user_id && it.user_id !== f.person) return;
+            if (f.category_id && it.category_id && it.category_id !== f.category_id && !DB.catInFilter(db, cid, it.category_id, f.category_id)) return;
+            var amt = it.amount;
+            try { amt = DB.planScenarioAmount(it, scenItems); } catch (e4) {}
+            var et = it.item_type === 'income' ? 'income' : it.item_type === 'expense' ? 'expense' : 'planning_item';
+            push(mk({ id: 'plan:' + it.id, event_type: et === 'income' || et === 'expense' ? et : 'planning_item', source_type: 'planning_item', source_id: it.id, title: 'Planejado • ' + it.name, description: 'Item planejado (não é lançamento real).' + (f.scenarioId ? ' Cenário visualizado.' : ''), event_date: it.planned_date, due_date: it.planned_date, amount: amt, status: 'planejado', user_id: it.user_id || null, category_id: it.category_id || null, account_id: it.account_id || null, plan_id: p.id, is_planned: true, related_entity_type: 'plan', related_entity_id: p.id, metadata: { item_type: it.item_type, plan_name: p.name }, route: '#/planning/' + p.id }));
+          });
+        });
+      } catch (e) {}
+      /* 11. Insights como contexto (sem nova engine). */
+      try {
+        var ins = DB.getActiveInsights(userId, {}).slice(0, 20);
+        ins.forEach(function (r) {
+          var d = (r.period_end || r.created_at || f.today).slice(0, 10);
+          push(mk({ id: 'ins:' + r.id, event_type: 'insight', source_type: 'insight', source_id: r.id, title: 'Contexto • ' + r.title, description: 'Contexto factual; não é recomendação.', event_date: d, amount: 0, status: 'info', related_entity_type: 'insight', related_entity_id: r.id, metadata: { severity: r.severity }, route: '#/insights' }));
+        });
+      } catch (e) {}
+      evs.sort(function (a, b) { return (a.event_date + a.id).localeCompare(b.event_date + b.id); });
+      return evs;
+    },
+    filterEvents: function (events, opt) {
+      opt = opt || {};
+      return (events || []).filter(function (e) {
+        if (opt.types && opt.types.indexOf(e.event_type) < 0) return false;
+        if (opt.states && opt.states.indexOf(e.status) < 0) return false;
+        if (opt.search && (e.title + ' ' + (e.description || '')).toLowerCase().indexOf(String(opt.search).toLowerCase()) < 0) return false;
+        return true;
+      });
+    },
+    groupEventsByDate: function (events) {
+      var out = {};
+      (events || []).forEach(function (e) { (out[e.event_date] = out[e.event_date] || []).push(e); });
+      return out;
+    },
+    getEventsForDay: function (userId, dayISO, opt) {
+      var d = cleanDate(dayISO);
+      return DB.getCalendarEvents(userId, Object.assign({}, opt, { from: d, to: d }));
+    },
+    getEventsForWeek: function (userId, dayISO, opt) {
+      var d = cleanDate(dayISO);
+      var dt = new Date(d + 'T12:00:00');
+      var dow = dt.getDay();
+      var start = new Date(dt.getTime() - dow * 864e5), end = new Date(dt.getTime() + (6 - dow) * 864e5);
+      function iso(x) { return x.getFullYear() + '-' + ('0' + (x.getMonth() + 1)).slice(-2) + '-' + ('0' + x.getDate()).slice(-2); }
+      return DB.getCalendarEvents(userId, Object.assign({}, opt, { from: iso(start), to: iso(end) }));
+    },
+    getEventsForMonth: function (userId, ym, opt) {
+      if (!/^\d{4}-\d{2}$/.test(ym || '')) throw new Error('Mês inválido.');
+      var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10);
+      return DB.getCalendarEvents(userId, Object.assign({}, opt, { from: ym + '-01', to: ym + '-' + dim(y, m) }));
+    },
+    getUpcomingEvents: function (userId, opt) {
+      opt = opt || {};
+      var today = (opt.today || now().slice(0, 10)).slice(0, 10);
+      var evs = DB.getCalendarEvents(userId, Object.assign({}, opt, { from: today, to: opt.to || '9999-12-31' }));
+      evs = evs.filter(function (e) { return e.event_date >= today && ['previsto', 'pendente', 'vencido', 'planejado'].indexOf(e.status) >= 0; });
+      return evs.slice(0, opt.limit || 10);
+    },
+    getOverdueEvents: function (userId, opt) {
+      opt = opt || {};
+      var today = (opt.today || now().slice(0, 10)).slice(0, 10);
+      var evs = DB.getCalendarEvents(userId, Object.assign({}, opt, { from: '0000-01-01', to: opt.to || today }));
+      return evs.filter(function (e) { return e.event_date <= today && e.status === 'vencido'; }).slice(0, opt.limit || 50);
+    },
+    getEventDetails: function (userId, eventId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var parts = String(eventId || '').split(':');
+      if (parts.length < 2) throw new Error('Evento não encontrado.');
+      var kind = parts[0], ref = parts.slice(1).join(':');
+      var evs = DB.getCalendarEvents(userId, { from: '0000-01-01', to: '9999-12-31' });
+      var ev = evs.find(function (e) { return e.id === eventId; });
+      if (!ev) throw new Error('Evento não encontrado.');
+      var actions = [];
+      if (kind === 'tx') actions = [{ label: 'Ver transação', route: '#/transactions' }, { label: 'Editar', route: '#/transactions' }];
+      else if (kind === 'tr') actions = [{ label: 'Ver contas', route: '#/accounts' }];
+      else if (kind === 'inv-due') actions = [{ label: 'Ver fatura', route: '#/invoices' }, { label: 'Pagar fatura', route: '#/invoices' }];
+      else if (kind === 'inv-close') actions = [{ label: 'Ver fatura', route: '#/invoices' }];
+      else if (kind === 'pay') actions = [{ label: 'Ver fatura', route: '#/invoices' }];
+      else if (kind === 'inst') actions = [{ label: 'Ver parcelada', route: '#/installments' }, { label: 'Ver fatura', route: '#/invoices' }];
+      else if (kind === 'rec') actions = [{ label: 'Ver recorrência', route: '#/calendar' }, { label: 'Marcar como paga', route: '#/calendar' }];
+      else if (kind === 'goal-due' || kind === 'goal-done' || kind === 'goal-ev') actions = [{ label: 'Ver meta', route: '#/goals' }];
+      else if (kind === 'bud') actions = [{ label: 'Ver orçamento', route: '#/budget' }];
+      else if (kind === 'set') actions = [{ label: 'Ver acertos', route: '#/settlements' }];
+      else if (kind === 'plan') actions = [{ label: 'Ver no planejamento', route: ev.route }, { label: 'Registrar despesa', route: '#/transactions' }];
+      else actions = [{ label: 'Abrir origem', route: ev.route }];
+      return { event: ev, actions: actions };
+    },
+    /* Resumo do dia/período sem somar incompatíveis: realizado, compromissos
+       (previsto/pendente/vencido não-planejados), planejado; pagamento de
+       fatura e transferência fora de receita/despesa. */
+    calculateDaySummary: function (userId, dayISO, opt) {
+      var evs = DB.getEventsForDay(userId, dayISO, opt);
+      var s = { date: cleanDate(dayISO), incomeRealized: 0, expenseRealized: 0, commitments: 0, plannedIn: 0, plannedOut: 0, transfers: 0, invoicePayments: 0, count: evs.length };
+      evs.forEach(function (e) {
+        if (e.status === 'realizado' && e.event_type === 'income') s.incomeRealized = Math.round((s.incomeRealized + e.amount) * 100) / 100;
+        else if (e.status === 'realizado' && e.event_type === 'expense') {
+          if (e.credit_card_id) return;
+          s.expenseRealized = Math.round((s.expenseRealized + e.amount) * 100) / 100;
+        }
+        else if (e.event_type === 'transfer') s.transfers = Math.round((s.transfers + e.amount) * 100) / 100;
+        else if (e.event_type === 'invoice_payment') s.invoicePayments = Math.round((s.invoicePayments + e.amount) * 100) / 100;
+        else if (e.status === 'planejado') {
+          if (e.event_type === 'income') s.plannedIn = Math.round((s.plannedIn + e.amount) * 100) / 100;
+          else s.plannedOut = Math.round((s.plannedOut + e.amount) * 100) / 100;
+        }
+        else if (!e.is_planned && (e.status === 'previsto' || e.status === 'pendente' || e.status === 'vencido') && e.event_type !== 'budget' && e.event_type !== 'insight' && e.event_type !== 'invoice') {
+          if (e.event_type === 'invoice_payment') return;
+          s.commitments = Math.round((s.commitments + e.amount) * 100) / 100;
+        }
+        else if (e.event_type === 'invoice' && e.metadata && e.metadata.kind === 'due') s.commitments = Math.round((s.commitments + e.amount) * 100) / 100;
+      });
+      s.resultRealized = Math.round((s.incomeRealized - s.expenseRealized) * 100) / 100;
+      return s;
+    },
+    calculatePeriodSummary: function (userId, opt) {
+      var f = DB.calValidateFilters(userId, opt || {});
+      if (!f.from || !f.to) throw new Error('Informe o período.');
+      var evs = DB.getCalendarEvents(userId, opt);
+      var s = { from: f.from, to: f.to, incomeRealized: 0, expenseRealized: 0, commitments: 0, plannedIn: 0, plannedOut: 0, transfers: 0, invoicePayments: 0, count: evs.length };
+      evs.forEach(function (e) {
+        if (e.status === 'realizado' && e.event_type === 'income') s.incomeRealized = Math.round((s.incomeRealized + e.amount) * 100) / 100;
+        else if (e.status === 'realizado' && e.event_type === 'expense') {
+          if (e.credit_card_id) return;
+          s.expenseRealized = Math.round((s.expenseRealized + e.amount) * 100) / 100;
+        }
+        else if (e.event_type === 'transfer') s.transfers = Math.round((s.transfers + e.amount) * 100) / 100;
+        else if (e.event_type === 'invoice_payment') s.invoicePayments = Math.round((s.invoicePayments + e.amount) * 100) / 100;
+        else if (e.status === 'planejado') {
+          if (e.event_type === 'income') s.plannedIn = Math.round((s.plannedIn + e.amount) * 100) / 100;
+          else s.plannedOut = Math.round((s.plannedOut + e.amount) * 100) / 100;
+        }
+        else if (e.event_type === 'invoice' && e.metadata && e.metadata.kind === 'due') s.commitments = Math.round((s.commitments + e.amount) * 100) / 100;
+        else if (!e.is_planned && (e.status === 'previsto' || e.status === 'pendente' || e.status === 'vencido') && ['installment', 'recurring', 'settlement', 'goal'].indexOf(e.event_type) >= 0) s.commitments = Math.round((s.commitments + e.amount) * 100) / 100;
+      });
+      s.resultRealized = Math.round((s.incomeRealized - s.expenseRealized) * 100) / 100;
+      var opening = 0, projected = null;
+      try { opening = DB.calculateAccountsSummary(userId).totalBalance; } catch (e) {}
+      try { var pb = DB.calculateProjectedBalance(userId, f.from.slice(0, 7)); projected = pb.projected; } catch (e2) {}
+      s.opening = opening; s.projected = projected;
+      return s;
+    },
+    /* Fluxo de caixa diário: só o que move conta (receita/despesa em conta +
+       pagamentos de fatura). Cartão e transferência não alteram resultado. */
+    calendarCashflow: function (userId, opt) {
+      var f = DB.calValidateFilters(userId, opt || {});
+      if (!f.from || !f.to) throw new Error('Informe o período.');
+      var evs = DB.getCalendarEvents(userId, opt);
+      var opening = 0;
+      try { opening = DB.calculateAccountsSummary(userId).totalBalance; } catch (e) {}
+      var days = [], cur = f.from;
+      var byDay = DB.groupEventsByDate(evs);
+      var bal = opening;
+      while (cur <= f.to) {
+        var list = byDay[cur] || [];
+        var inn = 0, out = 0;
+        list.forEach(function (e) {
+          if (e.event_type === 'income' && e.status === 'realizado' && !e.credit_card_id) inn += e.amount;
+          else if (e.event_type === 'expense' && e.status === 'realizado' && !e.credit_card_id && e.account_id) out += e.amount;
+          else if (e.event_type === 'invoice_payment') out += e.amount;
+        });
+        inn = Math.round(inn * 100) / 100; out = Math.round(out * 100) / 100;
+        bal = Math.round((bal + inn - out) * 100) / 100;
+        days.push({ date: cur, in: inn, out: out, balance: bal });
+        cur = DB.dateAddDays(cur, 1);
+      }
+      return { opening: opening, days: days, closing: bal };
+    },
+    calendarExportCsv: function (userId, opt) {
+      var evs = DB.getCalendarEvents(userId, opt || {});
+      function q(v) { return '\"' + String(v == null ? '' : v).replace(/\"/g, '\"\"') + '\"'; }
+      var lines = ['data;tipo;descricao;status;valor;categoria;conta;cartao;pessoa;origem;classe'];
+      var db = read();
+      function nm(id, key) {
+        var u = db.users.find(function (x) { return x.id === id; });
+        return u ? u.nome : '';
+      }
+      evs.forEach(function (e) {
+        var cls = e.is_realized ? 'realizado' : e.is_planned ? 'planejado' : e.is_projected ? 'projetado' : 'info';
+        var cat = '', acc = '', card = '';
+        try { cat = e.category_id ? DB.catName(userId, e.category_id) : ''; } catch (x) {}
+        try { acc = e.account_id ? DB.accountName(userId, e.account_id) : ''; } catch (x2) {}
+        try { card = e.credit_card_id ? DB.cardName(userId, e.credit_card_id) : ''; } catch (x3) {}
+        lines.push([e.event_date, e.event_type, q(e.title), e.status, e.amount.toFixed(2), q(cat), q(acc), q(card), q(e.user_id ? nm(e.user_id) : 'Casal'), e.source_type, cls].join(';'));
+      });
+      return { filename: 'calendario.csv', csv: '﻿' + lines.join('\n') };
+    },
+    /* ============ PROMPT 28 (V3): DASHBOARD V3 ============
+       Camada de AGREGAÇÃO e apresentação. Só lê via serviços oficiais;
+       nenhum cálculo financeiro próprio (somas de exibição em centavos).
+       Falha isolada por seção: um módulo quebrado nunca derruba o resumo.
+       Cache coordenado com invalidação por fingerprint (eventos alteram
+       updated_at/max e o cache cai sozinho); dashInvalidate() p/ refresh. */
+    DASH_PRESETS: ['month', 'prev', 'next30', 'next3', 'last3', 'last6', 'last12', 'custom'],
+    dashValidateFilters: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var vision = opt.vision || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(vision) < 0) throw new Error('Visão inválida.');
+      function own(table, idv, label) {
+        if (idv == null || idv === '') return null;
+        var row = db[table].find(function (x) { return x.id === idv && x.couple_id === cid; });
+        if (!row) throw new Error(label + ' inválido para este casal.');
+        return row.id;
+      }
+      var preset = opt.preset || 'month';
+      if (DB.DASH_PRESETS.indexOf(preset) < 0) throw new Error('Período inválido.');
+      var curYm = now().slice(0, 7), fromYm, toYm, future = false;
+      if (preset === 'month') { fromYm = opt.month || curYm; toYm = fromYm; }
+      else if (preset === 'prev') { fromYm = shiftMonth(opt.month || curYm, -1); toYm = fromYm; }
+      else if (preset === 'next30') { fromYm = curYm; toYm = shiftMonth(curYm, 1); future = true; }
+      else if (preset === 'next3') { fromYm = curYm; toYm = shiftMonth(curYm, 2); future = true; }
+      else if (preset === 'last3') { fromYm = shiftMonth(curYm, -2); toYm = curYm; }
+      else if (preset === 'last6') { fromYm = shiftMonth(curYm, -5); toYm = curYm; }
+      else if (preset === 'last12') { fromYm = shiftMonth(curYm, -11); toYm = curYm; }
+      else {
+        var a = (opt.cFrom || curYm).slice(0, 7), b = (opt.cTo || curYm).slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(a) || !/^\d{4}-\d{2}$/.test(b)) throw new Error('Período inválido.');
+        fromYm = a < b ? a : b; toYm = a < b ? b : a;
+        if ((parseInt(toYm.slice(0, 4), 10) - parseInt(fromYm.slice(0, 4), 10)) * 12 + (parseInt(toYm.slice(5, 7), 10) - parseInt(fromYm.slice(5, 7), 10)) + 1 > 36) throw new Error('Período muito longo (máx 36 meses).');
+      }
+      return { vision: vision, preset: preset, month: (opt.month || curYm).slice(0, 7), fromYm: fromYm, toYm: toYm, from: fromYm + '-01', to: toYm + '-' + dim(+toYm.slice(0, 4), +toYm.slice(5, 7)), future: future, account_id: own('accounts', opt.account_id, 'Conta'), credit_card_id: own('credit_cards', opt.credit_card_id, 'Cartão'), category_id: own('categories', opt.category_id, 'Categoria') };
+    },
+    dashFingerprint: function (db) {
+      var fp = DB.analyticsFingerprint(db);
+      var n = 0, mx = '';
+      ['financial_plans', 'financial_plan_items', 'financial_insights', 'notifications', 'settlements', 'goals'].forEach(function (k) {
+        var arr = db[k] || []; n += arr.length * 13 + k.length;
+        for (var i = 0; i < arr.length; i++) { var t = arr[i].updated_at || arr[i].created_at || ''; if (t > mx) mx = t; }
+      });
+      return fp + '|' + n + '|' + mx;
+    },
+    dashInvalidate: function () { DB._dcache = {}; return true; },
+    getCashPosition: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var accS = DB.calculateAccountsSummary(userId);
+      var out = { total: accS.totalBalance, joint: accS.jointBalance, individual: accS.individual, activeAccounts: accS.activeAccounts, accounts: accS.accounts, vision: f.vision, note: '' };
+      if (f.vision !== 'couple') {
+        var va = DB.visionAccounts(userId, f.vision);
+        out.total = va.total; out.accounts = va.list.map(function (x) { return { id: x.account.id, name: x.account.name, type: x.account.type, owner_type: x.account.owner_type, owner_user_id: x.account.owner_user_id, balance: x.balance }; });
+        out.note = va.note;
+      }
+      if (f.account_id) {
+        var one = out.accounts.filter(function (a) { return a.id === f.account_id; })[0];
+        if (!one) throw new Error('Conta inválida para esta visão.');
+        out.total = one.balance; out.accounts = [one];
+      }
+      return out;
+    },
+    getFinancialResult: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var d = DB.dashboardCalc(userId, { from: f.fromYm, to: f.toYm, vision: f.vision, account_id: f.account_id || undefined, credit_card_id: f.credit_card_id || undefined, category_id: f.category_id || undefined });
+      return { income: d.income, expense: d.expense, balance: Math.round((d.income - d.expense) * 100) / 100, incomeCount: d.incomeCount, expenseCount: d.expenseCount, saveRate: d.income ? Math.round((d.income - d.expense) / d.income * 1000) / 10 : null, byCat: d.byCat, topCat: d.topCat, perPerson: d.perPerson, evolution: d.evolution, prev: d.prev, range: { from: f.fromYm, to: f.toYm } };
+    },
+    getDashboardMetrics: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      return DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+    },
+    getUpcomingCommitments: function (userId, opt) {
+      opt = opt || {};
+      var f = DB.dashValidateFilters(userId, opt);
+      var today = now().slice(0, 10);
+      var fc = DB.calculateFutureCommitments(userId, { from: today, to: DB.dateAddDays(today, 30) });
+      var agenda = DB.getUpcomingEvents(userId, { limit: opt.limit || 7, vision: f.vision });
+      return { total30: fc.total, count30: fc.count, items30: fc.items.slice(0, 5), agenda: agenda };
+    },
+    getCardSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var vc = DB.visionCards(userId, f.vision);
+      var list = vc.list;
+      if (f.credit_card_id) list = list.filter(function (x) { return x.card.id === f.credit_card_id; });
+      var tot = 0, used = 0;
+      list.forEach(function (x) { tot = tot + x.card.credit_limit; used = used + x.used; });
+      tot = Math.round(tot * 100) / 100; used = Math.round(used * 100) / 100;
+      return { cards: list.map(function (x) { return { id: x.card.id, name: x.card.name, brand: x.card.brand, last4: x.card.last_four_digits, owner_type: x.card.owner_type, limit: x.card.credit_limit, used: x.used, available: x.available, exceeded: x.exceeded }; }), totalLimit: tot, totalUsed: used, totalAvailable: Math.round(Math.max(0, tot - used) * 100) / 100, anyExceeded: list.some(function (x) { return x.exceeded; }), note: vc.note };
+    },
+    getInvoiceSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var invs = DB.listInvoices(userId, {}).filter(function (i) {
+        return i.status !== 'cancelled' && i.status !== 'paid' && (!f.credit_card_id || i.credit_card_id === f.credit_card_id);
+      });
+      var pend = 0, next = null, over = [];
+      invs.forEach(function (i) {
+        var o = DB.calculateInvoiceOutstanding(userId, i.id);
+        if (o > 0) { pend = Math.round((pend + o) * 100) / 100; if (!next || i.due_date < next.due_date) next = i; if (i.status === 'overdue') over.push(i.id); }
+      });
+      return { pending: pend, count: invs.length, overdue: over.length, nextDue: next ? next.due_date : null, nextCard: next ? DB.cardName(userId, next.credit_card_id) : null, nextOutstanding: next ? DB.calculateInvoiceOutstanding(userId, next.id) : 0, overdueIds: over.slice(0, 5) };
+    },
+    getBudgetSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var yms = monthsBetween(f.fromYm, f.toYm).slice(0, 12);
+      return yms.map(function (ym) {
+        var bs = DB.budgetSummary(userId, ym);
+        return { ym: ym, total: bs.total, spent: bs.spent, remaining: bs.remaining, pct: bs.pct, top: bs.items.slice(0, 3).map(function (it) { return { name: it.name, icon: it.icon, limit: it.limit, spent: it.spent, pct: it.pct, status: it.status.key }; }) };
+      });
+    },
+    getGoalSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var db = read(), cid = DB.myCoupleId(userId);
+      var plannedByGoal = {};
+      DB.listPlans(userId, { status: 'active' }).forEach(function (p) {
+        if (p.period_end < f.from || p.period_start > f.to) return;
+        DB.listPlanItems(userId, p.id, { activeOnly: true }).forEach(function (it) {
+          if (it.item_type !== 'goal_contribution' || !it.source_id) return;
+          plannedByGoal[it.source_id] = Math.round(((plannedByGoal[it.source_id] || 0) + it.amount) * 100) / 100;
+        });
+      });
+      return DB.listGoals(userId, false).filter(function (g) { return g.status === 'active'; }).slice(0, 5).map(function (g) {
+        var pr = DB.goalProgress(g);
+        return { id: g.id, name: g.name, current: g.current_amount, target: g.target_amount, remaining: pr.remaining, pct: pr.pct, deadline: g.deadline, planned: plannedByGoal[g.id] || 0 };
+      });
+    },
+    getSettlementSummary: function (userId) {
+      var eng = DB.settle(userId);
+      return { debt: eng.debt, sharedCount: eng.sharedCount, sharedTotal: eng.sharedTotal, settledTotal: eng.settledTotal, mode: DB.moneyMode(userId) };
+    },
+    getPlanningSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var ym = f.future ? now().slice(0, 7) : f.fromYm;
+      var plans = DB.listPlans(userId, { status: 'active' }).filter(function (p) { return p.period_start.slice(0, 7) <= ym && p.period_end.slice(0, 7) >= ym; });
+      if (!plans.length) return { hasPlan: false };
+      var c = DB.calculatePlan(userId, plans[0].id, { vision: f.vision });
+      var m = c.months.filter(function (x) { return x.ym === ym; })[0] || c.months[0];
+      return { hasPlan: true, id: plans[0].id, name: plans[0].name, income: m.income, outflows: Math.round((m.expenses + m.savings + m.goalContributions) * 100) / 100, ending: m.ending, realized: m.realized.income - m.realized.expense, varianceIncome: m.variance.income.variance, varianceExpense: m.variance.expense.variance };
+    },
+    getCalendarSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var agenda = DB.getUpcomingEvents(userId, { limit: 7, vision: f.vision });
+      var over = DB.getOverdueEvents(userId, { limit: 5, vision: f.vision });
+      var today = now().slice(0, 10);
+      var per = DB.calculatePeriodSummary(userId, { from: today, to: DB.dateAddDays(today, 7), vision: f.vision });
+      return { agenda: agenda, overdue: over.length, overdueItems: over.slice(0, 3), weekIncome: per.incomeRealized, weekExpense: per.expenseRealized, weekCommitments: per.commitments };
+    },
+    getInsightSummary: function (userId) {
+      var counts = DB.insightCounts(userId, {});
+      return { total: counts.total, unread: counts.unread, attention: counts.attention, top: DB.getActiveInsights(userId, {}).slice(0, 3).map(function (x) { return { id: x.id, title: x.title, severity: x.severity }; }) };
+    },
+    getNotificationSummary: function (userId) {
+      var unread = DB.notifUnreadCount(userId);
+      var list = DB.notifList(userId, {}).filter(function (n) { return ['sent', 'delivered'].indexOf(n.status) >= 0; }).slice(0, 3).map(function (n) { return { id: n.id, title: n.title, type: n.type }; });
+      return { unread: unread, top: list };
+    },
+    /* Agregação coordenada: 1 fingerprint, 1 passe por seção isolada. */
+    getDashboardSummary: function (userId, opt) {
+      var f = DB.dashValidateFilters(userId, opt || {});
+      var db = read();
+      var fp = DB.dashFingerprint(db);
+      DB._dcache = DB._dcache || {};
+      var key = JSON.stringify([db.members.find(function (m) { return m.user_id === userId; }) || {}, f]);
+      var hit = DB._dcache[key];
+      if (hit && hit.fp === fp) {
+        var c = JSON.parse(JSON.stringify(hit.result));
+        c.meta.cached = true;
+        return c;
+      }
+      var out = { meta: { generatedAt: now(), cached: false, errors: [] }, range: f, cash: null, result: null, available: null, projected: null, commitments: null, cards: null, invoices: null, budgets: null, goals: null, settlement: null, planning: null, calendar: null, insights: null, notifications: null, analytics: null };
+      function section(name, fn) {
+        try { out[name] = fn(); }
+        catch (e) { out.meta.errors.push({ section: name, message: e.message }); out[name] = null; }
+      }
+      var o = { vision: f.vision, preset: f.preset, month: f.month, cFrom: f.fromYm, cTo: f.toYm, account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id };
+      section('cash', function () { return DB.getCashPosition(userId, o); });
+      section('result', function () { return DB.getFinancialResult(userId, o); });
+      section('available', function () { return DB.calculateAvailableToSpend(userId, { from: f.fromYm, to: f.toYm, vision: f.vision }); });
+      section('projected', function () { return DB.calculateProjectedBalance(userId, f.future ? now().slice(0, 7) : f.fromYm); });
+      section('commitments', function () { return DB.getUpcomingCommitments(userId, o); });
+      section('cards', function () { return DB.getCardSummary(userId, o); });
+      section('invoices', function () { return DB.getInvoiceSummary(userId, o); });
+      section('budgets', function () { return DB.getBudgetSummary(userId, o); });
+      section('goals', function () { return DB.getGoalSummary(userId, o); });
+      section('settlement', function () { return DB.getSettlementSummary(userId); });
+      section('planning', function () { return DB.getPlanningSummary(userId, o); });
+      section('calendar', function () { return DB.getCalendarSummary(userId, o); });
+      section('insights', function () { return DB.getInsightSummary(userId); });
+      section('notifications', function () { return DB.getNotificationSummary(userId); });
+      section('analytics', function () { return DB.getDashboardMetrics(userId, o); });
+      DB._dcache[key] = { fp: fp, result: JSON.parse(JSON.stringify(out)) };
+      return out;
+    },
+    /* ============ PROMPT 29 (V3): RELATÓRIOS V3 ============
+       Camada de ANÁLISE em profundidade. Só orquestra serviços oficiais;
+       nenhum cálculo financeiro próprio (somas de exibição em centavos).
+       Estados sempre rotulados: histórico / atual / planejado / projetado /
+       comprometido. Cache por fingerprint (dashFingerprint); exportReport
+       respeita filtros e casal. saved_reports guarda só configuração. */
+    REPORT_TYPES: ['summary', 'income_expense', 'category', 'cashflow', 'account', 'card', 'invoice', 'installment', 'budget', 'goal', 'planning', 'settlement', 'recurring', 'trend', 'participation', 'commitment', 'reconciliation', 'insight', 'comparison', 'scenario'],
+    repValidateFilters: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var vision = opt.vision || 'couple';
+      if (['couple', 'me', 'partner'].indexOf(vision) < 0) throw new Error('Visão inválida.');
+      function own(table, idv, label) {
+        if (idv == null || idv === '') return null;
+        var row = db[table].find(function (x) { return x.id === idv && x.couple_id === cid; });
+        if (!row) throw new Error(label + ' inválido para este casal.');
+        return row.id;
+      }
+      var preset = opt.preset || 'month';
+      if (['month', 'prev', 'last3', 'last6', 'last12', 'year', 'prevYear', 'custom'].indexOf(preset) < 0) throw new Error('Período inválido.');
+      var curYm = now().slice(0, 7), curY = curYm.slice(0, 4), fromYm, toYm;
+      if (preset === 'month') { fromYm = opt.month || curYm; toYm = fromYm; }
+      else if (preset === 'prev') { fromYm = shiftMonth(opt.month || curYm, -1); toYm = fromYm; }
+      else if (preset === 'last3') { fromYm = shiftMonth(curYm, -2); toYm = curYm; }
+      else if (preset === 'last6') { fromYm = shiftMonth(curYm, -5); toYm = curYm; }
+      else if (preset === 'last12') { fromYm = shiftMonth(curYm, -11); toYm = curYm; }
+      else if (preset === 'year') { fromYm = curY + '-01'; toYm = curY + '-12'; }
+      else if (preset === 'prevYear') { var py = String(+curY - 1); fromYm = py + '-01'; toYm = py + '-12'; }
+      else {
+        var a = (opt.cFrom || curYm).slice(0, 7), b = (opt.cTo || curYm).slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(a) || !/^\d{4}-\d{2}$/.test(b)) throw new Error('Período inválido.');
+        fromYm = a < b ? a : b; toYm = a < b ? b : a;
+      }
+      var type = opt.type || '';
+      if (type && ['income', 'expense', 'transfer', 'invoice', 'installment', 'recurring', 'goal', 'budget', 'planning', 'settlement'].indexOf(type) < 0) throw new Error('Tipo inválido.');
+      return { vision: vision, preset: preset, month: (opt.month || curYm).slice(0, 7), fromYm: fromYm, toYm: toYm, from: fromYm + '-01', to: toYm + '-' + dim(+toYm.slice(0, 4), +toYm.slice(5, 7)), category_id: own('categories', opt.category_id, 'Categoria'), account_id: own('accounts', opt.account_id, 'Conta'), credit_card_id: own('credit_cards', opt.credit_card_id, 'Cartão'), type: type };
+    },
+    repCache: function (userId, filters, build) {
+      var db = read();
+      var fp = DB.dashFingerprint(db);
+      DB._rcache = DB._rcache || {};
+      var cid = DB.myCoupleId(userId);
+      var key = JSON.stringify([cid, userId, filters]);
+      var hit = DB._rcache[key];
+      if (hit && hit.fp === fp) {
+        var c = JSON.parse(JSON.stringify(hit.result));
+        c.meta.cached = true;
+        return c;
+      }
+      var out = build();
+      out.meta = out.meta || {};
+      out.meta.cached = false; out.meta.generatedAt = now();
+      DB._rcache[key] = { fp: fp, result: JSON.parse(JSON.stringify(out)) };
+      return out;
+    },
+    repInvalidate: function () { DB._rcache = {}; return true; },
+    generateSummaryReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'summary', f: f }, function () {
+        var dash = DB.getDashboardSummary(userId, { vision: f.vision, preset: 'custom', cFrom: f.fromYm, cTo: f.toYm });
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        return { kind: 'history', range: f, result: dash.result, cash: dash.cash, projected: dash.projected, commitments: { total: dash.commitments.total30, count: dash.commitments.count30 }, planning: dash.planning, metrics: an.data.metrics, topCategories: an.data.topCategories };
+      });
+    },
+    generateIncomeExpenseReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'incexp', f: f }, function () {
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        var months = [];
+        var c = f.fromYm;
+        while (c <= f.toYm && months.length < 36) { months.push(c); if (c === f.toYm) break; c = shiftMonth(c, 1); }
+        var monthly = months.map(function (ym) {
+          var d = DB.dashboardCalc(userId, { from: ym, to: ym, vision: f.vision });
+          return { ym: ym, income: d.income, expenses: d.expense, result: Math.round((d.income - d.expense) * 100) / 100, kind: ym <= now().slice(0, 7) ? 'history' : 'projected' };
+        });
+        return { kind: 'history', range: f, metrics: an.data.metrics, monthly: monthly, comparison: an.data.comparison, incomeByCat: an.data.incomeAnalysis };
+      });
+    },
+    generateCategoryReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'category', f: f }, function () {
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        var counts = DB.expenseCounts(userId, f.fromYm, f.toYm);
+        var cats = an.data.categoryAnalysis.map(function (c) {
+          var n = counts[c.categoryId] || 0;
+          var kids = (c.children || []).map(function (k) {
+            var kn = counts[k.categoryId] || 0;
+            n += kn;
+            return { id: k.categoryId, name: k.categoryName, total: k.total, pct: k.percentageOfExpenses, count: kn, avg: kn ? Math.round(k.total / kn * 100) / 100 : 0, isSubcategory: true, parentId: c.categoryId, parentName: c.categoryName };
+          });
+          return { id: c.categoryId, name: c.categoryName, total: c.total, pct: c.percentageOfExpenses, count: n, avg: n ? Math.round(c.total / n * 100) / 100 : 0, children: kids };
+        });
+        return { kind: 'history', range: f, categories: cats, largest: an.data.largestExpenses, frequency: an.data.frequency, merchants: an.data.merchants };
+      });
+    },
+    generateCashFlowReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'cashflow', f: f }, function () {
+        return { kind: 'history', range: f, byAccount: DB.cashFlowByAccount(userId, f.fromYm, f.toYm) };
+      });
+    },
+    generateAccountReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'account', f: f }, function () {
+        var cf = DB.cashFlowByAccount(userId, f.fromYm, f.toYm);
+        var rows = cf.accounts.filter(function (a) { return !f.account_id || a.id === f.account_id; });
+        return { kind: 'current', range: f, accounts: rows, totals: cf.totals };
+      });
+    },
+    generateCardReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'card', f: f }, function () {
+        return {
+          kind: 'current', range: f,
+          cards: DB.listCards(userId, 'all').filter(function (c) { return !f.credit_card_id || c.id === f.credit_card_id; }).map(function (c) {
+            var u = DB.calculateCardAvailableLimit(userId, c.id);
+            var pend = DB.calculateCardInstallmentCommitment(userId, c.id);
+            var invs = DB.listInvoices(userId, {}).filter(function (i) { return i.credit_card_id === c.id && i.status !== 'paid' && i.status !== 'cancelled'; }).length;
+            var util = c.credit_limit ? Math.round(u.used / c.credit_limit * 1000) / 10 : null;
+            return { id: c.id, name: c.name, brand: c.brand, last4: c.last_four_digits, active: c.active, limit: c.credit_limit, used: u.used, available: u.available, exceeded: u.exceeded, utilization: util, installmentsPending: pend, invoicesPending: invs };
+          })
+        };
+      });
+    },
+    generateInvoiceReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'invoice', f: f }, function () {
+        var invs = DB.listInvoices(userId, {}).filter(function (i) {
+          var ref = i.reference_year + '-' + ('0' + i.reference_month).slice(-2);
+          return ref >= f.fromYm && ref <= f.toYm && (!f.credit_card_id || i.credit_card_id === f.credit_card_id);
+        });
+        var pays = DB.listInvoicePayments(userId, {}).filter(function (p) { return p.payment_date >= f.from && p.payment_date <= f.to; });
+        return {
+          kind: 'history', range: f,
+          invoices: invs.map(function (i) { return { id: i.id, card: DB.cardName(userId, i.credit_card_id), ref: ('0' + i.reference_month).slice(-2) + '/' + i.reference_year, closing: i.closing_date, due: i.due_date, total: DB.calculateInvoiceTotal(userId, i.id), paid: i.paid_amount, outstanding: DB.calculateInvoiceOutstanding(userId, i.id), status: DB.calculateInvoiceStatus(userId, i.id) }; }),
+          payments: pays.map(function (p) { return { id: p.id, date: p.payment_date, amount: p.amount, account: DB.accountName(userId, p.payment_account_id) }; })
+        };
+      });
+    },
+    generateInstallmentReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'installment', f: f }, function () {
+        return {
+          kind: 'committed', range: f,
+          purchases: DB.listInstallmentPurchases(userId, {}).filter(function (p) { return !f.credit_card_id || p.credit_card_id === f.credit_card_id; }).map(function (p) {
+            var sm = DB.purchaseSummary(userId, p.id);
+            return { id: p.id, description: p.description, card: DB.cardName(userId, p.credit_card_id), total: p.total_amount, count: p.installment_count, paid: sm.paidInstallments, paidAmount: sm.paidAmount, pending: sm.pendingInstallments, pendingAmount: sm.pendingAmount, nextDue: sm.nextDueDate, status: p.status };
+          })
+        };
+      });
+    },
+    generateBudgetReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'budget', f: f }, function () {
+        var yms = monthsBetween(f.fromYm, f.toYm).slice(0, 36);
+        return {
+          kind: 'history', range: f,
+          months: yms.map(function (ym) {
+            var bs = DB.budgetSummary(userId, ym);
+            return { ym: ym, total: bs.total, spent: bs.spent, remaining: bs.remaining, pct: bs.pct, items: bs.items.filter(function (it) { return !f.category_id || it.category_id === f.category_id; }).map(function (it) { return { name: it.name, icon: it.icon, limit: it.limit, spent: it.spent, remaining: it.remaining, pct: it.pct, status: it.status.key }; }) };
+          })
+        };
+      });
+    },
+    generateGoalReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'goal', f: f }, function () {
+        var plannedByGoal = {};
+        DB.listPlans(userId, { status: 'active' }).forEach(function (p) {
+          DB.listPlanItems(userId, p.id, { activeOnly: true }).forEach(function (it) {
+            if (it.item_type !== 'goal_contribution' || !it.source_id) return;
+            plannedByGoal[it.source_id] = Math.round(((plannedByGoal[it.source_id] || 0) + it.amount) * 100) / 100;
+          });
+        });
+        return {
+          kind: 'current', range: f,
+          goals: DB.listGoals(userId, true).map(function (g) {
+            var pr = DB.goalProgress(g);
+            var evs = DB.listGoalEvents(userId, g.id).filter(function (e) { return e.date >= f.from && e.date <= f.to; });
+            var realized = Math.round(evs.reduce(function (a, e) { return a + e.amount; }, 0) * 100) / 100;
+            return { id: g.id, name: g.name, target: g.target_amount, current: g.current_amount, remaining: pr.remaining, pct: pr.pct, deadline: g.deadline, status: g.status, planned: plannedByGoal[g.id] || 0, realizedInPeriod: realized };
+          })
+        };
+      });
+    },
+    generatePlanningReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'planning', f: f }, function () {
+        var plans = DB.listPlans(userId, {}).filter(function (p) { return p.period_start <= f.to && p.period_end >= f.from; });
+        return {
+          kind: 'planned', range: f,
+          plans: plans.map(function (p) {
+            var c;
+            try { c = DB.calculatePlan(userId, p.id, { vision: f.vision }); }
+            catch (e) { return { id: p.id, name: p.name, status: p.status, error: true }; }
+            var months = c.months.filter(function (m) { return m.ym >= f.fromYm && m.ym <= f.toYm; });
+            function sum(k) { return Math.round(months.reduce(function (a, m) { return a + m[k]; }, 0) * 100) / 100; }
+            return { id: p.id, name: p.name, status: p.status, period: p.period_start + '…' + p.period_end, income: sum('income'), outflows: Math.round(months.reduce(function (a, m) { return a + m.expenses + m.savings + m.goalContributions; }, 0) * 100) / 100, ending: months.length ? months[months.length - 1].ending : c.totals.ending, months: months.map(function (m) { return { ym: m.ym, income: m.income, outflows: Math.round((m.expenses + m.savings + m.goalContributions) * 100) / 100, realized: Math.round((m.realized.income - m.realized.expense) * 100) / 100, dIncome: m.variance.income.variance, dExpense: m.variance.expense.variance }; }) };
+          })
+        };
+      });
+    },
+    generateSettlementReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'settlement', f: f }, function () {
+        var hist = DB.listSettlements(userId).filter(function (x) { return x.date >= f.from && x.date <= f.to; });
+        var eng = DB.settle(userId);
+        return { kind: 'history', range: f, balance: eng, history: hist.map(function (x) { return { id: x.id, date: x.date, from: DB.userName(userId, x.from_user_id), to: DB.userName(userId, x.to_user_id), amount: x.amount }; }) };
+      });
+    },
+    generateRecurringReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'recurring', f: f }, function () {
+        var occs = DB.listOccurrences(userId, f.from, f.to, false);
+        var byRec = {};
+        occs.forEach(function (o) {
+          var k = o.recurring_transaction_id;
+          byRec[k] = byRec[k] || { realized: 0, pending: 0, count: 0 };
+          byRec[k].count++;
+          if (o.status === 'paid') byRec[k].realized = Math.round((byRec[k].realized + o.amount) * 100) / 100;
+          else if (o.status === 'pending') byRec[k].pending = Math.round((byRec[k].pending + o.amount) * 100) / 100;
+        });
+        return {
+          kind: 'history', range: f,
+          items: DB.listRecurring(userId, false).map(function (r) {
+            var st = byRec[r.id] || { realized: 0, pending: 0, count: 0 };
+            return { id: r.id, description: r.description, type: r.type, amount: r.amount, frequency: r.frequency, active: r.active, next: DB.listOccurrences(userId, now().slice(0, 10), null, true).filter(function (o) { return o.recurring_transaction_id === r.id; })[0], realizedInPeriod: st.realized, pendingInPeriod: st.pending, occurrences: st.count };
+          })
+        };
+      });
+    },
+    generateTrendReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'trend', f: f }, function () {
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        var months = [];
+        var c = f.fromYm;
+        while (c <= f.toYm && months.length < 36) { months.push(c); if (c === f.toYm) break; c = shiftMonth(c, 1); }
+        var curYm = now().slice(0, 7);
+        return {
+          kind: 'history', range: f,
+          monthly: months.map(function (ym) {
+            var d = DB.dashboardCalc(userId, { from: ym, to: ym, vision: f.vision });
+            return { ym: ym, income: d.income, expenses: d.expense, result: Math.round((d.income - d.expense) * 100) / 100, kind: ym <= curYm ? 'history' : 'projected' };
+          }),
+          trends: an.data.trends, comparison: an.data.comparison
+        };
+      });
+    },
+    generateParticipationReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'participation', f: f }, function () {
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: 'couple', filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        return { kind: 'history', range: f, participation: an.data.participation, settlement: an.data.settlement };
+      });
+    },
+    generateCommitmentReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'commitment', f: f }, function () {
+        var fc = DB.calculateFutureCommitments(userId, { from: f.from, to: f.to });
+        var byMonth = {}, byKind = {};
+        fc.items.forEach(function (it) {
+          var m = it.date.slice(0, 7);
+          byMonth[m] = Math.round(((byMonth[m] || 0) + it.amount) * 100) / 100;
+          byKind[it.kind] = Math.round(((byKind[it.kind] || 0) + it.amount) * 100) / 100;
+        });
+        return { kind: 'committed', range: f, total: fc.total, count: fc.count, byMonth: byMonth, byKind: byKind, items: fc.items.slice(0, 200) };
+      });
+    },
+    generateReconciliationReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'recon', f: f }, function () {
+        var db = read(), cid = DB.myCoupleId(userId);
+        var batches = DB.listImportBatches(userId, { limit: 50 }).filter(function (b) { return (b.created_at || '').slice(0, 10) >= f.from && (b.created_at || '').slice(0, 10) <= f.to; });
+        var counts = { imported: 0, reconciled: 0, new: 0, ignored: 0, pending: 0, duplicates: 0 };
+        db.imported_transactions.forEach(function (r) {
+          if (r.couple_id !== cid) return;
+          var b = db.import_batches.find(function (x) { return x.id === r.import_batch_id; });
+          if (!b || (b.created_at || '').slice(0, 10) < f.from || (b.created_at || '').slice(0, 10) > f.to) return;
+          counts.imported++;
+          if (r.match_status === 'matched') counts.reconciled++;
+          else if (r.match_status === 'new') counts.new++;
+          else if (r.match_status === 'duplicate') counts.duplicates++;
+          else if (r.status === 'ignored') counts.ignored++;
+          else counts.pending++;
+        });
+        return {
+          kind: 'history', range: f, counts: counts,
+          batches: batches.map(function (b) { return { id: b.id, file: b.file_name || b.id, type: DB.isCardBatch(b) ? 'card' : 'bank', status: b.status, created: (b.created_at || '').slice(0, 10), account: b.account_id ? DB.accountName(userId, b.account_id) : null, card: b.credit_card_id ? DB.cardName(userId, b.credit_card_id) : null }; })
+        };
+      });
+    },
+    generateInsightReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      var db = read(), cid = DB.myCoupleId(userId);
+      return {
+        kind: 'history', range: f,
+        items: db.financial_insights.filter(function (r) {
+          return r.couple_id === cid && r.period_start <= f.to && r.period_end >= f.from && (!opt.status || r.status === opt.status);
+        }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); }).slice(0, 100)
+          .map(function (r) { return { id: r.id, title: r.title, type: r.insight_type, severity: r.severity, status: r.status, period: r.period_start + '…' + r.period_end }; })
+      };
+    },
+    generateNotificationReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.notifications.filter(function (n) {
+        return n.couple_id === cid && (n.created_at || '').slice(0, 10) >= f.from && (n.created_at || '').slice(0, 10) <= f.to;
+      });
+      var by = {};
+      rows.forEach(function (n) { by[n.status] = (by[n.status] || 0) + 1; });
+      return { kind: 'history', range: f, total: rows.length, byStatus: by };
+    },
+    generateComparisonReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'comparison', f: f }, function () {
+        var an = DB.analyzeFinancialPeriod(userId, { periodStart: f.from, periodEnd: f.to, view: f.vision, filters: { account_id: f.account_id, credit_card_id: f.credit_card_id, category_id: f.category_id } });
+        return { kind: 'history', range: f, current: an.data.metrics, comparison: an.data.comparison };
+      });
+    },
+    generateScenarioReport: function (userId, opt) {
+      var f = DB.repValidateFilters(userId, opt || {});
+      return DB.repCache(userId, { t: 'scenario', f: f }, function () {
+        var out = [];
+        DB.listPlans(userId, {}).filter(function (p) { return p.period_start <= f.to && p.period_end >= f.from; }).forEach(function (p) {
+          var scens = DB.listScenarios(userId, p.id);
+          scens.forEach(function (s) {
+            var c;
+            try { c = DB.calculatePlan(userId, p.id, { scenarioId: s.id, vision: f.vision }); }
+            catch (e) { return; }
+            out.push({ plan: p.name, scenario: s.name, type: s.scenario_type, income: c.totals.income, outflows: Math.round((c.totals.expenses + c.totals.savings + c.totals.goalContributions) * 100) / 100, ending: c.totals.ending });
+          });
+        });
+        return { kind: 'projected', range: f, scenarios: out };
+      });
+    },
+    /* Relatórios salvos: só configuração (tipo+filtros), nunca valores. */
+    createSavedReport: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var name = String((data && data.name) || '').trim();
+      if (name.length < 2) throw new Error('Dê um nome para o relatório.');
+      var type = data.report_type;
+      if (DB.REPORT_TYPES.indexOf(type) < 0) throw new Error('Tipo de relatório inválido.');
+      var filters = data.filters || {};
+      var f = DB.repValidateFilters(userId, filters);
+      var r = { id: id('sr'), couple_id: cid, user_id: userId, name: name.slice(0, 80), report_type: type, filters: { preset: f.preset, month: f.month, cFrom: f.fromYm, cTo: f.toYm, vision: f.vision, category_id: f.category_id, account_id: f.account_id, credit_card_id: f.credit_card_id, type: f.type }, created_at: now(), updated_at: now() };
+      db.saved_reports.push(r);
+      logAudit(db, cid, userId, 'saved_report', r.id, 'create', { type: type });
+      write(db);
+      return r;
+    },
+    listSavedReports: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.saved_reports.filter(function (r) { return r.couple_id === cid; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+    },
+    getSavedReport: function (userId, reportId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.saved_reports.find(function (x) { return x.id === reportId && x.couple_id === cid; });
+      if (!r) throw new Error('Relatório salvo não encontrado.');
+      return r;
+    },
+    deleteSavedReport: function (userId, reportId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.saved_reports.findIndex(function (x) { return x.id === reportId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Relatório salvo não encontrado.');
+      db.saved_reports.splice(i, 1);
+      logAudit(db, cid, userId, 'saved_report', reportId, 'delete', {});
+      write(db);
+    },
+    runSavedReport: function (userId, reportId) {
+      var r = DB.getSavedReport(userId, reportId);
+      var map = { summary: 'generateSummaryReport', income_expense: 'generateIncomeExpenseReport', category: 'generateCategoryReport', cashflow: 'generateCashFlowReport', account: 'generateAccountReport', card: 'generateCardReport', invoice: 'generateInvoiceReport', installment: 'generateInstallmentReport', budget: 'generateBudgetReport', goal: 'generateGoalReport', planning: 'generatePlanningReport', settlement: 'generateSettlementReport', recurring: 'generateRecurringReport', trend: 'generateTrendReport', participation: 'generateParticipationReport', commitment: 'generateCommitmentReport', reconciliation: 'generateReconciliationReport', insight: 'generateInsightReport', comparison: 'generateComparisonReport', scenario: 'generateScenarioReport' };
+      var fn = map[r.report_type];
+      if (!fn) throw new Error('Tipo de relatório inválido.');
+      return DB[fn](userId, r.filters);
+    },
+    /* Exportação por relatório (CSV com a estrutura de cada um). */
+    exportReport: function (userId, reportType, opt) {
+      var f = DB.repValidateFilters(userId, (opt && opt.filters) || opt || {});
+      function csv(rows) {
+        function q(v) { return '\"' + String(v == null ? '' : v).replace(/\"/g, '\"\"') + '\"'; }
+        return '﻿' + rows.map(function (r) { return r.map(q).join(';'); }).join('\n');
+      }
+      function br(v) { return (Math.round(Number(v) * 100) / 100).toFixed(2); }
+      var map = { summary: 'generateSummaryReport', income_expense: 'generateIncomeExpenseReport', category: 'generateCategoryReport', cashflow: 'generateCashFlowReport', account: 'generateAccountReport', card: 'generateCardReport', invoice: 'generateInvoiceReport', installment: 'generateInstallmentReport', budget: 'generateBudgetReport', goal: 'generateGoalReport', planning: 'generatePlanningReport', settlement: 'generateSettlementReport', recurring: 'generateRecurringReport', trend: 'generateTrendReport', participation: 'generateParticipationReport', commitment: 'generateCommitmentReport', reconciliation: 'generateReconciliationReport', insight: 'generateInsightReport', comparison: 'generateComparisonReport', scenario: 'generateScenarioReport' };
+      if (DB.REPORT_TYPES.indexOf(reportType) < 0 || !map[reportType]) throw new Error('Tipo de relatório inválido.');
+      var R = DB[map[reportType]](userId, f);
+      var rows = [['relatorio', reportType], ['periodo', f.from + ' a ' + f.to], ['visao', f.vision], ['gerado_em', now().slice(0, 10)], []];
+      if (reportType === 'category') {
+        rows.push(['categoria', 'valor', 'percentual', 'transacoes', 'media']);
+        R.categories.forEach(function (c) { rows.push([c.name, br(c.total), String(c.pct).replace('.', ','), c.count, br(c.avg)]); });
+      } else if (reportType === 'income_expense' || reportType === 'trend') {
+        rows.push(['mes', 'receitas', 'despesas', 'resultado', 'estado']);
+        R.monthly.forEach(function (m) { rows.push([m.ym || m.month, br(m.income), br(m.expenses), br(m.result), m.kind || 'history']); });
+      } else if (reportType === 'commitment') {
+        rows.push(['data', 'tipo', 'descricao', 'valor']);
+        R.items.forEach(function (i) { rows.push([i.date, i.kind, i.label, br(i.amount)]); });
+      } else if (reportType === 'invoice') {
+        rows.push(['cartao', 'referencia', 'vencimento', 'total', 'pago', 'aberto', 'status']);
+        R.invoices.forEach(function (i) { rows.push([i.card, i.ref, i.due, br(i.total), br(i.paid), br(i.outstanding), i.status]); });
+      } else if (reportType === 'installment') {
+        rows.push(['compra', 'cartao', 'total', 'parcelas', 'pagas', 'pendentes', 'restante', 'proxima']);
+        R.purchases.forEach(function (p) { rows.push([p.description, p.card, br(p.total), p.count, p.paid, p.pending, br(p.pendingAmount), p.nextDue || '']); });
+      } else if (reportType === 'budget') {
+        rows.push(['mes', 'categoria', 'orcamento', 'gasto', 'restante', 'percentual', 'status']);
+        R.months.forEach(function (m) { m.items.forEach(function (it) { rows.push([m.ym, it.name, br(it.limit), br(it.spent), br(it.remaining), String(it.pct).replace('.', ','), it.status]); }); });
+      } else if (reportType === 'goal') {
+        rows.push(['meta', 'atual', 'alvo', 'restante', 'percentual', 'prazo', 'planejado', 'realizado_periodo', 'status']);
+        R.goals.forEach(function (g) { rows.push([g.name, br(g.current), br(g.target), br(g.remaining), String(g.pct).replace('.', ','), g.deadline || '', br(g.planned), br(g.realizedInPeriod), g.status]); });
+      } else if (reportType === 'settlement') {
+        rows.push(['data', 'de', 'para', 'valor']);
+        R.history.forEach(function (x) { rows.push([x.date, x.from, x.to, br(x.amount)]); });
+      } else if (reportType === 'recurring') {
+        rows.push(['descricao', 'tipo', 'valor', 'frequencia', 'ativa', 'realizado_periodo', 'pendente_periodo']);
+        R.items.forEach(function (r) { rows.push([r.description, r.type, br(r.amount), r.frequency, r.active ? 'sim' : 'não', br(r.realizedInPeriod), br(r.pendingInPeriod)]); });
+      } else if (reportType === 'account' || reportType === 'cashflow') {
+        var accs = reportType === 'account' ? R.accounts : R.byAccount.accounts;
+        rows.push(['conta', 'inicio', 'entradas', 'saidas', 'fim']);
+        accs.forEach(function (a) { rows.push([a.name, br(a.start), br(a.inIncome + a.inTransfers), br(a.outExpense + a.outTransfers + a.outPays), br(a.end)]); });
+      } else if (reportType === 'card') {
+        rows.push(['cartao', 'limite', 'utilizado', 'disponivel', 'utilizacao', 'parcelas_pendentes', 'faturas_pendentes']);
+        R.cards.forEach(function (c) { rows.push([c.name, br(c.limit), br(c.used), br(c.available), c.utilization == null ? '' : String(c.utilization).replace('.', ','), br(c.installmentsPending), c.invoicesPending]); });
+      } else if (reportType === 'planning') {
+        rows.push(['plano', 'mes', 'receita_planejada', 'saida_planejada', 'realizado', 'dif_receita', 'dif_despesa']);
+        R.plans.forEach(function (p) { (p.months || []).forEach(function (m) { rows.push([p.name, m.ym, br(m.income), br(m.outflows), br(m.realized), br(m.dIncome), br(m.dExpense)]); }); });
+      } else if (reportType === 'scenario') {
+        rows.push(['plano', 'cenario', 'tipo', 'receitas', 'saidas', 'saldo_projetado']);
+        R.scenarios.forEach(function (s) { rows.push([s.plan, s.scenario, s.type, br(s.income), br(s.outflows), br(s.ending)]); });
+      } else if (reportType === 'reconciliation') {
+        rows.push(['lote', 'tipo', 'status', 'criado_em']);
+        R.batches.forEach(function (b) { rows.push([b.file, b.type, b.status, b.created]); });
+      } else if (reportType === 'insight') {
+        rows.push(['titulo', 'tipo', 'severidade', 'status', 'periodo']);
+        R.items.forEach(function (i) { rows.push([i.title, i.type, i.severity, i.status, i.period]); });
+      } else if (reportType === 'comparison') {
+        rows.push(['metrica', 'atual', 'anterior', 'diferenca', 'variacao']);
+        [['receitas', R.comparison.income], ['despesas', R.comparison.expenses], ['resultado', R.comparison.result]].forEach(function (p) {
+          rows.push([p[0], br(R.current[p[0] === 'receitas' ? 'totalIncome' : p[0] === 'despesas' ? 'totalExpenses' : 'financialResult']), br(p[1].previousValue), br(p[1].absoluteDifference), p[1].percentageDifference == null ? '' : String(p[1].percentageDifference).replace('.', ',')]);
+        });
+      } else {
+        rows.push(['receitas', 'despesas', 'resultado', 'poupanca']);
+        rows.push([br(R.result.income), br(R.result.expense), br(R.result.income - R.result.expense), R.result.saveRate == null ? '' : String(R.result.saveRate).replace('.', ',')]);
+      }
+      return { filename: 'relatorio-' + reportType + '.csv', csv: csv(rows) };
+    },
+    /* ============ PROMPT 30 (V3): SEGURANÇA + AUDITORIA + INTEGRIDADE ============
+       Camada transversal (não é fonte financeira). Regra: UI/IA/WhatsApp →
+       contexto autenticado → Authorization → Validation → serviço financeiro
+       oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
+       tudo reutiliza os serviços oficiais. Sem segredos em logs. */
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export'],
+    secHash: function (s) {
+      s = String(s == null ? '' : s);
+      var h1 = 0x811c9dc5;
+      for (var i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619); }
+      return (h1 >>> 0).toString(16);
+    },
+    secSanitize: function (meta) {
+      var out = {};
+      if (!meta || typeof meta !== 'object') return out;
+      var ban = ['pass', 'password', 'senha', 'token', 'secret', 'cvv', 'pin', 'card_number', 'numero_cartao', 'access_token', 'refresh_token', 'webhook_secret', 'authorization'];
+      Object.keys(meta).forEach(function (k) {
+        var kl = k.toLowerCase();
+        var hit = ban.some(function (b) { return kl.indexOf(b) >= 0; });
+        if (hit) { out[k] = '[redacted]'; return; }
+        var v = meta[k];
+        if (typeof v === 'string') out[k] = v.slice(0, 300);
+        else if (typeof v === 'number' || typeof v === 'boolean' || v == null) out[k] = v;
+        else { try { out[k] = JSON.stringify(v).slice(0, 300); } catch (e) { out[k] = '[object]'; } }
+      });
+      return out;
+    },
+    /* AuthorizationService: membership + ownership por entidade. Owner e
+       member têm os mesmos poderes financeiros (sem hierarquia admin);
+       a distinção existe para auditoria e ações futuras. */
+    authzContext: function (userId) {
+      var db = read();
+      var m = db.members.find(function (x) { return x.user_id === userId; });
+      return { member: m || null, couple_id: m ? m.couple_id : null, role: m ? m.role : null };
+    },
+    canAccessCouple: function (userId, coupleId) {
+      var c = DB.authzContext(userId);
+      return !!(c.member && c.couple_id === coupleId);
+    },
+    requireAuthz: function (userId, action, ref) {
+      var c = DB.authzContext(userId);
+      if (!c.member) {
+        try { DB.logAuthorizationFailure(userId, action, ref); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      if (ref && ref.couple_id && ref.couple_id !== c.couple_id) {
+        try { DB.logAuthorizationFailure(userId, action, ref); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return c;
+    },
+    canReadFinancialData: function (userId) { return !!DB.authzContext(userId).member; },
+    canCreateTransaction: function (userId) { return !!DB.authzContext(userId).member; },
+    canUpdateTransaction: function (userId, txId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      var db = read();
+      var t = db.transactions.find(function (x) { return x.id === txId; });
+      return !!t && t.couple_id === c.couple_id && !t.deleted_at;
+    },
+    canDeleteTransaction: function (userId, txId) { return DB.canUpdateTransaction(userId, txId); },
+    canCreateTransfer: function (userId) { return !!DB.authzContext(userId).member; },
+    canManageCard: function (userId, cardId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!cardId) return true;
+      var db = read();
+      var x = db.credit_cards.find(function (r) { return r.id === cardId; });
+      return !!x && x.couple_id === c.couple_id;
+    },
+    canManageInvoice: function (userId, invoiceId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!invoiceId) return true;
+      var db = read();
+      var x = db.invoices.find(function (r) { return r.id === invoiceId; });
+      return !!x && x.couple_id === c.couple_id;
+    },
+    canManagePlanning: function (userId, planId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!planId) return true;
+      var db = read();
+      var x = db.financial_plans.find(function (r) { return r.id === planId; });
+      return !!x && x.couple_id === c.couple_id;
+    },
+    canExecuteAutomation: function (userId) { return !!DB.authzContext(userId).member; },
+    canExecuteAIAction: function (userId) { return !!DB.authzContext(userId).member; },
+    canManageWhatsApp: function (userId) { return !!DB.authzContext(userId).member; },
+    canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
+    /* SecurityAuditService: trilha de segurança separada da auditoria
+       financeira (audit_logs). Sem segredos; IP/UA só como hash. */
+    logSecurityEvent: function (userId, eventType, data) {
+      data = data || {};
+      if (DB.SEC_EVENT_TYPES.indexOf(eventType) < 0) throw new Error('Tipo de evento inválido.');
+      var db = read();
+      var ctx = userId ? DB.authzContext(userId) : { couple_id: data.couple_id || null };
+      var row = {
+        id: id('se'), couple_id: data.couple_id || ctx.couple_id || null, user_id: userId || null,
+        event_type: eventType, action: String(data.action || eventType).slice(0, 80),
+        entity_type: data.entity_type ? String(data.entity_type).slice(0, 40) : null,
+        entity_id: data.entity_id ? String(data.entity_id).slice(0, 80) : null,
+        result: data.result === 'denied' ? 'denied' : 'ok',
+        ip_hash: data.ip ? DB.secHash(data.ip) : null,
+        user_agent_hash: data.userAgent ? DB.secHash(data.userAgent) : null,
+        metadata: DB.secSanitize(data.metadata), created_at: now()
+      };
+      db.security_audit_logs.push(row);
+      if (db.security_audit_logs.length > 2000) db.security_audit_logs = db.security_audit_logs.slice(-2000);
+      write(db);
+      return row;
+    },
+    logAuthorizationFailure: function (userId, action, ref) {
+      return DB.logSecurityEvent(userId, 'authorization_denied', { action: action, result: 'denied', entity_type: ref && ref.entity_type, entity_id: ref && ref.entity_id, metadata: { couple_id: ref && ref.couple_id } });
+    },
+    logFinancialAction: function (userId, action, entityType, entityId, metadata) {
+      return DB.logSecurityEvent(userId, 'financial_action', { action: action, entity_type: entityType, entity_id: entityId, metadata: metadata });
+    },
+    logSensitiveAccess: function (userId, entityType, entityId) {
+      return DB.logSecurityEvent(userId, 'sensitive_access', { action: 'read', entity_type: entityType, entity_id: entityId });
+    },
+    logWebhookEvent: function (userId, action, metadata) {
+      return DB.logSecurityEvent(userId, 'whatsapp_webhook', { action: action, metadata: metadata });
+    },
+    logImportEvent: function (userId, action, entityId, metadata) {
+      return DB.logSecurityEvent(userId, 'import', { action: action, entity_type: 'import_batch', entity_id: entityId, metadata: metadata });
+    },
+    logAIAction: function (userId, action, entityId, metadata) {
+      return DB.logSecurityEvent(userId, 'ai_action', { action: action, entity_type: 'ai_action', entity_id: entityId, metadata: metadata });
+    },
+    logAutomationEvent: function (userId, action, entityId, metadata) {
+      return DB.logSecurityEvent(userId, 'automation', { action: action, entity_type: 'automation_job', entity_id: entityId, metadata: metadata });
+    },
+    logNotificationEvent: function (userId, action, entityId, metadata) {
+      return DB.logSecurityEvent(userId, 'notification', { action: action, entity_type: 'notification', entity_id: entityId, metadata: metadata });
+    },
+    listSecurityEvents: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.security_audit_logs.filter(function (r) {
+        return (r.couple_id === cid || (!r.couple_id && r.user_id === userId)) &&
+          (!f.type || r.event_type === f.type) && (!f.result || r.result === f.result);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 100);
+    },
+    /* InputValidationService: validação backend central. Texto de usuário é
+       sempre DADO (nunca instrução): sanitiza controles, limita tamanho. */
+    valString: function (v, label, min, max) {
+      var s = String(v == null ? '' : v);
+      if (s.length < (min || 0)) throw new Error(label + ' muito curto.');
+      if (s.length > (max || 500)) throw new Error(label + ' muito longo (máx ' + (max || 500) + ').');
+      return s;
+    },
+    valText: function (v, label, max) {
+      var s = String(v == null ? '' : v).replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (s.length > (max || 500)) throw new Error(label + ' muito longo (máx ' + (max || 500) + ').');
+      return s;
+    },
+    valMoney: function (v, label) {
+      var n = Math.round(Number(String(v).replace(/R\$\s?/gi, '').trim().replace(/\./g, '').replace(',', '.')) * 100) / 100;
+      if (!isFinite(n) || n <= 0) throw new Error(label + ' inválido (use valor maior que zero).');
+      return n;
+    },
+    valPercent: function (v, label) {
+      var n = Number(String(v == null ? '' : v).replace(',', '.'));
+      if (!isFinite(n) || n < 0 || n > 100) throw new Error(label + ' precisa estar entre 0 e 100.');
+      return Math.round(n * 100) / 100;
+    },
+    valDate: function (v, label) {
+      var d = String(v || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(new Date(d + 'T12:00:00').getTime())) throw new Error((label || 'Data') + ' inválida.');
+      return d;
+    },
+    valEnum: function (v, list, label) {
+      if (list.indexOf(v) < 0) throw new Error((label || 'Valor') + ' inválido.');
+      return v;
+    },
+    valPagination: function (opt) {
+      opt = opt || {};
+      var limit = parseInt(opt.limit, 10);
+      if (!isFinite(limit) || limit < 1) limit = 50;
+      if (limit > 200) limit = 200;
+      var offset = parseInt(opt.offset, 10);
+      if (!isFinite(offset) || offset < 0) offset = 0;
+      return { limit: limit, offset: offset };
+    },
+    valUploadMeta: function (meta) {
+      meta = meta || {};
+      var maxBytes = 5 * 1024 * 1024;
+      if (meta.size != null && (+meta.size > maxBytes)) throw new Error('Arquivo muito grande (máx 5 MB).');
+      var okTypes = ['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream', 'application/x-ofx', 'application/ofx'];
+      if (meta.mime && okTypes.indexOf(meta.mime) < 0) throw new Error('Tipo de arquivo inválido.');
+      var name = String(meta.name || '');
+      if (/\.(exe|bat|cmd|ps1|sh|js|html|svg)$/i.test(name)) throw new Error('Extensão de arquivo não permitida.');
+      if (name.indexOf('..') >= 0 || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) throw new Error('Nome de arquivo inválido.');
+      return { name: name.slice(0, 120), size: +meta.size || 0, mime: meta.mime || null };
+    },
+    /* Rate limiting em memória (por chave + janela). */
+    rateCheck: function (key, limit, windowMs) {
+      DB._rate = DB._rate || {};
+      var t = Date.now(), w = windowMs || 60000;
+      var arr = (DB._rate[key] || []).filter(function (x) { return t - x < w; });
+      if (arr.length >= limit) throw new Error('Muitas tentativas. Aguarde um momento.');
+      arr.push(t);
+      DB._rate[key] = arr;
+      return true;
+    },
+    /* FinancialIntegrityService: valida invariantes reutilizando os
+       serviços oficiais. Somente leitura; retorna issues (sem corrigir). */
+    integCheckTx: function (userId, t) {
+      var out = [];
+      if (!(t.amount > 0)) out.push('amount');
+      if (['income', 'expense'].indexOf(t.type) < 0) out.push('type');
+      return out;
+    },
+    integValidateConsistency: function (userId) {
+      var issues = [];
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return issues;
+      function flag(check, severity, entity, id, problem, evidence) {
+        issues.push({ check: check, severity: severity, entity_type: entity, entity_id: id, problem: problem, evidence: evidence || null });
+      }
+      /* Saldo das contas = inicial + receitas − despesas − transf out + transf in − pagamentos. */
+      DB.listAccounts(userId, 'all').forEach(function (a) {
+        try {
+          var bal = DB.calculateAccountBalance(userId, a.id);
+          var s = 0;
+          db.transactions.forEach(function (t) {
+            if (t.couple_id !== cid || t.deleted_at || (t.account_id || null) !== a.id) return;
+            s += t.type === 'income' ? toCents(t.amount) : -toCents(t.amount);
+          });
+          db.transfers.forEach(function (t) {
+            if (t.couple_id !== cid || t.deleted_at) return;
+            if (t.to_account_id === a.id) s += toCents(t.amount);
+            if (t.from_account_id === a.id) s -= toCents(t.amount);
+          });
+          db.invoice_payments.forEach(function (p) {
+            if (p.couple_id !== cid || p.deleted_at || (p.payment_account_id || null) !== a.id) return;
+            s -= toCents(p.amount);
+          });
+          var expect = fromCents(toCents(a.initial_balance) + s);
+          if (expect !== bal) flag('account_balance', 'critical', 'account', a.id, 'Saldo divergente', { expected: expect, found: bal });
+        } catch (e) { flag('account_balance', 'warning', 'account', a.id, 'Não verificável', null); }
+      });
+      /* Parcelas somam o total. */
+      DB.listInstallmentPurchases(userId, {}).forEach(function (p) {
+        if (p.deleted_at) return;
+        var rows = db.installments.filter(function (r) { return r.installment_purchase_id === p.id && !r.deleted_at; });
+        var sum = rows.reduce(function (x, r) { return x + toCents(r.amount); }, 0);
+        if (sum !== toCents(p.total_amount)) flag('installment_sum', 'critical', 'installment_purchase', p.id, 'Parcelas não somam o total', { sum: fromCents(sum), total: p.total_amount });
+      });
+      /* Pagamento nunca excede o total da fatura; pagamento ≠ despesa. */
+      db.invoices.forEach(function (i) {
+        if (i.couple_id !== cid || i.status === 'cancelled') return;
+        try {
+          var total = toCents(DB.calculateInvoiceTotal(userId, i.id));
+          if (toCents(i.paid_amount) > total && total > 0) flag('invoice_overpaid', 'critical', 'invoice', i.id, 'Pago além do total', null);
+        } catch (e) {}
+      });
+      db.invoice_payments.forEach(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return;
+        var dup = db.invoice_payments.filter(function (q) { return q.couple_id === cid && !q.deleted_at && q.invoice_id === p.invoice_id && q.id !== p.id && q.amount === p.amount && q.payment_date === p.payment_date; });
+        if (dup.length) flag('invoice_payment_dup', 'warning', 'invoice_payment', p.id, 'Possível pagamento duplicado', null);
+      });
+      /* Settlement nunca excede o pendente (recalcula sem o próprio). */
+      db.settlements.forEach(function (s) {
+        if (s.couple_id !== cid) return;
+        if (!(s.amount > 0)) flag('settlement_amount', 'critical', 'settlement', s.id, 'Valor inválido', null);
+      });
+      /* Planejamento nunca toca realizado: itens não têm transaction_id. */
+      db.financial_plan_items.forEach(function (i) {
+        if (i.couple_id !== cid || i.deleted_at) return;
+        if (i.transaction_id) flag('plan_leak', 'critical', 'financial_plan_items', i.id, 'Item planejado vinculado a transação', null);
+      });
+      /* Splits fecham no total (centavos). */
+      db.transactions.forEach(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || !t.is_shared) return;
+        var ss = db.splits.filter(function (x) { return x.transaction_id === t.id; });
+        var sum = ss.reduce(function (x, r) { return x + toCents(r.calculated_amount); }, 0);
+        if (ss.length && sum !== toCents(t.amount)) flag('split_mismatch', 'critical', 'transaction', t.id, 'Splits não fecham', null);
+      });
+      return issues;
+    },
+    runDiagnostics: function (userId, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      DB.requireAuthz(userId, 'run_diagnostics', { couple_id: cid });
+      var found = DB.integValidateConsistency(userId);
+      DB.diagnose(userId).forEach(function (d) {
+        found.push({ check: d.code || 'diagnose', severity: 'warning', entity_type: d.entity, entity_id: d.id, problem: d.detail || d.code, evidence: null });
+      });
+      var kept = [];
+      found.forEach(function (iss) {
+        var fp = [cid, iss.check, iss.entity_type, iss.entity_id, iss.problem].join('|');
+        var ex = db.financial_integrity_checks.find(function (r) { return r.fingerprint === fp && r.status === 'open'; });
+        if (ex) { kept.push(ex); return; }
+        var row = { id: id('fi'), couple_id: cid, check_type: iss.check, severity: ['info', 'warning', 'critical'].indexOf(iss.severity) >= 0 ? iss.severity : 'warning', status: 'open', entity_type: iss.entity_type, entity_id: iss.entity_id, fingerprint: fp, details: { problem: iss.problem, evidence: iss.evidence }, detected_at: now(), resolved_at: null, created_at: now() };
+        db.financial_integrity_checks.push(row);
+        kept.push(row);
+      });
+      var fps = found.map(function (i) { return [cid, i.check, i.entity_type, i.entity_id, i.problem].join('|'); });
+      var resolved = 0;
+      db.financial_integrity_checks.forEach(function (r) {
+        if (r.couple_id === cid && r.status === 'open' && fps.indexOf(r.fingerprint) < 0) {
+          r.status = 'resolved'; r.resolved_at = now(); resolved++;
+        }
+      });
+      logAudit(db, cid, userId, 'integrity', 'run', 'diagnostics', { open: kept.length, resolved: resolved });
+      try { DB.logSecurityEvent(userId, 'integrity_event', { action: 'run_diagnostics', metadata: { open: kept.length, resolved: resolved } }); } catch (e) {}
+      write(db);
+      return { open: kept, resolved: resolved };
+    },
+    listIntegrityChecks: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.financial_integrity_checks.filter(function (r) {
+        return r.couple_id === cid && (!f.status || r.status === f.status) && (!f.severity || r.severity === f.severity);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 100);
+    },
+    ignoreIntegrityCheck: function (userId, checkId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.financial_integrity_checks.find(function (x) { return x.id === checkId && x.couple_id === cid; });
+      if (!r) throw new Error('Verificação não encontrada.');
+      r.status = 'ignored'; r.resolved_at = now();
+      logAudit(db, cid, userId, 'integrity', checkId, 'ignored', {});
+      write(db);
+      return r;
+    },
+    /* Diagnóstico do sistema (somente leitura, sem SQL arbitrário). */
+    systemDiagnostics: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      DB.requireAuthz(userId, 'system_diagnostics', { couple_id: cid });
+      var today = now().slice(0, 10);
+      function stuckJobs() {
+        return db.automation_jobs.filter(function (j) {
+          return j.couple_id === cid && j.status === 'running' && j.started_at && (Date.now() - Date.parse(j.started_at) > 10 * 60 * 1000);
+        }).length;
+      }
+      return {
+        stuckJobs: stuckJobs(),
+        failedJobs: db.automation_jobs.filter(function (j) { return j.couple_id === cid && j.status === 'failed'; }).length,
+        incompleteImports: db.import_batches.filter(function (b) { return b.couple_id === cid && ['uploaded', 'parsing', 'staged'].indexOf(b.status) >= 0; }).length,
+        pendingReconciliation: db.imported_transactions.filter(function (r) { return r.couple_id === cid && r.match_status !== 'matched' && r.match_status !== 'duplicate' && r.status !== 'ignored'; }).length,
+        overdueInvoices: db.invoices.filter(function (i) { return i.couple_id === cid && i.status === 'overdue'; }).length,
+        stuckNotifications: db.notifications.filter(function (n) { return n.couple_id === cid && ['pending', 'processing'].indexOf(n.status) >= 0; }).length,
+        aiPending: db.ai_actions.filter(function (a) { return a.couple_id === cid && a.status === 'pending_confirmation'; }).length,
+        failedDeliveries: (db.whatsapp_message_failures || []).filter(function (w) { return w.couple_id === cid; }).length,
+        openIntegrity: db.financial_integrity_checks.filter(function (r) { return r.couple_id === cid && r.status === 'open'; }).length,
+        cache: { dashboard: Object.keys(DB._dcache || {}).length, reports: Object.keys(DB._rcache || {}).length, analytics: Object.keys(DB._acache || {}).length },
+        generatedAt: today
+      };
+    },
+    /* ============ PROMPT 31 (V3): ENTRADA POR ÁUDIO ============
+       Áudio é só ENTRADA. Fluxo: receive → validate → transcribe →
+       normalize → FinancialAIAssistantService (mesmo que texto digitado) →
+       intent → authz → validation → preview → confirmation → serviço
+       financeiro oficial → audit. Nenhum cálculo financeiro aqui; a IA
+       continua sem acesso direto ao banco. STT nunca inventa transcrição:
+       providers 'client-side' (navegador transcreveu) e 'local-sim'
+       (transcrição explícita fornecida, p/ testes/assistente). */
+    AUDIO_CONFIG: function () {
+      return {
+        provider: 'client-side', maxSizeMB: 10, maxDurationSec: 120,
+        allowedMimes: ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/m4a', 'audio/aac'],
+        language: 'pt-BR', retentionHours: 24, confirmTtlMin: 30,
+        rateUploadPerMin: 10, rateTranscribePerMin: 20
+      };
+    },
+    audioGet: function (userId, audioId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.audio_messages.find(function (x) { return x.id === audioId && x.couple_id === cid; });
+      if (!r) throw new Error('Áudio não encontrado.');
+      return r;
+    },
+    audioValidateFile: function (meta) {
+      var cfg = DB.AUDIO_CONFIG();
+      meta = meta || {};
+      var mime = String(meta.mime || '').toLowerCase().split(';')[0].trim();
+      if (cfg.allowedMimes.indexOf(mime) < 0) throw new Error('Esse formato de áudio não é compatível.');
+      var size = +meta.size || 0;
+      if (!(size > 0) || size > cfg.maxSizeMB * 1024 * 1024) throw new Error('O áudio é muito longo. Grave uma mensagem mais curta.');
+      var dur = meta.durationSec == null ? null : +meta.durationSec;
+      if (dur != null && (!(dur > 0) || dur > cfg.maxDurationSec)) throw new Error('O áudio é muito longo. Grave uma mensagem mais curta.');
+      var name = String(meta.name || 'audio');
+      if (/\.(exe|bat|cmd|ps1|sh|js|html|svg)$/i.test(name)) throw new Error('Extensão de arquivo não permitida.');
+      if (name.indexOf('..') >= 0 || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) throw new Error('Nome de arquivo inválido.');
+      return { mime: mime, size: size, durationSec: dur, name: name.slice(0, 120) };
+    },
+    audioReceive: function (userId, file, opts) {
+      DB.requireAuthz(userId, 'audio_upload', null);
+      DB.rateCheck('audio_up:' + userId, DB.AUDIO_CONFIG().rateUploadPerMin, 60000);
+      opts = opts || {};
+      var channel = opts.channel || 'web';
+      if (['web', 'whatsapp'].indexOf(channel) < 0) throw new Error('Canal inválido.');
+      var v = DB.audioValidateFile(file);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cfg = DB.AUDIO_CONFIG();
+      var row = {
+        id: id('au'), couple_id: cid, user_id: userId, conversation_id: opts.conversationId || null,
+        channel: channel, source: opts.source || (channel === 'whatsapp' ? 'whatsapp_audio' : 'microphone'),
+        storage_reference: String(file.storageRef || ('local:' + Date.now().toString(36))).slice(0, 200),
+        original_filename: v.name, mime_type: v.mime, file_size: v.size, duration_seconds: v.durationSec,
+        language: opts.language || cfg.language, transcript: null, transcript_status: 'pending',
+        processing_status: 'uploaded', intent: null, confidence: null, error_code: null, error_message: null,
+        action_id: null, created_at: now(), updated_at: now(), processed_at: null,
+        expires_at: new Date(Date.now() + cfg.retentionHours * 3600000).toISOString()
+      };
+      db.audio_messages.push(row);
+      logAudit(db, cid, userId, 'audio_message', row.id, 'uploaded', { channel: channel, size: v.size });
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'audio_uploaded', entity_type: 'audio_message', entity_id: row.id, metadata: { channel: channel, size: v.size } }); } catch (e) {}
+      write(db);
+      DB.audioCleanup(userId);
+      return row;
+    },
+    /* Provider STT: nunca inventa. 'local-sim' exige transcrição explícita
+       (testes/assistente); 'client-side' confirma a transcrição vinda da UI. */
+    audioTranscribe: function (userId, audioId, opts) {
+      DB.requireAuthz(userId, 'audio_transcribe', null);
+      DB.rateCheck('audio_tr:' + userId, DB.AUDIO_CONFIG().rateTranscribePerMin, 60000);
+      opts = opts || {};
+      var db = read();
+      var r = DB.audioGet(userId, audioId);
+      if (r.transcript_status === 'completed' && r.transcript) return r;
+      r.processing_status = 'transcribing'; r.updated_at = now();
+      write(db);
+      var provider = opts.provider || DB.AUDIO_CONFIG().provider;
+      if (['client-side', 'local-sim'].indexOf(provider) < 0) throw new Error('Provedor de transcrição indisponível.');
+      var text = DB.valText(opts.transcript || '', 'Transcrição', 1000);
+      if (!text) {
+        var db2 = read();
+        var r2 = db2.audio_messages.find(function (x) { return x.id === audioId; });
+        r2.transcript_status = 'failed'; r2.processing_status = 'failed';
+        r2.error_code = 'no_transcript'; r2.error_message = 'Não consegui entender o áudio. Tente novamente ou envie a mensagem por texto.';
+        r2.updated_at = now();
+        logAudit(db2, r2.couple_id, userId, 'audio_message', r2.id, 'transcribe_failed', { provider: provider });
+        write(db2);
+        throw new Error('Não consegui entender o áudio. Tente novamente ou envie a mensagem por texto.');
+      }
+      var norm = DB.audioNormalize(text);
+      var db3 = read();
+      var r3 = db3.audio_messages.find(function (x) { return x.id === audioId; });
+      r3.transcript = norm.text; r3.transcript_status = 'completed';
+      r3.processing_status = 'transcribed'; r3.processed_at = now(); r3.updated_at = now();
+      logAudit(db3, r3.couple_id, userId, 'audio_message', r3.id, 'transcribed', { provider: provider, chars: norm.text.length });
+      write(db3);
+      return DB.audioGet(userId, audioId);
+    },
+    /* Normalizador: limpa ruído, preserva significado/valores/datas/nomes.
+       Converte palavras-número pt-BR em dígitos (determinístico). */
+    audioNormalize: function (text) {
+      var s = DB.valText(text, 'Transcrição', 1000);
+      var words = { zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, três: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13, quatorze: 14, catorze: 14, quinze: 15, dezesseis: 16, dezessete: 17, dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90, cem: 100, cento: 100, centena: 100, duzentos: 200, duzentas: 200, trezentos: 300, quatrocentos: 400, quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800, novecentos: 900, mil: 1000 };
+      function normW(w) {
+        var k = w.toLowerCase();
+        try { k = k.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+        return k.replace(/[^a-z]/g, '');
+      }
+      var key = {};
+      Object.keys(words).forEach(function (w) { key[normW(w)] = words[w]; });
+      var toks = s.split(/\s+/);
+      var out = [], i = 0, uncertain = /(\buns\b|\bumas\b|\bacho\b|\btalvez\b|\bou\b)/i.test(s);
+      while (i < toks.length) {
+        var tl = normW(toks[i]);
+        if (key[tl] != null) {
+          var total = 0, j = i;
+          while (j < toks.length) {
+            var wj = normW(toks[j]);
+            if (wj === 'e' && key[normW(toks[j + 1] || '')] != null) { j++; continue; }
+            if (key[wj] == null) break;
+            var v = key[wj];
+            if (v === 1000) total = (total || 1) * 1000;
+            else total += v;
+            j++;
+          }
+          if (total > 0) { out.push(String(total)); i = j; continue; }
+        }
+        out.push(toks[i]); i++;
+      }
+      var joined = out.join(' ').replace(/\s+/g, ' ').trim();
+      return { text: joined, uncertain: uncertain };
+    },
+    /* Áudio → assistente (mesmo que texto digitado). Contexto vem da sessão. */
+    audioToAssistant: function (userId, audioId, opts) {
+      DB.requireAuthz(userId, 'audio_interpret', null);
+      opts = opts || {};
+      var r = DB.audioGet(userId, audioId);
+      if (r.transcript_status !== 'completed' || !r.transcript) throw new Error('Transcreva o áudio antes de interpretar.');
+      if (r.action_id) {
+        var db0 = read();
+        var prev = db0.ai_actions.find(function (x) { return x.id === r.action_id; });
+        if (prev && (prev.status === 'completed' || prev.status === 'pending_confirmation' || prev.status === 'confirmed' || prev.status === 'executing')) {
+          return { duplicate: true, actionId: prev.id, status: prev.status };
+        }
+      }
+      var res = DB.aiProcessMessage(userId, opts.conversationId || r.conversation_id, r.transcript, { channel: r.channel, audioMessageId: r.id });
+      var db = read();
+      var r2 = db.audio_messages.find(function (x) { return x.id === audioId; });
+      r2.processing_status = res.pendingAction ? 'awaiting_confirmation' : 'completed';
+      r2.intent = res.intent || null;
+      r2.conversation_id = res.conversationId || r2.conversation_id;
+      if (res.pendingAction) r2.action_id = res.pendingAction.id || res.pendingAction;
+      r2.updated_at = now();
+      logAudit(db, r2.couple_id, userId, 'audio_message', r2.id, 'interpreted', { intent: r2.intent });
+      try { DB.logSecurityEvent(userId, 'ai_action', { action: 'audio_interpreted', entity_type: 'audio_message', entity_id: r2.id, metadata: { intent: r2.intent } }); } catch (e) {}
+      write(db);
+      res.audioId = audioId;
+      return res;
+    },
+    audioPreview: function (userId, audioId) {
+      var r = DB.audioGet(userId, audioId);
+      if (r.transcript_status !== 'completed') throw new Error('Transcreva o áudio antes de ver a prévia.');
+      var preview = null;
+      if (r.action_id) {
+        try {
+          var a = DB.aiGetAction(userId, r.action_id);
+          preview = { type: a.action_type, params: a.request_data, status: a.status };
+        } catch (e) { preview = null; }
+      }
+      return { transcript: r.transcript, intent: r.intent, status: r.processing_status, preview: preview, source: 'audio' };
+    },
+    audioCancel: function (userId, audioId) {
+      var r = DB.audioGet(userId, audioId);
+      var db = read();
+      var r2 = db.audio_messages.find(function (x) { return x.id === audioId; });
+      if (r2.action_id) { try { DB.aiCancelAction(userId, r2.action_id); } catch (e) {} }
+      r2.processing_status = 'cancelled'; r2.updated_at = now();
+      logAudit(db, r2.couple_id, userId, 'audio_message', r2.id, 'cancelled', {});
+      write(db);
+      return r2;
+    },
+    /* Retenção mínima: remove referência de arquivo; mantém transcrição. */
+    audioCleanup: function (userId) {
+      var db = read(), cid = userId ? DB.myCoupleId(userId) : null;
+      var t = now();
+      var n = 0;
+      db.audio_messages.forEach(function (r) {
+        if (cid && r.couple_id !== cid) return;
+        if (r.expires_at && r.expires_at <= t && r.storage_reference) {
+          r.storage_reference = null; r.processing_status = 'expired'; r.updated_at = now(); n++;
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    audioMetrics: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.audio_messages.filter(function (r) { return r.couple_id === cid; });
+      var by = {};
+      rows.forEach(function (r) { by[r.processing_status] = (by[r.processing_status] || 0) + 1; });
+      return { total: rows.length, byStatus: by };
+    },
+    /* ============ PROMPT 32 (V3): ENTRADA POR IMAGEM ============
+       Imagem é só ENTRADA e evidência. Fluxo: receive → validate → process
+       (VisionProvider abstraído; nunca inventa) → normalize → assistant
+       (mesmo que texto) → intent → authz → preview → confirmação → serviço
+       oficial → audit. Sem cálculo financeiro; sem persistir PAN/CVV. */
+    IMAGE_CONFIG: function () {
+      return {
+        provider: 'client-side', maxSizeMB: 10, maxWidth: 4096, maxHeight: 4096, maxPerRequest: 1,
+        allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+        language: 'pt-BR', retentionHours: 24, confirmTtlMin: 30,
+        rateUploadPerMin: 10, rateProcessPerMin: 15,
+        imageTypes: ['receipt', 'invoice', 'proof_of_payment', 'bill', 'bank_statement', 'card_statement', 'transfer_proof', 'screenshot', 'unknown']
+      };
+    },
+    imageGet: function (userId, imageId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.image_messages.find(function (x) { return x.id === imageId && x.couple_id === cid; });
+      if (!r) throw new Error('Imagem não encontrada.');
+      return r;
+    },
+    imageValidateFile: function (meta) {
+      var cfg = DB.IMAGE_CONFIG();
+      meta = meta || {};
+      var mime = String(meta.mime || '').toLowerCase().split(';')[0].trim();
+      if (cfg.allowedMimes.indexOf(mime) < 0) throw new Error('Esse formato de imagem não é compatível.');
+      var ext = String(meta.name || '').split('.').pop().toLowerCase();
+      var extOk = { 'image/jpeg': ['jpg', 'jpeg'], 'image/png': ['png'], 'image/webp': ['webp'], 'image/heic': ['heic'], 'image/heif': ['heif', 'heic'] }[mime] || [];
+      if (extOk.length && extOk.indexOf(ext) < 0) throw new Error('Extensão incompatível com o formato do arquivo.');
+      if (/\.(exe|bat|cmd|ps1|sh|js|html|svg)$/i.test(String(meta.name || ''))) throw new Error('Extensão de arquivo não permitida.');
+      var size = +meta.size || 0;
+      if (!(size > 0) || size > cfg.maxSizeMB * 1024 * 1024) throw new Error('Imagem muito grande. Envie uma imagem menor.');
+      var w = meta.width == null ? null : +meta.width, h = meta.height == null ? null : +meta.height;
+      if ((w != null && (!(w > 0) || w > cfg.maxWidth)) || (h != null && (!(h > 0) || h > cfg.maxHeight))) throw new Error('Resolução da imagem não suportada.');
+      if (w != null && h != null && (w < 200 || h < 200)) throw new Error('Imagem muito pequena ou ilegível. Tente uma foto mais nítida.');
+      if (meta.magic && !/^(ffd8ff|89504e47|52494646|000000..66747970)/i.test(String(meta.magic).replace(/\s/g, ''))) throw new Error('Arquivo inválido ou corrompido.');
+      return { mime: mime, size: size, width: w, height: h, name: String(meta.name || 'imagem').slice(0, 120) };
+    },
+    imageReceive: function (userId, file, opts) {
+      DB.requireAuthz(userId, 'image_upload', null);
+      DB.rateCheck('image_up:' + userId, DB.IMAGE_CONFIG().rateUploadPerMin, 60000);
+      opts = opts || {};
+      var channel = opts.channel || 'web';
+      if (['web', 'whatsapp'].indexOf(channel) < 0) throw new Error('Canal inválido.');
+      var source = opts.source || (channel === 'whatsapp' ? 'whatsapp_image' : 'upload');
+      if (['camera', 'upload', 'whatsapp_image', 'screenshot'].indexOf(source) < 0) throw new Error('Origem inválida.');
+      var v = DB.imageValidateFile(file);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cfg = DB.IMAGE_CONFIG();
+      var row = {
+        id: id('im'), couple_id: cid, user_id: userId, conversation_id: opts.conversationId || null,
+        channel: channel, source: source,
+        storage_reference: String(file.storageRef || ('local:' + Date.now().toString(36))).slice(0, 200),
+        original_filename: v.name, mime_type: v.mime, file_size: v.size, width: v.width, height: v.height,
+        language: opts.language || cfg.language, image_type: 'unknown',
+        processing_status: 'uploaded', extraction_status: 'pending',
+        extracted_text: null, structured_data: null, confidence: null,
+        error_code: null, error_message: null, action_id: null,
+        created_at: now(), updated_at: now(), processed_at: null,
+        expires_at: new Date(Date.now() + cfg.retentionHours * 3600000).toISOString()
+      };
+      db.image_messages.push(row);
+      logAudit(db, cid, userId, 'image_message', row.id, 'uploaded', { channel: channel, size: v.size });
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'image_uploaded', entity_type: 'image_message', entity_id: row.id, metadata: { channel: channel, size: v.size } }); } catch (e) {}
+      write(db);
+      DB.imageCleanup(userId);
+      return row;
+    },
+    /* VisionProvider: 'client-side' (UI/provider extraiu) ou 'local-sim'
+       (extração explícita fornecida, p/ testes). Nunca inventa campos. */
+    imageProcess: function (userId, imageId, opts) {
+      DB.requireAuthz(userId, 'image_process', null);
+      DB.rateCheck('image_pr:' + userId, DB.IMAGE_CONFIG().rateProcessPerMin, 60000);
+      opts = opts || {};
+      var r = DB.imageGet(userId, imageId);
+      if (r.extraction_status === 'completed' && r.structured_data) return r;
+      var provider = opts.provider || DB.IMAGE_CONFIG().provider;
+      if (['client-side', 'local-sim'].indexOf(provider) < 0) throw new Error('Provedor de visão indisponível.');
+      var ex = opts.extraction || null;
+      function fail(code, msg) {
+        var db = read();
+        var r2 = db.image_messages.find(function (x) { return x.id === imageId; });
+        r2.extraction_status = 'failed'; r2.processing_status = 'failed';
+        r2.error_code = code; r2.error_message = msg; r2.updated_at = now();
+        logAudit(db, r2.couple_id, userId, 'image_message', r2.id, 'extract_failed', { provider: provider });
+        write(db);
+        throw new Error(msg);
+      }
+      if (!ex || typeof ex !== 'object') fail('no_extraction', 'Não consegui identificar os dados com segurança. Tente enviar uma foto mais nítida.');
+      var norm = DB.imageNormalizeExtraction(ex);
+      if (!norm.hasData) fail('no_data', 'Não encontrei dados financeiros na imagem. Tente uma foto mais nítida ou digite os dados.');
+      var db = read();
+      var r3 = db.image_messages.find(function (x) { return x.id === imageId; });
+      r3.image_type = norm.imageType; r3.extracted_text = norm.textRedacted;
+      r3.structured_data = norm.data; r3.confidence = norm.partial ? 'partial' : 'ok';
+      r3.extraction_status = norm.partial ? 'partial' : 'completed';
+      r3.processing_status = 'extracted'; r3.processed_at = now(); r3.updated_at = now();
+      logAudit(db, r3.couple_id, userId, 'image_message', r3.id, 'extracted', { provider: provider, type: norm.imageType, partial: norm.partial });
+      write(db);
+      return DB.imageGet(userId, imageId);
+    },
+    /* Normalizador: BRL, datas pt-BR, merchant; PAN mascarado (só last4).
+       Campos ausentes continuam ausentes. */
+    imageRedactPan: function (s) {
+      return String(s || '').replace(/\b(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})\b/g, '**** **** **** $4')
+        .replace(/\b\d{3}\.\d{3}\.\d{3}\-\d{2}\b/g, '[documento]')
+        .replace(/\bcvv\s*:?\s*\d{3,4}\b/gi, 'CVV:[redacted]');
+    },
+    imageParseBRL: function (v) {
+      if (v == null || v === '') return null;
+      if (typeof v === 'number') return isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : null;
+      var s = String(v).replace(/R\$\s?/gi, '').trim();
+      var neg = /^-|\(\s*[\d.,]+\s*\)$/.test(s);
+      s = s.replace(/[()]/g, '');
+      var n;
+      if (s.indexOf(',') >= 0) n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+      else if (/^\d+\.\d{3}(\.\d{3})*$/.test(s)) n = parseFloat(s.replace(/\./g, ''));
+      else n = parseFloat(s);
+      if (!isFinite(n) || n < 0) return null;
+      n = Math.round(n * 100) / 100;
+      return neg ? -n : n;
+    },
+    imageParseDate: function (v, todayISO) {
+      if (!v) return null;
+      var s = String(v).trim();
+      var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (m) {
+        var y = +m[3] < 100 ? 2000 + (+m[3]) : +m[3];
+        var d = y + '-' + ('0' + (+m[2])).slice(-2) + '-' + ('0' + (+m[1])).slice(-2);
+        if (!isNaN(new Date(d + 'T12:00:00').getTime())) return d;
+        return null;
+      }
+      var months = { janeiro: '01', fevereiro: '02', marco: '03', março: '03', abril: '04', maio: '05', junho: '06', julho: '07', agosto: '08', setembro: '09', outubro: '10', novembro: '11', dezembro: '12' };
+      var m2 = s.toLowerCase().match(/(\d{1,2})\s+de\s+([a-zç]+)(?:\s+de\s+(\d{4}))?/);
+      if (m2 && months[m2[2]]) {
+        var yy = m2[3] || (todayISO || now().slice(0, 10)).slice(0, 4);
+        return yy + '-' + months[m2[2]] + '-' + ('0' + (+m2[1])).slice(-2);
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      return null;
+    },
+    imageNormalizeExtraction: function (ex) {
+      var cfg = DB.IMAGE_CONFIG();
+      var type = cfg.imageTypes.indexOf(ex.imageType) >= 0 ? ex.imageType : 'unknown';
+      function money(v) { return DB.imageParseBRL(v); }
+      function date(v) { return DB.imageParseDate(v); }
+      var data = {
+        imageType: type,
+        merchantName: ex.merchantName ? DB.valText(ex.merchantName, 'Estabelecimento', 120) : null,
+        date: date(ex.date), dueDate: date(ex.dueDate), issueDate: date(ex.issueDate),
+        totalAmount: money(ex.totalAmount), subtotal: money(ex.subtotal), discount: money(ex.discount),
+        tax: money(ex.tax), paidAmount: money(ex.paidAmount), installmentAmount: money(ex.installmentAmount),
+        installmentCount: ex.installmentCount != null ? parseInt(ex.installmentCount, 10) || null : null,
+        currency: 'BRL', items: Array.isArray(ex.items) ? ex.items.slice(0, 50).map(function (it) {
+          return { name: DB.valText(it.name || '', 'Item', 120), amount: money(it.amount), qty: it.qty != null ? +it.qty || null : null };
+        }) : [],
+        paymentMethod: ex.paymentMethod ? DB.valText(ex.paymentMethod, 'Pagamento', 60) : null,
+        categoryHint: ex.categoryHint ? DB.valText(ex.categoryHint, 'Categoria', 60) : null,
+        documentNumber: ex.documentNumber ? DB.valText(ex.documentNumber, 'Documento', 60) : null,
+        beneficiary: ex.beneficiary ? DB.valText(ex.beneficiary, 'Beneficiário', 120) : null,
+        cardLast4: String(ex.cardLast4 || '').replace(/\D/g, '').slice(-4) || null,
+        evidence: ex.evidence && typeof ex.evidence === 'object' ? ex.evidence : null
+      };
+      if (data.installmentCount != null && (data.installmentCount < 1 || data.installmentCount > 60)) data.installmentCount = null;
+      var hasData = !!(data.merchantName || data.date || data.dueDate || data.totalAmount != null || data.paidAmount != null || data.installmentAmount != null || data.beneficiary || data.documentNumber || data.items.length);
+      var partial = hasData && (data.totalAmount == null && data.paidAmount == null && data.installmentAmount == null);
+      var textRedacted = DB.imageRedactPan(ex.rawText || [data.merchantName, data.totalAmount != null ? 'R$ ' + data.totalAmount : null, data.date].filter(Boolean).join(' • ').slice(0, 500));
+      return { imageType: type, data: data, textRedacted: textRedacted, hasData: hasData, partial: partial };
+    },
+    /* Duplicidade: mesmas centavos + janela ±3 dias + merchant normalizado. */
+    imageFindDuplicates: function (userId, ref) {
+      var amount = DB.imageParseBRL(ref.totalAmount != null ? ref.totalAmount : ref.paidAmount);
+      if (amount == null) return [];
+      var base = ref.date || ref.dueDate || null;
+      var from = base ? DB.dateAddDays(base, -3).slice(0, 7) : '0000-00', to = base ? DB.dateAddDays(base, 3).slice(0, 7) : '9999-99';
+      var norm = ref.merchantName ? DB.normalizeDescription(ref.merchantName) : null;
+      return DB.listTx(userId, { from: from, to: to, type: 'expense' }).filter(function (t) {
+        if (Math.round(t.amount * 100) !== Math.round(amount * 100)) return false;
+        if (norm && DB.normalizeDescription(t.description).indexOf(norm) < 0 && norm.indexOf(DB.normalizeDescription(t.description)) < 0) return false;
+        return true;
+      }).slice(0, 5).map(function (t) { return { id: t.id, date: t.date, description: t.description, amount: t.amount }; });
+    },
+    /* Imagem → assistente (texto resumo + dados). Mesmo pipeline do texto. */
+    imageToAssistant: function (userId, imageId, opts) {
+      DB.requireAuthz(userId, 'image_interpret', null);
+      opts = opts || {};
+      var r = DB.imageGet(userId, imageId);
+      if (r.extraction_status !== 'completed' && r.extraction_status !== 'partial') throw new Error('Processe a imagem antes de interpretar.');
+      if (r.action_id) {
+        var db0 = read();
+        var prev = db0.ai_actions.find(function (x) { return x.id === r.action_id; });
+        if (prev && ['completed', 'pending_confirmation', 'confirmed', 'executing'].indexOf(prev.status) >= 0) {
+          return { duplicate: true, actionId: prev.id, status: prev.status };
+        }
+      }
+      var d = r.structured_data || {};
+      var bits = [];
+      if (d.merchantName) bits.push(d.merchantName);
+      if (d.totalAmount != null) bits.push('R$ ' + d.totalAmount.toFixed(2).replace('.', ','));
+      else if (d.paidAmount != null) bits.push('R$ ' + d.paidAmount.toFixed(2).replace('.', ','));
+      if (d.date) bits.push('em ' + d.date.split('-').reverse().join('/'));
+      var summary = 'Imagem (' + r.image_type + '): ' + (bits.join(', ') || 'sem dados suficientes') + '.';
+      var text = opts.question ? (summary + ' Pergunta: ' + opts.question) : (summary + ' Registrar despesa?');
+      var res = DB.aiProcessMessage(userId, opts.conversationId || r.conversation_id, text, { channel: r.channel, imageMessageId: r.id });
+      /* Comparação documento × sistema p/ perguntas de fatura. */
+      var comparison = null;
+      if (opts.question && /fatura/i.test(opts.question) && d.totalAmount != null) {
+        var invs = DB.listInvoices(userId, {}).filter(function (i) { return i.status !== 'paid' && i.status !== 'cancelled'; });
+        var sys = invs.length ? DB.calculateInvoiceOutstanding(userId, invs.sort(function (a, b) { return (a.due_date + a.id).localeCompare(b.due_date + b.id); })[0].id) : 0;
+        comparison = { document: d.totalAmount, system: sys, diff: Math.round((d.totalAmount - sys) * 100) / 100 };
+        res.answer += comparison.diff === 0
+          ? ' Documento: ' + DB.aiMoney(d.totalAmount) + ' • sistema: ' + DB.aiMoney(sys) + ' (iguais).'
+          : ' Documento: ' + DB.aiMoney(d.totalAmount) + ' • sistema: ' + DB.aiMoney(sys) + ' (diferença de ' + DB.aiMoney(comparison.diff) + '). Deseja revisar a fatura? Não alterei nada.';
+      }
+      var db = read();
+      var r2 = db.image_messages.find(function (x) { return x.id === imageId; });
+      r2.processing_status = res.pendingAction ? 'awaiting_confirmation' : 'completed';
+      r2.conversation_id = res.conversationId || r2.conversation_id;
+      if (res.pendingAction) r2.action_id = res.pendingAction.id || res.pendingAction;
+      r2.updated_at = now();
+      logAudit(db, r2.couple_id, userId, 'image_message', r2.id, 'interpreted', { type: r2.image_type });
+      try { DB.logSecurityEvent(userId, 'ai_action', { action: 'image_interpreted', entity_type: 'image_message', entity_id: r2.id, metadata: { type: r2.image_type } }); } catch (e) {}
+      write(db);
+      res.imageId = imageId;
+      res.duplicates = DB.imageFindDuplicates(userId, d);
+      res.comparison = comparison;
+      return res;
+    },
+    imagePreview: function (userId, imageId) {
+      var r = DB.imageGet(userId, imageId);
+      if (r.extraction_status !== 'completed' && r.extraction_status !== 'partial') throw new Error('Processe a imagem antes de ver a prévia.');
+      var d = r.structured_data || {};
+      var preview = {
+        tipo: r.image_type, estabelecimento: d.merchantName || null,
+        valor: d.totalAmount != null ? d.totalAmount : d.paidAmount, data: d.date || d.dueDate || null,
+        categoriaHint: d.categoryHint || null, pagamento: d.paymentMethod || 'não identificado',
+        duplicatas: DB.imageFindDuplicates(userId, d), source: 'image'
+      };
+      var action = null;
+      if (r.action_id) {
+        try {
+          var a = DB.aiGetAction(userId, r.action_id);
+          action = { type: a.action_type, params: a.request_data, status: a.status };
+        } catch (e) { action = null; }
+      }
+      return { imageType: r.image_type, partial: r.extraction_status === 'partial', preview: preview, action: action };
+    },
+    imageCancel: function (userId, imageId) {
+      var r = DB.imageGet(userId, imageId);
+      var db = read();
+      var r2 = db.image_messages.find(function (x) { return x.id === imageId; });
+      if (r2.action_id) { try { DB.aiCancelAction(userId, r2.action_id); } catch (e) {} }
+      r2.processing_status = 'cancelled'; r2.updated_at = now();
+      logAudit(db, r2.couple_id, userId, 'image_message', r2.id, 'cancelled', {});
+      write(db);
+      return r2;
+    },
+    imageCleanup: function (userId) {
+      var db = read(), cid = userId ? DB.myCoupleId(userId) : null;
+      var t = now(), n = 0;
+      db.image_messages.forEach(function (r) {
+        if (cid && r.couple_id !== cid) return;
+        if (r.expires_at && r.expires_at <= t && r.storage_reference) {
+          r.storage_reference = null; r.processing_status = 'expired'; r.updated_at = now(); n++;
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    imageMetrics: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.image_messages.filter(function (r) { return r.couple_id === cid; });
+      var by = {};
+      rows.forEach(function (r) { by[r.processing_status] = (by[r.processing_status] || 0) + 1; });
+      return { total: rows.length, byStatus: by };
+    },
+    /* ============ PROMPT 33 (V3): MULTIMODAL + DOCUMENTOS ============
+       UMA camada de entrada (texto/áudio/imagem/documento) → NormalizedInput
+       → assistant → intent → authz → preview → confirmação → serviço oficial.
+       Extraído = UNTRUSTED_USER_DATA (nunca instrução, nunca verdade).
+       Sem cálculo financeiro; sem executar conteúdo; sem inventar. */
+    INPUT_CONFIG: function () {
+      return {
+        docMaxSizeMB: 10, docMaxPages: 20, docMaxFiles: 3, docRetentionHours: 24,
+        docAllowedMimes: ['application/pdf'], docProvider: 'client-side',
+        ctxTtlMin: 60, inputRetentionHours: 24
+      };
+    },
+    /* InputNormalizationService: valores/datas/nomes (reusa normalizadores). */
+    inputNormMoney: function (v) { return DB.imageParseBRL(v); },
+    inputNormDate: function (v) { return DB.imageParseDate(v); },
+    inputNormName: function (v, max) { return v == null ? null : DB.valText(v, 'Nome', max || 120); },
+    inputNormMerchant: function (v) { return v == null ? null : DB.normalizeDescription(DB.valText(v, 'Estabelecimento', 120)); },
+    /* InputEvidenceService: origem de cada campo (sem PAN). */
+    inputAddEvidence: function (userId, inputId, field, value, source) {
+      source = source || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inp = db.multimodal_inputs.find(function (x) { return x.id === inputId && x.couple_id === cid; });
+      if (!inp) throw new Error('Entrada não encontrada.');
+      var row = {
+        id: id('ev'), couple_id: cid, input_id: inputId, field_name: String(field).slice(0, 60),
+        extracted_value: DB.imageRedactPan(String(value == null ? '' : (typeof value === 'object' ? JSON.stringify(value) : value))).slice(0, 300),
+        source_type: String(source.source_type || 'unknown').slice(0, 40),
+        source_reference: String(source.source_reference || inputId).slice(0, 120),
+        page_number: source.page_number != null ? +source.page_number : null,
+        bounding_box: null, confidence: source.confidence != null ? +source.confidence : null,
+        evidence_text: DB.imageRedactPan(String(source.evidence_text || value || '')).slice(0, 300),
+        created_at: now()
+      };
+      db.input_evidence.push(row);
+      write(db);
+      return row;
+    },
+    inputListEvidence: function (userId, inputId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.input_evidence.filter(function (r) { return r.couple_id === cid && r.input_id === inputId; })
+        .sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+    },
+    /* DocumentProcessingService + FinancialDocumentService (só PDF). */
+    docGet: function (userId, docId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.financial_documents.find(function (x) { return x.id === docId && x.couple_id === cid; });
+      if (!r) throw new Error('Documento não encontrado.');
+      return r;
+    },
+    docValidateFile: function (meta) {
+      var cfg = DB.INPUT_CONFIG();
+      meta = meta || {};
+      var mime = String(meta.mime || '').toLowerCase().split(';')[0].trim();
+      if (cfg.docAllowedMimes.indexOf(mime) < 0) throw new Error('Tipo de documento não suportado. Envie um PDF.');
+      var name = String(meta.name || '');
+      if (!/\.pdf$/i.test(name)) throw new Error('Extensão incompatível com o documento.');
+      if (/\.(exe|bat|cmd|ps1|sh|js|html|svg)$/i.test(name)) throw new Error('Extensão de arquivo não permitida.');
+      if (name.indexOf('..') >= 0 || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) throw new Error('Nome de arquivo inválido.');
+      var size = +meta.size || 0;
+      if (!(size > 0) || size > cfg.docMaxSizeMB * 1024 * 1024) throw new Error('Documento muito grande. Envie um arquivo menor.');
+      var pages = meta.pageCount == null ? null : +meta.pageCount;
+      if (pages != null && (!(pages >= 1) || pages > cfg.docMaxPages)) throw new Error('Documento com páginas demais (máx ' + cfg.docMaxPages + ').');
+      if (meta.magic && String(meta.magic).replace(/\s/g, '').toUpperCase().indexOf('25504446') !== 0) throw new Error('Arquivo inválido ou corrompido.');
+      return { mime: mime, size: size, pages: pages, name: name.slice(0, 120) };
+    },
+    receiveDocument: function (userId, file, opts) {
+      DB.requireAuthz(userId, 'document_upload', null);
+      DB.rateCheck('doc_up:' + userId, 10, 60000);
+      opts = opts || {};
+      var channel = opts.channel || 'web';
+      if (['web', 'whatsapp'].indexOf(channel) < 0) throw new Error('Canal inválido.');
+      var v = DB.docValidateFile(file);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cfg = DB.INPUT_CONFIG();
+      var row = {
+        id: id('dc'), couple_id: cid, user_id: userId, conversation_id: opts.conversationId || null,
+        channel: channel, source: opts.source || (channel === 'whatsapp' ? 'document_upload' : 'document_upload'),
+        storage_reference: String(file.storageRef || ('local:' + Date.now().toString(36))).slice(0, 200),
+        original_filename: v.name, mime_type: v.mime, file_size: v.size, page_count: v.pages,
+        language: opts.language || 'pt-BR', document_type: 'unknown',
+        processing_status: 'uploaded', extraction_status: 'pending',
+        extracted_text: null, structured_data: null, confidence: null,
+        error_code: null, error_message: null, action_id: null,
+        created_at: now(), updated_at: now(), processed_at: null,
+        expires_at: new Date(Date.now() + cfg.docRetentionHours * 3600000).toISOString()
+      };
+      db.financial_documents.push(row);
+      logAudit(db, cid, userId, 'financial_document', row.id, 'uploaded', { channel: channel, size: v.size });
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'document_uploaded', entity_type: 'financial_document', entity_id: row.id, metadata: { channel: channel, size: v.size } }); } catch (e) {}
+      write(db);
+      DB.docCleanup(userId);
+      return row;
+    },
+    docClassify: function (ex) {
+      ex = ex || {};
+      var hay = ((ex.rawText || '') + ' ' + (ex.title || '')).toLowerCase();
+      function has() { for (var i = 0; i < arguments.length; i++) if (hay.indexOf(arguments[i]) >= 0) return true; return false; }
+      if (has('fatura', 'vencimento') && has('cartao', 'cartão', 'limite', 'pagamento minimo', 'pagamento mínimo')) return 'invoice';
+      if (has('extrato', 'saldo', 'lançamento', 'lancamento')) return 'bank_statement';
+      if (has('boleto', 'linha digitavel', 'linha digitável', 'beneficiario', 'beneficiário')) return 'bill';
+      if (has('comprovante', 'pagamento efetuado', 'pagamento realizado', 'transferencia efetuada', 'transferência efetuada', 'pix')) return 'payment_proof';
+      if (has('nota fiscal', 'cupom fiscal', 'cnpj', 'danfe')) return 'receipt';
+      if (has('orcamento', 'orçamento', 'planejamento')) return 'budget_document';
+      if (has('relatorio', 'relatório', 'demonstrativo')) return 'financial_report';
+      return 'unknown';
+    },
+    extractDocumentText: function (userId, docId, opts) {
+      DB.requireAuthz(userId, 'document_process', null);
+      DB.rateCheck('doc_pr:' + userId, 15, 60000);
+      opts = opts || {};
+      var r = DB.docGet(userId, docId);
+      if (r.extraction_status === 'completed' && r.structured_data) return r;
+      var provider = opts.provider || DB.INPUT_CONFIG().docProvider;
+      if (['client-side', 'local-sim'].indexOf(provider) < 0) throw new Error('Provedor de documentos indisponível.');
+      var ex = opts.extraction || null;
+      function fail(code, msg) {
+        var db = read();
+        var r2 = db.financial_documents.find(function (x) { return x.id === docId; });
+        r2.extraction_status = 'failed'; r2.processing_status = 'failed';
+        r2.error_code = code; r2.error_message = msg; r2.updated_at = now();
+        logAudit(db, r2.couple_id, userId, 'financial_document', r2.id, 'extract_failed', { provider: provider });
+        write(db);
+        throw new Error(msg);
+      }
+      if (!ex || typeof ex !== 'object') fail('no_extraction', 'Não consegui interpretar esse arquivo com segurança. Você pode digitar os dados manualmente ou tentar enviar uma imagem mais nítida.');
+      var norm = DB.imageNormalizeExtraction(Object.assign({}, ex, { imageType: ex.imageType || undefined }));
+      var dtype = ex.documentType && ex.documentType !== 'unknown' && ['receipt', 'invoice', 'bank_statement', 'credit_card_statement', 'bill', 'payment_proof', 'transfer_proof', 'financial_report', 'budget_document', 'unknown'].indexOf(ex.documentType) >= 0
+        ? ex.documentType : DB.docClassify(ex);
+      var data = norm.data;
+      data.documentType = dtype;
+      data.rows = Array.isArray(ex.rows) ? ex.rows.slice(0, 200).map(function (w, ix) {
+        return { date: DB.imageParseDate(w.date), description: DB.valText(w.description || '', 'Linha', 120), amount: DB.imageParseBRL(w.amount), page: w.page != null ? +w.page : (ix === 0 ? 1 : null) };
+      }) : [];
+      var hasData = norm.hasData || data.rows.length > 0 || dtype !== 'unknown';
+      if (!hasData) fail('no_data', 'Não encontrei dados financeiros no documento.');
+      var db = read();
+      var r3 = db.financial_documents.find(function (x) { return x.id === docId; });
+      r3.document_type = dtype; r3.page_count = ex.pageCount != null ? +ex.pageCount : r3.page_count;
+      r3.extracted_text = norm.textRedacted;
+      r3.structured_data = data; r3.confidence = norm.partial && !data.rows.length ? 'partial' : 'ok';
+      r3.extraction_status = (norm.partial && !data.rows.length) ? 'partial' : 'completed';
+      r3.processing_status = 'extracted'; r3.processed_at = now(); r3.updated_at = now();
+      logAudit(db, r3.couple_id, userId, 'financial_document', r3.id, 'extracted', { provider: provider, type: dtype });
+      write(db);
+      return DB.docGet(userId, docId);
+    },
+    normalizeDocumentData: function (userId, docId) { return DB.docGet(userId, docId); },
+    docPreview: function (userId, docId) {
+      var r = DB.docGet(userId, docId);
+      if (r.extraction_status !== 'completed' && r.extraction_status !== 'partial') throw new Error('Processe o documento antes de ver a prévia.');
+      return { documentType: r.document_type, partial: r.extraction_status === 'partial', data: r.structured_data, rows: (r.structured_data && r.structured_data.rows) || [] };
+    },
+    cancelDocument: function (userId, docId) {
+      var r = DB.docGet(userId, docId);
+      var db = read();
+      var r2 = db.financial_documents.find(function (x) { return x.id === docId; });
+      if (r2.action_id) { try { DB.aiCancelAction(userId, r2.action_id); } catch (e) {} }
+      r2.processing_status = 'cancelled'; r2.updated_at = now();
+      logAudit(db, r2.couple_id, userId, 'financial_document', r2.id, 'cancelled', {});
+      write(db);
+      return r2;
+    },
+    expireDocument: function (userId, docId) { return DB.cancelDocument(userId, docId); },
+    docCleanup: function (userId) {
+      var db = read(), cid = userId ? DB.myCoupleId(userId) : null;
+      var t = now(), n = 0;
+      db.financial_documents.forEach(function (r) {
+        if (cid && r.couple_id !== cid) return;
+        if (r.expires_at && r.expires_at <= t && r.storage_reference) {
+          r.storage_reference = null; r.processing_status = 'expired'; r.updated_at = now(); n++;
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    /* DocumentComparisonService: doc × sistema (factual, sem alterar). */
+    compareDocumentWithTransactions: function (userId, docId) {
+      var r = DB.docGet(userId, docId);
+      var d = r.structured_data || {};
+      var out = [];
+      (d.rows || []).slice(0, 50).forEach(function (w) {
+        if (w.amount == null) return;
+        var cands = DB.imageFindDuplicates(userId, { totalAmount: w.amount, date: w.date, merchantName: w.description });
+        out.push({ row: w, status: cands.length ? 'possible_match' : 'missing_in_system', matches: cands.slice(0, 3) });
+      });
+      if (d.totalAmount != null) {
+        var c2 = DB.imageFindDuplicates(userId, { totalAmount: d.totalAmount, date: d.date || d.dueDate, merchantName: d.merchantName || d.beneficiary });
+        out.push({ row: { description: d.merchantName || d.beneficiary || 'Total', amount: d.totalAmount, date: d.date || d.dueDate }, status: c2.length ? 'possible_match' : 'missing_in_system', matches: c2.slice(0, 3) });
+      }
+      return out;
+    },
+    compareDocumentWithInvoice: function (userId, docId) {
+      var r = DB.docGet(userId, docId);
+      var d = r.structured_data || {};
+      if (d.totalAmount == null) return { status: 'unknown', detail: 'Sem total no documento.' };
+      var invs = DB.listInvoices(userId, {}).filter(function (i) { return i.status !== 'paid' && i.status !== 'cancelled'; });
+      var best = null, bestDiff = null;
+      invs.forEach(function (i) {
+        var o = DB.calculateInvoiceOutstanding(userId, i.id);
+        var diff = Math.round((d.totalAmount - o) * 100) / 100;
+        if (bestDiff == null || Math.abs(diff) < Math.abs(bestDiff)) { bestDiff = diff; best = { id: i.id, card: DB.cardName(userId, i.credit_card_id), ref: ('0' + i.reference_month).slice(-2) + '/' + i.reference_year, outstanding: o }; }
+      });
+      if (!best) return { status: 'missing_in_system', detail: 'Nenhuma fatura em aberto.' };
+      return { status: bestDiff === 0 ? 'match' : 'difference', document: d.totalAmount, system: best.outstanding, diff: bestDiff, invoice: best };
+    },
+    compareWithFinancialData: function (userId, docId) {
+      return { transactions: DB.compareDocumentWithTransactions(userId, docId), invoice: DB.compareDocumentWithInvoice(userId, docId) };
+    },
+    buildDocumentPreview: function (userId, docId) {
+      var p = DB.docPreview(userId, docId);
+      return { preview: p, comparison: DB.compareWithFinancialData(userId, docId) };
+    },
+    /* MultimodalContextService: combina entradas; conflito nunca silencioso. */
+    mmCreateContext: function (userId, opts) {
+      DB.requireAuthz(userId, 'mm_context', null);
+      opts = opts || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var cfg = DB.INPUT_CONFIG();
+      var ctx = {
+        id: id('mc'), couple_id: cid, user_id: userId, conversation_id: opts.conversationId || null,
+        channel: opts.channel || 'web', group_id: opts.groupId || id('mg'),
+        status: 'open', fields: {}, conflicts: [], input_ids: [],
+        confidence: null, action_id: null,
+        created_at: now(), updated_at: now(),
+        expires_at: new Date(Date.now() + cfg.ctxTtlMin * 60000).toISOString()
+      };
+      db.multimodal_contexts.push(ctx);
+      write(db);
+      return ctx;
+    },
+    mmGetContext: function (userId, ctxId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.multimodal_contexts.find(function (x) { return x.id === ctxId && x.couple_id === cid; });
+      if (!c) throw new Error('Contexto não encontrado.');
+      return c;
+    },
+    mmAddInput: function (userId, ctxId, input) {
+      var db = read();
+      var c = DB.mmGetContext(userId, ctxId);
+      var row = db.multimodal_contexts.find(function (x) { return x.id === ctxId; });
+      var FIELDS = ['amount', 'date', 'dueDate', 'merchant', 'description', 'categoryHint', 'accountHint', 'cardHint', 'payerHint', 'shared', 'split', 'documentNumber', 'installmentInfo', 'question'];
+      FIELDS.forEach(function (f) {
+        var v = input.fields ? input.fields[f] : undefined;
+        if (v == null || v === '') return;
+        var cur = row.fields[f];
+        var same = JSON.stringify(cur && cur.value) === JSON.stringify(v);
+        if (cur && !same) {
+          var ex = row.conflicts.filter(function (k) { return k.field_name === f && !k.resolved_at; })[0];
+          if (ex) {
+            if (!ex.values.some(function (w) { return JSON.stringify(w.value) === JSON.stringify(v); })) {
+              ex.values.push({ value: v, source: input.source, input_id: input.input_id || null });
+              ex.updated_at = now();
+            }
+          } else {
+            row.conflicts.push({ field_name: f, values: [{ value: cur.value, source: cur.source, input_id: cur.input_id || null }, { value: v, source: input.source, input_id: input.input_id || null }], resolution: null, resolved_by: null, resolved_at: null, created_at: now(), updated_at: now() });
+          }
+        } else if (!cur) {
+          row.fields[f] = { value: v, source: input.source, input_id: input.input_id || null };
+        }
+      });
+      if (input.input_id && row.input_ids.indexOf(input.input_id) < 0) row.input_ids.push(input.input_id);
+      var confs = (input.confidence != null ? [input.confidence] : [0.9]).concat(row.confidence != null ? [row.confidence] : []);
+      row.confidence = Math.min.apply(null, confs);
+      row.updated_at = now();
+      logAudit(db, row.couple_id, userId, 'mm_context', row.id, 'add_input', { source: input.source });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'multimodal_input_received', entity_type: 'mm_context', entity_id: row.id, metadata: { source: input.source } }); } catch (e) {}
+      return DB.mmGetContext(userId, ctxId);
+    },
+    mmResolveConflict: function (userId, ctxId, field, value, opts) {
+      opts = opts || {};
+      var db = read();
+      DB.mmGetContext(userId, ctxId);
+      var row = db.multimodal_contexts.find(function (x) { return x.id === ctxId; });
+      var c = row.conflicts.filter(function (k) { return k.field_name === field && !k.resolved_at; })[0];
+      if (!c) throw new Error('Conflito não encontrado.');
+      var okV = c.values.some(function (w) { return JSON.stringify(w.value) === JSON.stringify(value); });
+      if (!okV && !opts.allowCustom) throw new Error('Escolha um dos valores identificados.');
+      c.resolution = value; c.resolved_by = userId; c.resolved_at = now(); c.updated_at = now();
+      row.fields[field] = { value: value, source: 'user_resolution', input_id: null };
+      row.updated_at = now();
+      logAudit(db, row.couple_id, userId, 'mm_context', row.id, 'resolve_conflict', { field: field });
+      write(db);
+      return DB.mmGetContext(userId, ctxId);
+    },
+    mmClearContext: function (userId, ctxId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var i = db.multimodal_contexts.findIndex(function (x) { return x.id === ctxId && x.couple_id === cid; });
+      if (i < 0) throw new Error('Contexto não encontrado.');
+      db.multimodal_contexts.splice(i, 1);
+      write(db);
+      return true;
+    },
+    mmExpireContext: function (userId, ctxId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var r = db.multimodal_contexts.find(function (x) { return x.id === ctxId && x.couple_id === cid; });
+      if (!r) throw new Error('Contexto não encontrado.');
+      if (r.action_id) { try { DB.aiCancelAction(userId, r.action_id); } catch (e) {} }
+      r.status = 'expired'; r.updated_at = now();
+      write(db);
+      return r;
+    },
+    mmCleanup: function (userId) {
+      var db = read(), cid = userId ? DB.myCoupleId(userId) : null;
+      var t = now(), n = 0;
+      db.multimodal_contexts.forEach(function (r) {
+        if (cid && r.couple_id !== cid) return;
+        if (r.expires_at && r.expires_at <= t && r.status === 'open') {
+          if (r.action_id) { try { DB.aiCancelAction(userId, r.action_id); } catch (e) {} }
+          r.status = 'expired'; r.updated_at = now(); n++;
+        }
+      });
+      var kept = [];
+      db.multimodal_inputs.forEach(function (r) {
+        if (cid && r.couple_id !== cid) { kept.push(r); return; }
+        if (r.expires_at && r.expires_at <= t) n++;
+        else kept.push(r);
+      });
+      db.multimodal_inputs = kept;
+      if (n) write(db);
+      return n;
+    },
+    /* FinancialInputOrchestrator: pipeline único p/ texto/áudio/imagem/doc. */
+    mmReceiveInput: function (userId, kind, payload, opts) {
+      DB.requireAuthz(userId, 'mm_receive', null);
+      opts = opts || {};
+      var cfg = DB.INPUT_CONFIG();
+      if (['text', 'audio', 'image', 'document'].indexOf(kind) < 0) throw new Error('Tipo de entrada inválido.');
+      var channel = opts.channel || 'web';
+      var contentHash = DB.secHash(JSON.stringify([kind, payload && (payload.audioId || payload.imageId || payload.docId || payload.text || ''), payload && payload.fileHash].filter(function (x) { return x != null; })));
+      var db = read(), cid = DB.myCoupleId(userId);
+      var dup = db.multimodal_inputs.find(function (x) { return x.couple_id === cid && x.idempotency_key === 'mm:' + contentHash && x.status !== 'cancelled' && x.status !== 'expired' && x.status !== 'failed'; });
+      if (dup) return dup;
+      var row = {
+        id: id('mi'), couple_id: cid, user_id: userId, conversation_id: opts.conversationId || null,
+        input_type: kind, source: opts.source || channel, content_reference: payload && (payload.audioId || payload.imageId || payload.docId) ? String(payload.audioId || payload.imageId || payload.docId).slice(0, 80) : null,
+        text_content: null, structured_data: null, language: 'pt-BR', confidence: null,
+        status: 'received', idempotency_key: 'mm:' + contentHash,
+        created_at: now(), updated_at: now(),
+        expires_at: new Date(Date.now() + cfg.inputRetentionHours * 3600000).toISOString(), metadata: {}
+      };
+      db.multimodal_inputs.push(row);
+      write(db);
+      return DB.mmProcessInput(userId, row.id, { text: payload && payload.text, audioId: payload && payload.audioId, imageId: payload && payload.imageId, docId: payload && payload.docId, transcript: payload && payload.transcript, extraction: payload && payload.extraction, file: payload && payload.file });
+    },
+    mmProcessInput: function (userId, inputId, via) {
+      via = via || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var inp = db.multimodal_inputs.find(function (x) { return x.id === inputId && x.couple_id === cid; });
+      if (!inp) throw new Error('Entrada não encontrada.');
+      function set(status, patch) {
+        var d2 = read();
+        var r2 = d2.multimodal_inputs.find(function (x) { return x.id === inputId; });
+        r2.status = status;
+        if (patch) Object.keys(patch).forEach(function (k) { r2[k] = patch[k]; });
+        r2.updated_at = now();
+        write(d2);
+      }
+      set('processing');
+      var out = { text: null, fields: {}, confidence: 0.9, source: inp.input_type };
+      try {
+        if (inp.input_type === 'text') {
+          var t = DB.valText(via.text || '', 'Texto', 1000);
+          if (!t) throw new Error('Escreva uma mensagem.');
+          out.text = t;
+        } else if (inp.input_type === 'audio') {
+          var a = DB.audioGet(userId, via.audioId);
+          if (a.transcript_status !== 'completed') {
+            if (!via.transcript) throw new Error('Transcreva o áudio antes.');
+            DB.audioTranscribe(userId, via.audioId, { provider: 'local-sim', transcript: via.transcript });
+            a = DB.audioGet(userId, via.audioId);
+          }
+          out.text = a.transcript; out.confidence = 0.85;
+          try {
+            var Amt = DB.mmParseAudioAmount(a.transcript);
+            if (Amt != null) out.fields = { amount: Amt };
+            if (/(casal|divid|meio a meio|metade|compartilhad)/i.test(a.transcript || '')) out.fields.shared = true;
+          } catch (e) {}
+        } else if (inp.input_type === 'image') {
+          var im = DB.imageGet(userId, via.imageId);
+          if (im.extraction_status !== 'completed' && im.extraction_status !== 'partial') {
+            if (!via.extraction) throw new Error('Processe a imagem antes.');
+            DB.imageProcess(userId, via.imageId, { provider: 'local-sim', extraction: via.extraction });
+            im = DB.imageGet(userId, via.imageId);
+          }
+          var idata = im.structured_data || {};
+          out.fields = { amount: idata.totalAmount != null ? idata.totalAmount : idata.paidAmount, date: idata.date || idata.dueDate, merchant: idata.merchantName, categoryHint: idata.categoryHint, dueDate: idata.dueDate, documentNumber: idata.documentNumber };
+          out.text = 'Imagem (' + im.image_type + '): ' + [idata.merchantName, out.fields.amount != null ? 'R$ ' + out.fields.amount : null, out.fields.date].filter(Boolean).join(', ') + '.';
+          out.confidence = im.extraction_status === 'partial' ? 0.6 : 0.85;
+        } else {
+          var dc = DB.docGet(userId, via.docId);
+          if (dc.extraction_status !== 'completed' && dc.extraction_status !== 'partial') {
+            if (!via.extraction) throw new Error('Processe o documento antes.');
+            DB.extractDocumentText(userId, via.docId, { provider: 'local-sim', extraction: via.extraction });
+            dc = DB.docGet(userId, via.docId);
+          }
+          var dd = dc.structured_data || {};
+          out.fields = { amount: dd.totalAmount != null ? dd.totalAmount : dd.paidAmount, date: dd.date || dd.dueDate, merchant: dd.merchantName || dd.beneficiary, categoryHint: dd.categoryHint, dueDate: dd.dueDate, documentNumber: dd.documentNumber };
+          out.text = 'Documento (' + dc.document_type + '): ' + [out.fields.merchant, out.fields.amount != null ? 'R$ ' + out.fields.amount : null, out.fields.date].filter(Boolean).join(', ') + '.';
+          out.confidence = dc.extraction_status === 'partial' ? 0.6 : 0.85;
+        }
+        set('normalized', { text_content: out.text, structured_data: out.fields, confidence: out.confidence });
+      } catch (e) {
+        set('failed');
+        throw e;
+      }
+      var fin = read().multimodal_inputs.find(function (x) { return x.id === inputId; });
+      return fin;
+    },
+    mmBuildContext: function (userId, inputIds, opts) {
+      opts = opts || {};
+      var ctx = DB.mmCreateContext(userId, { conversationId: opts.conversationId, channel: opts.channel, groupId: opts.groupId });
+      (inputIds || []).forEach(function (iid) {
+        var inp = read().multimodal_inputs.find(function (x) { return x.id === iid; });
+        if (!inp) throw new Error('Entrada não encontrada.');
+        var src = inp.input_type;
+        var fields = inp.structured_data || {};
+        if (src === 'text' && inp.text_content) {
+          var amt = DB.aiParseAmount ? DB.aiParseAmount(inp.text_content) : null;
+          if (amt != null) fields.amount = amt;
+          fields.question = (fields.question ? fields.question + ' ' : '') + inp.text_content;
+        }
+        if (src === 'audio' && inp.text_content) {
+          var amt2 = DB.mmParseAudioAmount(inp.text_content);
+          if (amt2 != null && fields.amount == null) fields.amount = amt2;
+          if (fields.shared == null && /(casal|divid|meio a meio|metade|compartilhad)/i.test(inp.text_content)) fields.shared = true;
+        }
+        DB.mmAddInput(userId, ctx.id, { fields: fields, source: src, input_id: inp.id, confidence: inp.confidence != null ? inp.confidence : 0.9 });
+        (DB.inputListEvidence(userId, inp.id) || []).forEach(function () {});
+      });
+      return DB.mmGetContext(userId, ctx.id);
+    },
+    mmInterpret: function (userId, ctxId, opts) {
+      opts = opts || {};
+      var ctx = DB.mmGetContext(userId, ctxId);
+      var open = ctx.conflicts.filter(function (k) { return !k.resolved_at; });
+      if (open.length) {
+        var q = open.map(function (k) {
+          function fmt(v) { return (v && typeof v === 'object') ? JSON.stringify(v) : String(v); }
+          return k.field_name + ': ' + k.values.map(function (w) { return fmt(w.value) + ' (' + w.source + ')'; }).join(' × ');
+        });
+        return { needsResolution: true, question: 'Encontrei valores diferentes: ' + q.join('; ') + '. Qual devo usar?', conflicts: open };
+      }
+      var f = ctx.fields;
+      function val(k) { return f[k] ? f[k].value : null; }
+      /* Texto NLU-compatível montado dos campos resolvidos (nunca inventa:
+         só usa o que foi extraído/resolvido). Leitura tem prioridade. */
+      var text;
+      if (val('question') && val('amount') == null && !val('merchant') && !val('description')) {
+        text = val('question');
+      } else if (val('amount') != null) {
+        text = 'Gastei R$ ' + val('amount') + ' no ' + (val('merchant') || val('description') || 'local') +
+          (val('date') ? ' em ' + String(val('date')).split('-').reverse().join('/') : '') +
+          (val('shared') ? ', dividido para o casal' : '') +
+          (val('payerHint') ? ', pago por ' + val('payerHint') : '') +
+          (val('question') ? ' ' + val('question') : '');
+      } else {
+        var parts = [];
+        if (val('merchant') || val('description')) parts.push(val('merchant') || val('description'));
+        if (val('payerHint')) parts.push('pago por ' + val('payerHint'));
+        if (val('question')) parts.push(val('question'));
+        text = parts.length ? parts.join(', ') + '.' : 'Analisar entradas.';
+      }
+      var res = DB.aiProcessMessage(userId, opts.conversationId || ctx.conversation_id, text, { channel: ctx.channel, multimodalContextId: ctx.id });
+      var db = read();
+      var row = db.multimodal_contexts.find(function (x) { return x.id === ctxId; });
+      row.status = res.pendingAction ? 'awaiting_confirmation' : 'completed';
+      row.conversation_id = res.conversationId || row.conversation_id;
+      if (res.pendingAction) row.action_id = res.pendingAction.id || res.pendingAction;
+      row.updated_at = now();
+      logAudit(db, row.couple_id, userId, 'mm_context', row.id, 'interpreted', {});
+      write(db);
+      res.contextId = ctxId;
+      return res;
+    },
+    mmPreview: function (userId, ctxId) {
+      var ctx = DB.mmGetContext(userId, ctxId);
+      function val(k) { return ctx.fields[k] ? ctx.fields[k].value : null; }
+      var origins = { text: '💬 Texto', audio: '🎤 Áudio', image: '📷 Foto', document: '📄 Documento' };
+      return {
+        origem: ctx.input_ids.map(function () { return null; }),
+        fields: ctx.fields, conflicts: ctx.conflicts.filter(function (k) { return !k.resolved_at; }),
+        confidence: ctx.confidence, status: ctx.status,
+        summary: [val('merchant') || val('description'), val('amount') != null ? 'R$ ' + val('amount') : null, val('date')].filter(Boolean).join(' • ')
+      };
+    },
+    mmCancel: function (userId, ctxId) { return DB.mmExpireContext(userId, ctxId); },
+    mmMetrics: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.multimodal_inputs.filter(function (r) { return r.couple_id === cid; });
+      var by = {};
+      rows.forEach(function (r) { by[r.input_type] = (by[r.input_type] || 0) + 1; });
+      return { total: rows.length, byType: by, contexts: db.multimodal_contexts.filter(function (r) { return r.couple_id === cid; }).length };
+    },
+    /* Áudio p/ campos: só aceita valor com pista monetária explícita
+       (R$, reais, mil, valor) — "cada um"/"50%" não é valor. */
+    mmParseAudioAmount: function (transcript) {
+      var tr = String(transcript || '');
+      if (!/(R\$|reais?\b|mil\b|milh|valor|custa|quantia)/i.test(tr)) return null;
+      var noPct = tr.replace(/\d[\d.,]*\s*%/g, ' ');
+      try { return DB.aiParseAmount ? DB.aiParseAmount(noPct) : null; } catch (e) { return null; }
+    },
+    /* ============ PROMPT 34 (V3): OPEN FINANCE (somente leitura) ============
+       Fonte externa ESTRUTURADA, nunca verdade interna. Fluxo: connect →
+       sync (contas/transações p/ staging próprio, idempotente) →
+       importToReconciliation (lote file_type 'openfinance' + analyzeBatch
+       existentes) → preview → confirmação → canonical. Sem pagamentos,
+       sem investimentos, sem segredos (só referência opaca). Provedores
+       reais exigem configuração explícita; sem ela, erro claro. */
+    /* ============ DESATIVAÇÃO TEMPORÁRIA DO OPEN FINANCE ============
+       Flag administrativa/técnica (sem toggle na UI). Com false: invisível
+       no frontend, rotas redirecionadas, backend/automação/IA/WhatsApp
+       bloqueados. Tabelas e serviços preservados p/ reativação futura. */
+    OF_FEATURE_ENABLED: false,
+    ofFeatureStatus: function () {
+      return DB.OF_FEATURE_ENABLED === true
+        ? { enabled: true, reason: 'Open Finance habilitado' }
+        : { enabled: false, reason: 'Open Finance temporariamente indisponível' };
+    },
+    ofIsEnabled: function () { return DB.ofFeatureStatus().enabled; },
+    ofAssertEnabled: function () {
+      if (!DB.ofIsEnabled()) throw new Error('Open Finance temporariamente indisponível.');
+      return true;
+    },
+    OF_CONFIG: function () {
+      return { providers: ['local-sim', 'belvo', 'pluggy'], syncWindowDays: 90, rateSyncPerMin: 5, retentionNote: 'staging próprio; canonical só via reconciliação' };
+    },
+    ofGetConnection: function (userId, connectionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (!c) throw new Error('Conexão não encontrada.');
+      return c;
+    },
+    ofListConnections: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.openfinance_connections.filter(function (c) { return c.couple_id === cid; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+    },
+    ofConnect: function (userId, data) {
+      DB.ofAssertEnabled();
+      DB.requireAuthz(userId, 'of_connect', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var provider = data.provider || 'local-sim';
+      if (DB.OF_CONFIG().providers.indexOf(provider) < 0) throw new Error('Provedor inválido.');
+      var inst = DB.valText(data.institution_name || data.institution || 'Banco', 'Instituição', 80);
+      if (provider !== 'local-sim') {
+        throw new Error('Provedor ' + provider + ' exige configuração (OAuth/credenciais) fora do escopo local. Use local-sim para testes.');
+      }
+      var ex = db.openfinance_connections.find(function (c) {
+        return c.couple_id === cid && c.provider === provider && c.institution_name === inst && c.status === 'active';
+      });
+      if (ex) return ex;
+      var c = { id: id('of'), couple_id: cid, user_id: userId, provider: provider, institution_id: String(data.institution_id || inst).slice(0, 80), institution_name: inst, status: 'active', credentials_ref: null, last_sync_at: null, last_error: null, created_at: now(), updated_at: now() };
+      db.openfinance_connections.push(c);
+      logAudit(db, cid, userId, 'of_connection', c.id, 'connected', { provider: provider });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'of_connected', entity_type: 'of_connection', entity_id: c.id, metadata: { provider: provider } }); } catch (e) {}
+      return c;
+    },
+    ofDisconnect: function (userId, connectionId) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (!c) throw new Error('Conexão não encontrada.');
+      c.status = 'revoked'; c.updated_at = now();
+      logAudit(db, cid, userId, 'of_connection', c.id, 'revoked', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'of_revoked', entity_type: 'of_connection', entity_id: c.id, metadata: {} }); } catch (e) {}
+      return c;
+    },
+    /* Provedor: local-sim lê fixture explícita (testes); reais exigem config. */
+    ofProviderFetch: function (connection, kind, opts) {
+      opts = opts || {};
+      if (connection.provider === 'local-sim') {
+        if (kind === 'accounts') return (opts.fixture && opts.fixture.accounts) || [];
+        if (kind === 'transactions') return (opts.fixture && opts.fixture.transactions) || [];
+        throw new Error('Fixture não informada.');
+      }
+      throw new Error('Provedor ' + connection.provider + ' não configurado neste ambiente.');
+    },
+    ofSyncAccounts: function (userId, connectionId, opts) {
+      DB.ofAssertEnabled();
+      DB.requireAuthz(userId, 'of_sync', null);
+      DB.rateCheck('of_sync:' + userId, DB.OF_CONFIG().rateSyncPerMin, 60000);
+      opts = opts || {};
+      var conn = DB.ofGetConnection(userId, connectionId);
+      if (conn.status !== 'active') throw new Error('Conexão inativa. Reconecte.');
+      var remote = DB.ofProviderFetch(conn, 'accounts', opts);
+      var db = read(), nNew = 0, nUpd = 0;
+      remote.forEach(function (a) {
+        var ext = String(a.id || a.external_id || '');
+        if (!ext) return;
+        var ex = db.openfinance_bank_accounts.find(function (x) { return x.connection_id === conn.id && x.external_account_id === ext; });
+        if (ex) {
+          ex.name = String(a.name || ex.name).slice(0, 80);
+          ex.balance = isFinite(+a.balance) ? Math.round(+a.balance * 100) / 100 : ex.balance;
+          ex.currency = 'BRL'; ex.updated_at = now(); nUpd++;
+        } else {
+          db.openfinance_bank_accounts.push({ id: id('oba'), couple_id: conn.couple_id, connection_id: conn.id, external_account_id: ext.slice(0, 80), name: String(a.name || 'Conta').slice(0, 80), type: String(a.type || 'checking').slice(0, 20), last4: String(a.last4 || a.mask || '').replace(/\D/g, '').slice(-4) || null, balance: isFinite(+a.balance) ? Math.round(+a.balance * 100) / 100 : 0, currency: 'BRL', linked_account_id: null, updated_at: now(), created_at: now() });
+          nNew++;
+        }
+      });
+      var c2 = db.openfinance_connections.find(function (x) { return x.id === conn.id; });
+      c2.last_sync_at = now(); c2.last_error = null; c2.updated_at = now();
+      logAudit(db, conn.couple_id, userId, 'of_connection', conn.id, 'sync_accounts', { new: nNew, updated: nUpd });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'of_synced_accounts', entity_type: 'of_connection', entity_id: conn.id, metadata: { new: nNew } }); } catch (e) {}
+      return { new: nNew, updated: nUpd };
+    },
+    ofListBankAccounts: function (userId, connectionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.openfinance_bank_accounts.filter(function (a) {
+        return a.couple_id === cid && (!connectionId || a.connection_id === connectionId);
+      }).sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+    },
+    ofLinkBankAccount: function (userId, bankAccountId, internalAccountId) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.openfinance_bank_accounts.find(function (x) { return x.id === bankAccountId && x.couple_id === cid; });
+      if (!b) throw new Error('Conta externa não encontrada.');
+      var acc = db.accounts.find(function (a) { return a.id === internalAccountId && a.couple_id === cid; });
+      if (!acc) throw new Error('Conta interna inválida para este casal.');
+      b.linked_account_id = acc.id; b.updated_at = now();
+      logAudit(db, cid, userId, 'of_bank_account', b.id, 'linked', { account: acc.id });
+      write(db);
+      return b;
+    },
+    ofSyncTransactions: function (userId, connectionId, opts) {
+      DB.ofAssertEnabled();
+      DB.requireAuthz(userId, 'of_sync', null);
+      DB.rateCheck('of_sync:' + userId, DB.OF_CONFIG().rateSyncPerMin, 60000);
+      opts = opts || {};
+      var conn = DB.ofGetConnection(userId, connectionId);
+      if (conn.status !== 'active') throw new Error('Conexão inativa. Reconecte.');
+      var remote = DB.ofProviderFetch(conn, 'transactions', opts);
+      var db = read(), nNew = 0, nSkip = 0;
+      remote.forEach(function (t) {
+        var ext = String(t.id || t.external_id || '');
+        var date = DB.imageParseDate(t.date);
+        var desc = DB.valText(t.description || '', 'Descrição', 120);
+        var amt = (typeof t.amount === 'number' && isFinite(t.amount)) ? Math.round(t.amount * 100) / 100 : DB.imageParseBRL(t.amount);
+        if (!ext || !date || !desc || amt == null || amt === 0) { nSkip++; return; }
+        var dup = db.openfinance_bank_transactions.find(function (x) { return x.connection_id === conn.id && x.external_id === ext; });
+        if (dup) { nSkip++; return; }
+        var bankAcc = null;
+        if (t.bank_account_id || t.account_id) {
+          bankAcc = db.openfinance_bank_accounts.find(function (x) { return x.connection_id === conn.id && (x.external_account_id === String(t.bank_account_id || t.account_id)); }) || null;
+        }
+        db.openfinance_bank_transactions.push({ id: id('obt'), couple_id: conn.couple_id, connection_id: conn.id, bank_account_id: bankAcc ? bankAcc.id : null, external_id: ext.slice(0, 80), date: date, description: desc, amount: amt, currency: 'BRL', status: 'synced', created_at: now() });
+        nNew++;
+      });
+      var c2 = db.openfinance_connections.find(function (x) { return x.id === conn.id; });
+      c2.last_sync_at = now(); c2.last_error = null; c2.updated_at = now();
+      logAudit(db, conn.couple_id, userId, 'of_connection', conn.id, 'sync_transactions', { new: nNew, skipped: nSkip });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'of_synced', entity_type: 'of_connection', entity_id: conn.id, metadata: { new: nNew, skipped: nSkip } }); } catch (e) {}
+      return { new: nNew, skipped: nSkip };
+    },
+    ofListBankTransactions: function (userId, connectionId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      return db.openfinance_bank_transactions.filter(function (t) {
+        return t.couple_id === cid && t.connection_id === connectionId &&
+          (!f.from || t.date >= f.from) && (!f.to || t.date <= f.to);
+      }).sort(function (a, b) { return (a.date + a.id).localeCompare(b.date + b.id); })
+        .slice(0, f.limit || 200);
+    },
+    /* Ponte p/ reconciliação existente: lote 'openfinance' + analyzeBatch. */
+    ofImportToReconciliation: function (userId, connectionId, opts) {
+      DB.ofAssertEnabled();
+      DB.requireAuthz(userId, 'of_import', null);
+      opts = opts || {};
+      var conn = DB.ofGetConnection(userId, connectionId);
+      if (conn.status !== 'active') throw new Error('Conexão inativa. Reconecte.');
+      var db = read(), cid = DB.myCoupleId(userId);
+      var allBank = db.openfinance_bank_accounts.filter(function (x) { return x.connection_id === conn.id && x.couple_id === cid; });
+      var bankAcc = opts.bankAccountId ? db.openfinance_bank_accounts.find(function (x) { return x.id === opts.bankAccountId && x.couple_id === cid; }) : (allBank.length === 1 ? allBank[0] : null);
+      if (opts.bankAccountId && !bankAcc) throw new Error('Conta externa não encontrada.');
+      if (!bankAcc) throw new Error('Escolha a conta externa.');
+      var internalAcc = bankAcc && bankAcc.linked_account_id ? bankAcc.linked_account_id : (opts.account_id || null);
+      if (internalAcc) {
+        var acc = db.accounts.find(function (a) { return a.id === internalAcc && a.couple_id === cid; });
+        if (!acc) throw new Error('Conta interna inválida para este casal.');
+      } else throw new Error('Vincule a conta externa a uma conta interna antes de conciliar.');
+      var staged = db.openfinance_bank_transactions.filter(function (t) {
+        return t.connection_id === conn.id && (!bankAcc || t.bank_account_id === bankAcc.id);
+      });
+      if (!staged.length) throw new Error('Nada sincronizado para conciliar. Sincronize primeiro.');
+      var hash = DB.secHash(['of', conn.id, bankAcc ? bankAcc.id : '-', staged.length, staged.map(function (t) { return t.external_id; }).sort().join(',')].join('|'));
+      var dup = db.import_batches.find(function (b) {
+        return b.couple_id === cid && b.file_hash === hash && b.status !== 'cancelled' && b.status !== 'failed';
+      });
+      if (dup) return DB.getImportBatch(userId, dup.id);
+      var b = { id: id('ib'), couple_id: cid, created_by: userId, file_name: ('openfinance-' + conn.institution_name + '.ofx').slice(0, 120), file_type: 'csv', file_size: staged.length, file_hash: hash, account_id: internalAcc, import_source_type: 'bank_statement', credit_card_id: null, invoice_id: null, statement_total: null, status: 'preview', total_rows: staged.length, valid_rows: staged.length, invalid_rows: 0, duplicate_rows: 0, matched_rows: 0, new_rows: 0, confirmed_rows: 0, imported_rows: 0, ignored_rows: 0, failed_rows: 0, period_start: null, period_end: null, created_at: now(), updated_at: now(), completed_at: null, error_message: null };
+      db.import_batches.push(b);
+      var minD = null, maxD = null;
+      staged.forEach(function (t, ix) {
+        var cents = Math.round(t.amount * 100);
+        var dc = cents < 0 ? 'debit' : 'credit';
+        if (!minD || t.date < minD) minD = t.date;
+        if (!maxD || t.date > maxD) maxD = t.date;
+        db.imported_transactions.push({ id: id('ir'), couple_id: cid, import_batch_id: b.id, account_id: internalAcc, credit_card_id: null, invoice_id: null, card_item_type: null, installment_number: null, total_installments: null, purchase_reference: null, line_number: ix + 1, external_transaction_id: 'of:' + t.external_id, raw_date: t.date, raw_description: t.description, raw_amount: String(t.amount), raw_type: dc, normalized_date: t.date, normalized_description: t.description, normalized_amount: fromCents(Math.abs(cents)), normalized_type: dc === 'credit' ? 'income' : 'expense', debit_credit: dc, currency: 'BRL', date_ambiguous: false, status: 'valid', match_status: 'new', matched_transaction_id: null, matched_transfer_id: null, matched_installment_id: null, confidence_score: null, match_reason: null, created_transaction_id: null, created_at: now(), updated_at: now() });
+      });
+      b.period_start = minD; b.period_end = maxD;
+      logAudit(db, cid, userId, 'import', b.id, 'of_staging', { rows: staged.length });
+      write(db);
+      return DB.analyzeBatch(userId, b.id);
+    },
+    ofStatus: function (userId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return { connections: 0, bankAccounts: 0, staged: 0 };
+      return {
+        connections: db.openfinance_connections.filter(function (c) { return c.couple_id === cid && c.status === 'active'; }).length,
+        bankAccounts: db.openfinance_bank_accounts.filter(function (a) { return a.couple_id === cid; }).length,
+        staged: db.openfinance_bank_transactions.filter(function (t) { return t.couple_id === cid; }).length
+      };
+    },
+    scheduleOpenFinanceSync: function (userId, connectionId, opts) {
+      DB.ofAssertEnabled();
+      opts = opts || {};
+      return DB.createJob(userId, { job_type: 'openfinance_sync', payload: { connection_id: connectionId }, scheduled_for: opts.when || null });
+    },
+    /* ============ PROMPT 35 (V3): SYNC AVANÇADA + CONCILIAÇÃO AUTOMÁTICA ==
+       Fonte externa → staging → versões → matching → reconciliação →
+       canonical (só com confirmação ou auto-link inequívoco). Nunca altera
+       valores canônicos, nunca executa movimentação bancária. */
+    OF_SYNC_CONFIG: function () {
+      return { lookbackDays: 90, lookaheadDays: 0, exactThreshold: 0.95, strongThreshold: 0.75, autoReconcileThreshold: 0.98, lockMinutes: 10, snapshotKeep: 30 };
+    },
+    ofListSyncRuns: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.open_finance_sync_runs.filter(function (r) {
+        return r.couple_id === cid && (!f.connection_id || r.connection_id === f.connection_id) && (!f.status || r.status === f.status);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 20);
+    },
+    ofAcquireSyncLock: function (userId, connectionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (!c) throw new Error('Conexão não encontrada.');
+      if (c.sync_lock && c.sync_lock_expires && c.sync_lock_expires > now()) throw new Error('Sincronização em andamento. Aguarde concluir.');
+      c.sync_lock = userId; c.sync_lock_expires = new Date(Date.now() + DB.OF_SYNC_CONFIG().lockMinutes * 60000).toISOString();
+      write(db);
+      return true;
+    },
+    ofReleaseSyncLock: function (userId, connectionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var c = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (c) { c.sync_lock = null; c.sync_lock_expires = null; write(db); }
+      return true;
+    },
+    /* Provedor paginado: fixture {pages:[...]} ou arrays planos (compat). */
+    ofProviderFetchPaged: function (connection, kind, opts, cursor) {
+      opts = opts || {};
+      if (connection.provider === 'local-sim') {
+        var fx = opts.fixture || {};
+        var pages = fx.pages && fx.pages[kind] ? fx.pages[kind] : null;
+        if (!pages) {
+          var flat = (kind === 'accounts' ? fx.accounts : fx.transactions) || [];
+          return { rows: flat, nextCursor: null, hasMore: false };
+        }
+        var idx = 0;
+        if (cursor != null && cursor !== '') {
+          idx = parseInt(cursor, 10);
+          if (!isFinite(idx) || idx < 0 || idx >= pages.length) { var e = new Error('Cursor inválido.'); e.code = 'bad_cursor'; throw e; }
+        }
+        return { rows: pages[idx] || [], nextCursor: idx + 1 < pages.length ? String(idx + 1) : null, hasMore: idx + 1 < pages.length };
+      }
+      throw new Error('Provedor ' + connection.provider + ' não configurado neste ambiente.');
+    },
+    ofRecordVersion: function (db, cid, userId, row, changeType, changedFields) {
+      var vers = db.open_finance_transaction_versions.filter(function (v) { return v.open_finance_transaction_id === row.id; });
+      var n = vers.length ? Math.max.apply(null, vers.map(function (v) { return v.version_number; })) + 1 : 1;
+      db.open_finance_transaction_versions.push({ id: id('ofv'), open_finance_transaction_id: row.id, couple_id: cid, version_number: n, snapshot: { date: row.date, description: row.description, amount: row.amount, status: row.ext_status || row.status }, change_type: changeType, changed_fields: changedFields || [], detected_at: now(), created_at: now() });
+      return n;
+    },
+    ofSyncNow: function (userId, connectionId, opts) {
+      DB.ofAssertEnabled();
+      DB.requireAuthz(userId, 'of_sync', null);
+      DB.rateCheck('of_sync:' + userId, DB.OF_CONFIG().rateSyncPerMin, 60000);
+      opts = opts || {};
+      var conn = DB.ofGetConnection(userId, connectionId);
+      if (conn.status !== 'active') throw new Error('Conexão inativa. Reconecte.');
+      DB.ofAcquireSyncLock(userId, connectionId);
+      var db = read(), cid = conn.couple_id;
+      var run = { id: id('ofr'), couple_id: cid, user_id: userId, connection_id: conn.id, provider: conn.provider, sync_type: opts.sync_type || 'manual', status: 'running', started_at: now(), completed_at: null, requested_at: now(), period_start: null, period_end: null, accounts_found: 0, accounts_updated: 0, transactions_found: 0, transactions_new: 0, transactions_updated: 0, transactions_pending: 0, transactions_cancelled: 0, transactions_matched: 0, transactions_imported: 0, transactions_ignored: 0, transactions_conflicts: 0, duplicates_detected: 0, errors_count: 0, warning_count: 0, cursor: conn.sync_cursor || null, provider_request_id: null, error_code: null, error_message: null, metadata: {}, created_at: now(), updated_at: now() };
+      db.open_finance_sync_runs.push(run);
+      write(db);
+      var counts = { acc: 0, accUpd: 0, found: 0, nw: 0, upd: 0, pend: 0, canc: 0, match: 0, imp: 0, ign: 0, conf: 0, dup: 0, err: 0, warn: 0 };
+      var fatal = null, pages = 0, seenCursors = {};
+      try {
+        var today = now().slice(0, 10);
+        var from = opts.from || DB.dateAddDays(today, -DB.OF_SYNC_CONFIG().lookbackDays);
+        var to = opts.to || today;
+        run.period_start = from; run.period_end = to;
+        var accPage = DB.ofProviderFetchPaged(conn, 'accounts', opts, null);
+        run.accounts_found = accPage.rows.length;
+        accPage.rows.forEach(function (a) {
+          var ext = String(a.id || a.external_id || '');
+          if (!ext) return;
+          var ex = db.openfinance_bank_accounts.find(function (x) { return x.connection_id === conn.id && x.external_account_id === ext; });
+          if (ex) {
+            ex.name = String(a.name || ex.name).slice(0, 80);
+            ex.balance = isFinite(+a.balance) ? Math.round(+a.balance * 100) / 100 : ex.balance;
+            ex.updated_at = now(); counts.accUpd++;
+          } else {
+            db.openfinance_bank_accounts.push({ id: id('oba'), couple_id: cid, connection_id: conn.id, external_account_id: ext.slice(0, 80), name: String(a.name || 'Conta').slice(0, 80), type: String(a.type || 'checking').slice(0, 20), last4: String(a.last4 || a.mask || '').replace(/\D/g, '').slice(-4) || null, balance: isFinite(+a.balance) ? Math.round(+a.balance * 100) / 100 : 0, currency: 'BRL', linked_account_id: null, updated_at: now(), created_at: now() });
+            counts.acc++;
+          }
+        });
+        db.openfinance_bank_accounts.filter(function (x) { return x.connection_id === conn.id; }).forEach(function (x) {
+          db.open_finance_balance_snapshots.push({ id: id('ofb'), couple_id: cid, connection_id: conn.id, open_finance_account_id: x.id, current_balance: x.balance, available_balance: null, currency: 'BRL', captured_at: now(), source: 'sync', created_at: now() });
+          var snaps = db.open_finance_balance_snapshots.filter(function (s) { return s.open_finance_account_id === x.id; }).sort(function (a, b) { return (b.captured_at + b.id).localeCompare(a.captured_at + a.id); });
+          snaps.slice(DB.OF_SYNC_CONFIG().snapshotKeep).forEach(function (old) {
+            var ix = db.open_finance_balance_snapshots.indexOf(old);
+            if (ix >= 0) db.open_finance_balance_snapshots.splice(ix, 1);
+          });
+        });
+        var cursor = opts.cursor !== undefined ? opts.cursor : (conn.sync_cursor || null);
+        var guard = 0;
+        while (true) {
+          if (guard++ > 50) throw new Error('Paginação excedeu o limite de segurança.');
+          var page;
+          try {
+            page = DB.ofProviderFetchPaged(conn, 'transactions', opts, cursor);
+          } catch (e) {
+            if (e && e.code === 'bad_cursor') {
+              cursor = null;
+              counts.warn++;
+              page = DB.ofProviderFetchPaged(conn, 'transactions', opts, null);
+            } else throw e;
+          }
+          pages++;
+          if (cursor != null && seenCursors[cursor]) throw new Error('Cursor repetido pelo provedor.');
+          if (cursor != null) seenCursors[cursor] = true;
+          page.rows.forEach(function (t) {
+            counts.found++;
+            var r = DB.ofUpsertStaging(db, cid, userId, conn, t, counts);
+            if (r === 'new') counts.nw++;
+            else if (r === 'updated') counts.upd++;
+            else if (r === 'pending') counts.pend++;
+            else if (r === 'cancelled') counts.canc++;
+            else if (r === 'duplicate') counts.dup++;
+            else if (r === 'ignored') counts.ign++;
+          });
+          cursor = page.nextCursor;
+          if (!page.hasMore) break;
+        }
+        var m = DB.ofAutoMatchStaging(db, cid, userId, conn, counts);
+        counts.match = m.matched; counts.conf = m.conflicts; counts.imp = m.auto;
+        var c2 = db.openfinance_connections.find(function (x) { return x.id === conn.id; });
+        c2.sync_cursor = cursor; c2.last_sync_at = now(); c2.last_error = null; c2.updated_at = now();
+        run.cursor = cursor;
+      } catch (e) {
+        fatal = e;
+        counts.err++;
+      }
+      run.accounts_found = counts.acc + counts.accUpd; run.accounts_updated = counts.accUpd;
+      run.transactions_found = counts.found; run.transactions_new = counts.nw; run.transactions_updated = counts.upd;
+      run.transactions_pending = counts.pend; run.transactions_cancelled = counts.canc;
+      run.transactions_matched = counts.match; run.transactions_imported = counts.imp; run.transactions_ignored = counts.ign;
+      run.transactions_conflicts = counts.conf; run.duplicates_detected = counts.dup;
+      run.errors_count = counts.err; run.warning_count = counts.warn;
+      run.metadata = { pages: pages };
+      if (fatal) {
+        run.status = 'failed'; run.error_code = fatal.code || 'sync_error'; run.error_message = String((fatal && fatal.message) || fatal).slice(0, 300);
+      } else if (counts.err > 0 || counts.warn > 0) run.status = 'completed_with_warnings';
+      else run.status = 'completed';
+      run.completed_at = now(); run.updated_at = now();
+      logAudit(db, cid, userId, 'of_sync', run.id, run.status, { new: counts.nw, matched: counts.match });
+      write(db);
+      DB.ofReleaseSyncLock(userId, connectionId);
+      (counts.excReq || []).forEach(function (q) {
+        try { DB.ofException(userId, q.conn, q.ext, q.canon, q.type, q.sev, q.desc, q.ev); } catch (e) {}
+      });
+      var today = now().slice(0, 10);
+      if (!fatal) {
+        try { DB.emitEvent(userId, { event_type: 'open_finance_sync_completed', entity_type: 'of_connection', entity_id: conn.id, metadata: { new: counts.nw, matched: counts.match } }); } catch (e) {}
+        if (counts.conf > 0) {
+          try { DB.notifCreate(userId, { type: 'of_reconciliation_pending', title: 'Conciliação pendente', body: counts.conf + ' item(ns) do banco aguardando revisão.', related_entity_type: 'of_connection', related_entity_id: conn.id, idempotency_key: ['of_recon', cid, conn.id, today].join('|') }); } catch (e2) {}
+        }
+        try { DB.notifCreate(userId, { type: 'of_sync_completed', title: 'Sincronização concluída', body: counts.nw + ' novas, ' + counts.match + ' conciliadas, ' + counts.conf + ' para revisão.', related_entity_type: 'of_connection', related_entity_id: conn.id, idempotency_key: ['of_sync', cid, conn.id, today].join('|') }); } catch (e3) {}
+      } else {
+        try { DB.emitEvent(userId, { event_type: 'open_finance_sync_failed', entity_type: 'of_connection', entity_id: conn.id, metadata: {} }); } catch (e) {}
+        try { DB.notifCreate(userId, { type: 'of_sync_failed', title: 'Sincronização falhou', body: String((fatal && fatal.message) || fatal).slice(0, 140), related_entity_type: 'of_connection', related_entity_id: conn.id, idempotency_key: ['of_sync_fail', cid, conn.id, now().slice(0, 13)].join('|') }); } catch (e2) {}
+      }
+      if (fatal) throw new Error(run.error_message);
+      return { run_id: run.id, status: run.status, new: counts.nw, updated: counts.upd, matched: counts.match, conflicts: counts.conf, duplicates: counts.dup, imported: counts.imp };
+    },
+    /* Upsert idempotente: mesma entidade externa, nunca duplica. Retorna
+       'new'|'updated'|'pending'|'cancelled'|'duplicate'|'ignored'. */
+    ofUpsertStaging: function (db, cid, userId, conn, t, counts) {
+      var ext = String((t && (t.id || t.external_id)) || '');
+      if (!ext) return 'ignored';
+      var date = DB.imageParseDate(t.date);
+      var desc = DB.valText(t.description || '', 'Descrição', 120);
+      var amt = (typeof t.amount === 'number' && isFinite(t.amount)) ? Math.round(t.amount * 100) / 100 : DB.imageParseBRL(t.amount);
+      var stRaw = String(t.status || 'posted').toLowerCase();
+      var st = /cancel|cancelled|reversed|void/.test(stRaw) ? 'cancelled' : /pend/.test(stRaw) ? 'pending' : 'posted';
+      if (!date || !desc || amt == null || amt === 0) return 'ignored';
+      var ex = db.openfinance_bank_transactions.find(function (x) { return x.connection_id === conn.id && x.external_id === ext; });
+      var bankAcc = null;
+      if (t.bank_account_id || t.account_id) {
+        bankAcc = db.openfinance_bank_accounts.find(function (x) { return x.connection_id === conn.id && x.external_account_id === String(t.bank_account_id || t.account_id); }) || null;
+      }
+      counts.excReq = counts.excReq || [];
+      if (!ex) {
+        var row = { id: id('obt'), couple_id: cid, connection_id: conn.id, bank_account_id: bankAcc ? bankAcc.id : null, external_id: ext.slice(0, 80), date: date, description: desc, amount: amt, currency: 'BRL', ext_status: st, status: 'synced', canonical_transaction_id: null, created_at: now(), updated_at: now() };
+        db.openfinance_bank_transactions.push(row);
+        DB.ofRecordVersion(db, cid, userId, row, 'created', []);
+        if (st === 'cancelled') counts.excReq.push({ conn: conn.id, ext: row.id, canon: null, type: 'external_transaction_cancelled', sev: 'warning', desc: 'Transação cancelada na origem.', ev: { amount: amt } });
+        return st === 'cancelled' ? 'cancelled' : 'new';
+      }
+      var changed = [];
+      if (ex.date !== date) changed.push('date');
+      if (ex.description !== desc) changed.push('description');
+      if (ex.amount !== amt) changed.push('amount');
+      if ((ex.ext_status || 'posted') !== st) changed.push('status');
+      if (!changed.length && (ex.bank_account_id || null) === (bankAcc ? bankAcc.id : null)) {
+        var dup = db.openfinance_bank_transactions.filter(function (x) { return x.connection_id === conn.id && x.external_id === ext && x.id !== ex.id; });
+        if (dup.length) return 'duplicate';
+        return 'ignored';
+      }
+      var was = ex.ext_status || 'posted';
+      ex.date = date; ex.description = desc; ex.amount = amt; ex.ext_status = st;
+      if (bankAcc) ex.bank_account_id = bankAcc.id;
+      ex.updated_at = now();
+      var chType = st === 'cancelled' ? 'cancelled' : (was === 'pending' && st === 'posted' ? 'posted' : 'updated');
+      DB.ofRecordVersion(db, cid, userId, ex, chType, changed);
+      if (st === 'cancelled') {
+        counts.excReq.push({ conn: conn.id, ext: ex.id, canon: ex.canonical_transaction_id, type: 'external_transaction_cancelled', sev: 'warning', desc: 'Transação cancelada na origem. O registro interno foi preservado.', ev: { amount: amt } });
+        return 'cancelled';
+      }
+      if (was === 'pending' && st === 'posted') {
+        if (ex.canonical_transaction_id) {
+          counts.excReq.push({ conn: conn.id, ext: ex.id, canon: ex.canonical_transaction_id, type: 'external_amount_changed', sev: 'info', desc: 'Status posted; vínculo interno preservado para revisão.', ev: { amount: amt } });
+        }
+        return 'pending';
+      }
+      if (ex.canonical_transaction_id && changed.indexOf('amount') >= 0) {
+        counts.excReq.push({ conn: conn.id, ext: ex.id, canon: ex.canonical_transaction_id, type: 'external_amount_changed', sev: 'warning', desc: 'Valor externo mudou após vínculo. Revisão necessária, sem sobrescrever.', ev: { amount: amt } });
+      }
+      return 'updated';
+    },
+    /* Exceções de reconciliação (dedupe de abertas por fingerprint). */
+    ofException: function (userId, connectionId, extTxId, canonicalId, type, severity, description, evidence) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var fp = [cid, connectionId, extTxId || '-', canonicalId || '-', type].join('|');
+      var ex = db.open_finance_reconciliation_exceptions.find(function (x) { return x.couple_id === cid && [x.connection_id, x.open_finance_transaction_id || '-', x.transaction_id || '-', x.exception_type].join('|') === fp && ['open', 'reviewing'].indexOf(x.status) >= 0; });
+      if (ex) return ex;
+      var row = { id: id('ofe'), couple_id: cid, connection_id: connectionId, open_finance_transaction_id: extTxId, transaction_id: canonicalId || null, exception_type: type, severity: ['info', 'warning', 'critical'].indexOf(severity) >= 0 ? severity : 'warning', status: 'open', description: String(description || '').slice(0, 300), evidence: evidence && typeof evidence === 'object' ? evidence : null, detected_at: now(), resolved_at: null, resolved_by: null, resolution_type: null, resolution_notes: null, created_at: now(), updated_at: now() };
+      db.open_finance_reconciliation_exceptions.push(row);
+      logAudit(db, cid, userId, 'of_exception', row.id, 'created', { type: type });
+      try { DB.emitEvent(userId, { event_type: 'open_finance_reconciliation_pending', entity_type: 'of_exception', entity_id: row.id, metadata: { type: type } }); } catch (e) {}
+      write(db);
+      return row;
+    },
+    ofListExceptions: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      return db.open_finance_reconciliation_exceptions.filter(function (x) {
+        return x.couple_id === cid && (!f.status || x.status === f.status) && (!f.connection_id || x.connection_id === f.connection_id) && (!f.type || x.exception_type === f.type);
+      }).sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, f.limit || 100);
+    },
+    ofResolveException: function (userId, exceptionId, resolution, notes) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var x = db.open_finance_reconciliation_exceptions.find(function (r) { return r.id === exceptionId && r.couple_id === cid; });
+      if (!x) throw new Error('Exceção não encontrada.');
+      if (['open', 'reviewing'].indexOf(x.status) < 0) throw new Error('Exceção já resolvida.');
+      if (['resolved', 'ignored', 'dismissed'].indexOf(resolution) < 0) throw new Error('Resolução inválida.');
+      x.status = resolution; x.resolution_type = resolution; x.resolution_notes = String(notes || '').slice(0, 300);
+      x.resolved_at = now(); x.resolved_by = userId; x.updated_at = now();
+      logAudit(db, cid, userId, 'of_exception', x.id, 'resolved', { resolution: resolution });
+      write(db);
+      return x;
+    },
+    /* Matching engine sobre staging (reusa score oficial; nunca escreve). */
+    ofFindCandidates: function (userId, extTxId, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.openfinance_bank_transactions.find(function (x) { return x.id === extTxId && x.couple_id === cid; });
+      if (!t) throw new Error('Transação externa não encontrada.');
+      if ((t.ext_status || 'posted') === 'cancelled') return [];
+      var out = [];
+      var bankAcc = t.bank_account_id ? db.openfinance_bank_accounts.find(function (x) { return x.id === t.bank_account_id; }) : null;
+      var internalAcc = bankAcc && bankAcc.linked_account_id ? bankAcc.linked_account_id : null;
+      db.transactions.forEach(function (x) {
+        if (x.couple_id !== cid || x.deleted_at) return;
+        if (internalAcc && x.account_id && x.account_id !== internalAcc) return;
+        var s = DB.calculateReconciliationScore({ date: t.date, amountCents: Math.abs(Math.round(t.amount * 100)), desc: t.description }, { date: x.date, amountCents: toCents(x.amount), desc: x.description });
+        var cls = DB.classifyReconciliation(s);
+        if (cls) out.push({ kind: 'transaction', id: x.id, score: s, cls: cls, label: x.description });
+      });
+      db.transfers.forEach(function (x) {
+        if (x.couple_id !== cid || x.deleted_at) return;
+        var neg = t.amount < 0;
+        var mine = (neg && x.from_account_id === internalAcc) || (!neg && x.to_account_id === internalAcc) || (!internalAcc && (x.from_account_id === internalAcc || x.to_account_id === internalAcc));
+        if (internalAcc && !mine && x.from_account_id !== internalAcc && x.to_account_id !== internalAcc) return;
+        var dd = Math.abs(Math.round((Date.parse(t.date) - Date.parse(x.date)) / 864e5));
+        if (toCents(x.amount) !== Math.abs(Math.round(t.amount * 100)) || dd > 3) return;
+        var s2 = dd === 0 ? 0.9 : dd === 1 ? 0.8 : 0.7;
+        var cls2 = DB.classifyReconciliation(s2);
+        if (cls2) out.push({ kind: 'transfer', id: x.id, score: s2, cls: cls2, label: 'transferência' });
+      });
+      out.sort(function (a, b) { return b.score - a.score; });
+      return out.slice(0, limit || 5);
+    },
+    ofMatchConfidence: function (cand) { return cand.score; },
+    /* Auto-reconciliação segura: só link inequívoco (external id já
+       vinculado ou score máximo + mesma data + mesma conta). */
+    ofAutoMatchStaging: function (db, cid, userId, conn, counts) {
+      var cfg = DB.OF_SYNC_CONFIG();
+      var matched = 0, conflicts = 0, auto = 0;
+      counts.excReq = counts.excReq || [];
+      db.openfinance_bank_transactions.forEach(function (t) {
+        if (t.connection_id !== conn.id || t.couple_id !== cid) return;
+        if (t.canonical_transaction_id) return;
+        if ((t.ext_status || 'posted') === 'cancelled') return;
+        var cands = [];
+        var bankAcc = t.bank_account_id ? db.openfinance_bank_accounts.find(function (x) { return x.id === t.bank_account_id; }) : null;
+        var internalAcc = bankAcc && bankAcc.linked_account_id ? bankAcc.linked_account_id : null;
+        db.transactions.forEach(function (x) {
+          if (x.couple_id !== cid || x.deleted_at) return;
+          if (internalAcc && x.account_id && x.account_id !== internalAcc) return;
+          var s = DB.calculateReconciliationScore({ date: t.date, amountCents: Math.abs(Math.round(t.amount * 100)), desc: t.description }, { date: x.date, amountCents: toCents(x.amount), desc: x.description });
+          var cls = DB.classifyReconciliation(s);
+          if (cls) cands.push({ kind: 'transaction', id: x.id, score: s, cls: cls, date: x.date, account: x.account_id });
+        });
+        cands.sort(function (a, b) { return b.score - a.score; });
+        var top = cands[0] || null;
+        var second = cands[1] || null;
+        if (top && top.score >= cfg.autoReconcileThreshold && top.date === t.date && (!internalAcc || (top.account || null) === internalAcc) && (!second || second.score < cfg.strongThreshold)) {
+          t.canonical_transaction_id = top.id; t.updated_at = now();
+          db.reconciliation_matches.push({ id: id('rm'), couple_id: cid, import_batch_id: null, imported_transaction_id: null, entity_type: 'transaction', entity_id: top.id, match_type: 'exact', confidence_score: top.score, match_reason: 'Auto-link Open Finance inequívoco.', status: 'accepted', source_type: 'open_finance', source_record_id: t.id, match_method: 'auto_exact', auto_reconciled: true, created_at: now(), updated_at: now(), resolved_at: now(), resolved_by: null });
+          logAudit(db, cid, userId, 'of_match', t.id, 'auto_reconciled', { score: top.score });
+          matched++; auto++;
+        } else if (top && top.score >= cfg.strongThreshold) {
+          if (second && (top.score - second.score) < 0.1) {
+            counts.excReq.push({ conn: conn.id, ext: t.id, canon: null, type: 'multiple_matches', sev: 'warning', desc: 'Mais de um candidato próximo. Revisão necessária.', ev: { top: top.score } });
+            conflicts++;
+          } else {
+            matched++;
+          }
+        } else if (top) {
+          counts.excReq.push({ conn: conn.id, ext: t.id, canon: null, type: 'manual_review_required', sev: 'info', desc: 'Correspondência fraca. Revisão sugerida.', ev: { score: top.score } });
+          conflicts++;
+        }
+      });
+      return { matched: matched, conflicts: conflicts, auto: auto };
+    },
+    /* Sugestão de match p/ central (cria match pendente, sem vincular). */
+    ofCreateMatchSuggestion: function (userId, extTxId, kind, entityId) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var t = db.openfinance_bank_transactions.find(function (x) { return x.id === extTxId && x.couple_id === cid; });
+      if (!t) throw new Error('Transação externa não encontrada.');
+      if (t.canonical_transaction_id) throw new Error('Já vinculada.');
+      var cands = DB.ofFindCandidates(userId, extTxId, 10);
+      var c = cands.filter(function (x) { return x.kind === kind && x.id === entityId; })[0];
+      if (!c) throw new Error('Candidato inválido.');
+      var ex = db.reconciliation_matches.find(function (m) { return m.source_record_id === t.id && m.entity_id === entityId && m.status === 'pending'; });
+      if (ex) return ex;
+      var m = { id: id('rm'), couple_id: cid, import_batch_id: null, imported_transaction_id: null, entity_type: kind === 'transfer' ? 'transfer' : 'transaction', entity_id: entityId, match_type: c.cls, confidence_score: c.score, match_reason: 'Sugestão Open Finance.', status: 'pending', source_type: 'open_finance', source_record_id: t.id, match_method: 'manual_suggestion', auto_reconciled: false, created_at: now(), updated_at: now(), resolved_at: null, resolved_by: null };
+      db.reconciliation_matches.push(m);
+      logAudit(db, cid, userId, 'of_match', t.id, 'suggested', { score: c.score });
+      write(db);
+      return m;
+    },
+    ofResolveMatch: function (userId, matchId, accept) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var m = db.reconciliation_matches.find(function (x) { return x.id === matchId && x.couple_id === cid; });
+      if (!m) throw new Error('Correspondência não encontrada.');
+      if (m.status !== 'pending') throw new Error('Correspondência já resolvida.');
+      if (m.source_type !== 'open_finance' || !m.source_record_id) throw new Error('Correspondência de outro fluxo.');
+      if (accept) {
+        var t = db.openfinance_bank_transactions.find(function (x) { return x.id === m.source_record_id; });
+        if (t && m.entity_type === 'transaction') t.canonical_transaction_id = m.entity_id;
+        if (t) t.updated_at = now();
+        m.status = 'accepted'; m.resolved_at = now(); m.resolved_by = userId;
+        logAudit(db, cid, userId, 'of_match', m.id, 'accepted', {});
+      } else {
+        m.status = 'rejected'; m.resolved_at = now(); m.resolved_by = userId;
+        logAudit(db, cid, userId, 'of_match', m.id, 'rejected', {});
+      }
+      m.updated_at = now();
+      write(db);
+      return m;
+    },
+    /* Transferências internas: par débito/crédito mesmo valor ±3 dias. */
+    ofDetectTransfers: function (userId, connectionId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var staged = db.openfinance_bank_transactions.filter(function (t) {
+        return t.couple_id === cid && (!connectionId || t.connection_id === connectionId) && (t.ext_status || 'posted') !== 'cancelled' && !t.canonical_transaction_id;
+      });
+      var out = [];
+      staged.forEach(function (d) {
+        if (!(d.amount < 0)) return;
+        staged.forEach(function (c) {
+          if (!(c.amount > 0) || d.id === c.id) return;
+          if (Math.abs(Math.round(d.amount * 100)) !== Math.round(c.amount * 100)) return;
+          if (d.bank_account_id && c.bank_account_id && d.bank_account_id === c.bank_account_id) return;
+          var dd = Math.abs(Math.round((Date.parse(d.date) - Date.parse(c.date)) / 864e5));
+          if (dd > 3) return;
+          out.push({ debit_id: d.id, credit_id: c.id, amount: Math.abs(Math.round(d.amount * 100)) / 100, dates: [d.date, c.date], kind: 'possible_internal_transfer' });
+        });
+      });
+      return out.slice(0, 50);
+    },
+    /* Saldos: snapshot já gravado no sync; diff vs conta interna vinculada. */
+    calculateBalanceDifference: function (userId, bankAccountId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var b = db.openfinance_bank_accounts.find(function (x) { return x.id === bankAccountId && x.couple_id === cid; });
+      if (!b) throw new Error('Conta externa não encontrada.');
+      var internal = b.linked_account_id ? DB.calculateAccountBalance(userId, b.linked_account_id) : null;
+      var diff = internal == null ? null : Math.round((b.balance - internal) * 100) / 100;
+      if (diff != null && diff !== 0) {
+        DB.ofException(userId, b.connection_id, null, null, 'balance_difference', 'info', 'Saldo externo difere do interno (timing/pendências possíveis).', { external: b.balance, internal: internal, diff: diff });
+      }
+      return { external: b.balance, internal: internal, diff: diff, linked: !!b.linked_account_id };
+    },
+    ofConnectionHealth: function (userId, connectionId) {
+      var conn = DB.ofGetConnection(userId, connectionId);
+      if (conn.status === 'revoked') return { status: 'revoked', detail: 'Conexão revogada.' };
+      if (conn.last_error) return { status: 'error', detail: conn.last_error };
+      if (conn.provider !== 'local-sim') return { status: 'reauthentication_required', detail: 'Provedor exige configuração.' };
+      if (!conn.last_sync_at) return { status: 'attention', detail: 'Nunca sincronizado.' };
+      var days = Math.round((Date.now() - Date.parse(conn.last_sync_at)) / 864e5);
+      if (days > 7) return { status: 'attention', detail: 'Sem sincronizar há ' + days + ' dias.' };
+      return { status: 'healthy', detail: 'Sincronizado recentemente.' };
+    },
+    ofResyncPeriod: function (userId, connectionId, from, to, opts) {
+      DB.ofAssertEnabled();
+      opts = opts || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      var conn = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (!conn) throw new Error('Conexão não encontrada.');
+      conn.sync_cursor = null;
+      write(db);
+      return DB.ofSyncNow(userId, connectionId, { from: DB.valDate(from, 'Início'), to: DB.valDate(to, 'Fim'), sync_type: 'recovery', fixture: opts.fixture });
+    },
+    ofRebuildCursor: function (userId, connectionId) {
+      DB.ofAssertEnabled();
+      var db = read(), cid = DB.myCoupleId(userId);
+      var conn = db.openfinance_connections.find(function (x) { return x.id === connectionId && x.couple_id === cid; });
+      if (!conn) throw new Error('Conexão não encontrada.');
+      conn.sync_cursor = null; conn.updated_at = now();
+      logAudit(db, cid, userId, 'of_connection', conn.id, 'cursor_rebuilt', {});
+      write(db);
+      return conn;
+    },
+    analyticsBuildSummary: function (a) {      var d = a.data;
+      return {
+        period: a.metadata.period, income: d.metrics ? d.metrics.totalIncome : null, expenses: d.metrics ? d.metrics.totalExpenses : null,
+        result: d.metrics ? d.metrics.financialResult : null, savingsRate: d.metrics ? d.metrics.savingsRate : null,
+        topCategories: d.topCategories || [], trends: d.trends || {}, commitments: d.commitments || null,
+        anomalies: d.anomalies || [], cardUtilization: d.cards ? d.cards.totalUtilization : null,
+        budgetStatus: d.budget || null, goals: d.goals || null, participation: d.participation || null
+      };
+    },
+  };
+  migrate();
+  J.DB = DB;
+})(window.Juntos);

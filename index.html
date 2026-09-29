@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Juntos Finanças</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="boot" class="boot"><div class="spinner"></div><p>Carregando Juntos…</p></div>
+
+<div id="shell" class="hidden">
+  <aside id="sidebar">
+    <div class="brand"><span class="brand-dot">❤</span><span>Juntos<small>FINANÇAS DO CASAL</small></span></div>
+    <nav id="side-nav" aria-label="Navegação principal">
+      <span class="nav-group">Principal</span>
+      <a href="#/dashboard" data-r="dashboard">🏠 Visão geral</a>
+      <a href="#/transactions" data-r="transactions">💸 Movimentações</a>
+      <a href="#/accounts" data-r="accounts">🏦 Contas</a>
+      <a href="#/cards" data-r="cards">💳 Cartões</a>
+      <a href="#/invoices" data-r="invoices">🧾 Faturas</a>
+      <a href="#/budget" data-r="budget">📊 Orçamento</a>
+      <a href="#/goals" data-r="goals">🎯 Metas</a>
+      <span class="nav-group">Planejamento</span>
+      <a href="#/planning" data-r="planning">🗺️ Planejamento</a>
+      <a href="#/calendar" data-r="calendar">📅 Calendário</a>
+      <a href="#/reports" data-r="reports">📈 Relatórios</a>
+      <a href="#/insights" data-r="insights">💡 Insights</a>
+      <a href="#/notifications" data-r="notifications">🔔 Notificações</a>
+      <span class="nav-group">Operacional</span>
+      <a href="#/settlements" data-r="settlements">⚖️ Acertos</a>
+      <a href="#/recurring" data-r="recurring">🔁 Recorrentes</a>
+      <span class="nav-group">Mais</span>
+      <a href="#/more" data-r="more">••• Mais</a>
+      <a href="#/settings" data-r="settings">⚙️ Configurações</a>
+    </nav>
+    <div class="side-foot"><button class="btn ghost sm" id="btn-logout-desk">Sair</button></div>
+  </aside>
+
+  <div class="main">
+    <header id="topbar"><button id="avatar-btn" class="avatar" title="Perfil">?</button><div class="top-id"><span id="hello-name">Olá</span><strong id="page-title">Início</strong></div><span class="top-actions"><a id="notif-bell" href="#/notifications" title="Notificações" aria-label="Notificações" style="text-decoration:none;display:none">🔔<span id="notif-count"></span></a></span></header>
+    <main id="view"></main>
+  </div>
+
+  <nav id="bottomnav" aria-label="Navegação principal">
+    <a href="#/dashboard" data-r="dashboard">🏠<span>Início</span></a>
+    <a href="#/transactions" data-r="transactions">💸<span>Movimentos</span></a>
+    <button id="fab" title="Adicionar" aria-label="Adicionar">+</button>
+    <a href="#/accounts" data-r="accounts">🏦<span>Contas</span></a>
+    <a href="#/planning" data-r="planning">🗺️<span>Plano</span></a>
+    <a href="#/more" data-r="more">•••<span>Mais</span></a>
+  </nav>
+</div>
+
+<div id="toasts"></div>
+<div id="modal-root"></div>
+
+<script src="js/db.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/router.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
