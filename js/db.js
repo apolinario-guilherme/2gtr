@@ -6265,6 +6265,8 @@ window.Juntos = window.Juntos || {};
       else if (/^(comeca|comecar|inicia|iniciar|bora|vamos)\b/.test(s) && DB.routineHasPendingContext(userId)) out.intent = 'routine_start';
       else if (/^(ja|terminei|conclui|fiz|pronto|feito|terminei)\b/.test(s) && DB.routineHasPendingContext(userId) && !has(['fatura', 'boleto', 'cartao', 'conta', 'meta', 'orcamento', 'transacao', 'despesa', 'receita', 'compromisso', 'reuniao', 'consulta', 'tarefa', 'habito', 'lista', 'mercado', 'pagamento', 'gasto', 'pix'])) out.intent = 'routine_complete_item';
       else if ((has(['marca', 'marcar', 'marque', 'comprei', 'já comprei', 'ja comprei']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(marca|marcar|marque|comprei|compra feita) .{2,60} (na lista|do mercado|da lista)/.test(s)) out.intent = 'list_check_item';
+      else if (/^(adiciona|adicione|adicionar|coloca|colocar|coloque|inclui|incluir|acrescenta)\b/.test(s) && DB.mmLastContext(userId, 'list') && !has(['tarefa', 'tarefas', 'compromisso', 'reuniao', 'consulta', 'habito', 'habitos', 'rotina', 'rotinas', 'meta', 'metas', 'fatura', 'transacao', 'despesa', 'receita', 'gasto', 'orcamento', 'conta', 'cartao', 'pix'])) out.intent = 'list_add_item';
+      else if (/^(marca|marcar|marque|comprei|desmarca|desmarcar)\b/.test(s) && DB.mmLastContext(userId, 'list') && !has(['tarefa', 'tarefas', 'compromisso', 'reuniao', 'consulta', 'habito', 'habitos', 'rotina', 'rotinas', 'meta', 'metas', 'fatura', 'transacao', 'despesa', 'receita', 'gasto', 'orcamento', 'conta', 'cartao', 'pix'])) out.intent = 'list_check_item';
       else if ((has(['adiciona', 'adicionar', 'adicione', 'coloca', 'colocar', 'coloque', 'inclui', 'incluir']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(adiciona|coloque|inclui) .{2,80} (na lista|no mercado|na viagem)/.test(s)) out.intent = 'list_add_item';
       else if ((has(['cria', 'criar', 'crie', 'nova lista', 'nova check']) && has(['lista', 'listas', 'mercado', 'viagem', 'checklist', 'compras'])) || /(cria|criar|crie) .{2,60} lista/.test(s)) out.intent = 'list_create';
       else if (has(['quais listas', 'minhas listas', 'lista do mercado', 'lista da viagem', 'mostra a lista', 'mostra as listas', 'tem alguma lista', 'o que falta comprar', 'o que falta na', 'quais itens faltam']) || (has(['lista', 'listas']) && has(['tenho', 'temos', 'mostra', 'mostre', 'quais', 'compartilhada', 'compartilhadas']))) out.intent = 'list_view';
@@ -6996,6 +6998,7 @@ window.Juntos = window.Juntos || {};
             try { DB.addItemsBulk(userId, nl.id, p.items.slice(0, 20), {}); } catch (eL) {}
           }
           res = { list_id: nl.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'LIST', nl.id, 30); } catch (eLCc) {}
         } else if (r.action_type === 'list_add_item') {
           var srcI = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
           if (p.items && p.items.length) {
@@ -7005,12 +7008,15 @@ window.Juntos = window.Juntos || {};
             var ni = DB.addItem(userId, p.list_id, { title: p.title, quantity: p.quantity, unit: p.unit }, { idempotency_key: 'ai:' + r.id });
             res = { list_id: p.list_id, item_id: ni.id };
           }
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'LIST', p.list_id, 30); } catch (eLAc) {}
           void srcI;
         } else if (r.action_type === 'list_check_item') {
           DB.checkItem(userId, p.item_id);
+          try { var _dbL = read(); var _itL = _dbL.list_items.find(function (x) { return x.id === p.item_id; }); if (_itL) DB.convSetContext(userId, r.conversation_id, r.channel, 'LIST', _itL.list_id, 30); } catch (eLIc) {}
           res = { item_id: p.item_id };
         } else if (r.action_type === 'list_uncheck_item') {
           DB.uncheckItem(userId, p.item_id);
+          try { var _dbU = read(); var _itU = _dbU.list_items.find(function (x) { return x.id === p.item_id; }); if (_itU) DB.convSetContext(userId, r.conversation_id, r.channel, 'LIST', _itU.list_id, 30); } catch (eLUc) {}
           res = { item_id: p.item_id };
         } else throw new Error('Ação não permitida.');
         var db2 = read();
@@ -7090,6 +7096,9 @@ window.Juntos = window.Juntos || {};
         var prov = DB.aiProviderGenerate(draft, o.facts);
         var val = DB.aiValidateResponse(prov.answer, o.facts);
         var final = val.ok ? prov.answer : draft;
+        if ((o.intent === 'list_view' || o.intent === 'list_search') && o.toolOutput && o.toolOutput.lists && o.toolOutput.lists.length === 1 && o.toolOutput.items) {
+          try { DB.convSetContext(userId, conv.id, channel, 'LIST', o.toolOutput.lists[0].id, 30); } catch (eRL) {}
+        }
         var am = saveMsg('assistant', final, { intent: o.intent, tool: (o.tools || []).join(','), input: o.toolInput || null, output: o.toolOutput || null });
         return { answer: final, facts: o.facts || [], sources: o.tools || [], actions: o.actions || [], follow_up: o.follow_up || null, intent: o.intent, domain: o.domain || DB.aiDomainOf(o.intent), confirmationRequired: !!o.confirmationRequired, suggestedReplies: o.suggestedReplies || null, navigationTarget: o.navigationTarget || null, messageId: am.id, userMessageId: um.id, conversationId: conv.id, pendingAction: o.pendingAction || null, factsValid: val.ok };
       }
@@ -7559,6 +7568,7 @@ window.Juntos = window.Juntos || {};
           if (!lCouple) {
             var createdL = DB.createList(userId, params, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
             try { DB.logSecurityEvent(userId, 'ai_action', { action: 'list_created', entity_type: 'list', entity_id: createdL.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (eL2) {}
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', createdL.id, 30); } catch (eLCx) {}
             return { answer: 'Lista "' + createdL.name + '" criada (' + (createdL.visibility === 'COUPLE' ? 'casal' : 'pessoal') + '). Confirmar?', facts: [{ label: 'lista', value: 1 }], tools: ['list_create'], intent: det.intent, domain: 'LISTS' };
           }
         } else if (det.intent === 'list_add_item') {
@@ -7593,12 +7603,15 @@ window.Juntos = window.Juntos || {};
           label = 'Adicionar ' + items.map(function (x) { return '"' + x.title + '"'; }).join(', ') + ' à lista "' + target.name + '"';
           if (items.length <= 4) {
             DB.addItemsBulk(userId, target.id, items, { idempotency_key: 'ai:' + messageId });
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', target.id, 30); } catch (eLAx) {}
             return { answer: 'Adicionei à lista ' + target.name + ': ' + items.map(function (x) { return x.title; }).join(', ') + '.', facts: [{ label: 'itens', value: items.length }], tools: ['list_add_item'], intent: det.intent, domain: 'LISTS' };
           }
         } else if (det.intent === 'list_check_item' || det.intent === 'list_uncheck_item') {
           var lc2 = DB.aiFindList(userId, rawText);
           var tgt2 = lc2.length === 1 ? lc2[0] : (lc2.length ? null : null);
-          var itemPool = tgt2 ? DB.getListItems(userId, tgt2.id, {}) : DB.getLists(userId, { status: 'ACTIVE', limit: 20 }).reduce(function (acc, l) { return acc.concat(DB.getListItems(userId, l.id, {}).map(function (it) { it._list = l; return it; })); }, []);
+          var lcCtx = null;
+          try { var _lcx = DB.mmLastContext(userId, 'list'); if (_lcx && _lcx.entity_id) { try { lcCtx = DB.getList(userId, _lcx.entity_id); } catch (eLCQ) { lcCtx = null; } } } catch (eLCQ2) {}
+          var itemPool = tgt2 ? DB.getListItems(userId, tgt2.id, {}).map(function (it) { it._list = tgt2; return it; }) : (lcCtx ? DB.getListItems(userId, lcCtx.id, {}).map(function (it) { it._list = lcCtx; return it; }) : DB.getLists(userId, { status: 'ACTIVE', limit: 20 }).reduce(function (acc, l) { return acc.concat(DB.getListItems(userId, l.id, {}).map(function (it) { it._list = l; return it; })); }, []));
           var scored = itemPool.map(function (it) {
             var tn = DB.aiNorm(it.title);
             return { it: it, hit: tn.length >= 3 && s.indexOf(tn) >= 0 };
@@ -7613,9 +7626,11 @@ window.Juntos = window.Juntos || {};
           label = (det.intent === 'list_check_item' ? 'Marcar "' + one.title + '" como concluído' : 'Desmarcar "' + one.title + '"');
           if (det.intent === 'list_check_item') {
             DB.checkItem(userId, one.id);
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', one.list_id, 30); } catch (eLKx) {}
             return { answer: 'Marquei "' + one.title + '" como concluído.', facts: [], tools: ['list_check_item'], intent: det.intent, domain: 'LISTS' };
           } else {
             DB.uncheckItem(userId, one.id);
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', one.list_id, 30); } catch (eLUx) {}
             return { answer: 'Desmarquei "' + one.title + '".', facts: [], tools: ['list_uncheck_item'], intent: det.intent, domain: 'LISTS' };
           }
         } else throw new Error('Ação não permitida.');
@@ -11441,6 +11456,30 @@ window.Juntos = window.Juntos || {};
       var nq = DB.aiNorm(q);
       return rows.filter(function (r) { var n = DB.aiNorm(r.name); return n.length >= 3 && (nq.indexOf(n) >= 0 || n.indexOf(nq) >= 0); });
     },
+    convSetContext: function (userId, conversationId, channel, entityType, entityId, ttlMin) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      var exp = new Date(Date.now() + (ttlMin || 30) * 60000).toISOString();
+      db.routine_contexts = (db.routine_contexts || []).filter(function (c) { return !(c.user_id === userId && c.conversation_id === conversationId && c.entity_type === entityType); });
+      var row = { id: id('rc'), couple_id: cid, user_id: userId, conversation_id: conversationId, channel: channel || 'web', entity_type: entityType, entity_id: entityId, expires_at: exp, created_at: now() };
+      db.routine_contexts.push(row);
+      write(db);
+      return row;
+    },
+    convGetContext: function (userId, conversationId, entityType) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      var t = now();
+      var rows = (db.routine_contexts || []).filter(function (c) { return !(c.expires_at && c.expires_at < t); })
+        .filter(function (c) { return c.couple_id === cid && c.user_id === userId && (!conversationId || c.conversation_id === conversationId) && (!entityType || c.entity_type === entityType); })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+      return rows[0] || null;
+    },
+    mmLastContext: function (userId, kind) {
+      var k = String(kind || '').toLowerCase();
+      var et = k === 'list' ? 'LIST' : String(kind || '').toUpperCase();
+      return DB.convGetContext(userId, null, et);
+    },
     routineSetContext: function (userId, conversationId, channel, executionId, ttlMin) {
       var db = read(), cid = DB.myCoupleId(userId);
       if (!cid) return null;
@@ -11456,7 +11495,7 @@ window.Juntos = window.Juntos || {};
       if (!cid) return null;
       var t = now();
       var rows = (db.routine_contexts || []).filter(function (c) { return !(c.expires_at && c.expires_at < t); })
-        .filter(function (c) { return c.couple_id === cid && c.user_id === userId && (!conversationId || c.conversation_id === conversationId); })
+        .filter(function (c) { return c.couple_id === cid && c.user_id === userId && c.entity_type === 'ROUTINE_EXECUTION' && (!conversationId || c.conversation_id === conversationId); })
         .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
       return rows[0] || null;
     },

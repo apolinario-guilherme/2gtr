@@ -115,6 +115,19 @@ ok(['list_check_item'].indexOf(r4.intent)>=0,'intent check');
 var r5=ask('Onde fica a tela de listas?');
 eq(r5.intent,'product_navigation','nav');
 eq(r5.navigationTarget,'#/lists','nav listas');
+/* --- contexto conversacional de listas --- */
+var lCtx=DB.createList(A.id,{name:'Churrasco Q'});
+DB.addItem(A.id,lCtx.id,{title:'Carvão'});
+var convL=DB.aiCreateConversation(A.id,'LC');
+function askL(t){return DB.aiProcessMessage(A.id,convL.id,t,{channel:'web'});}
+var lc0=askL('Adiciona pão na lista Churrasco Q');
+eq(lc0.intent,'list_add_item','ctx seed');
+var lc1=askL('Adiciona gelo');
+eq(lc1.intent,'list_add_item','ctx add sem nome');
+ok(DB.searchListItems(A.id,'gelo').some(function(x){return x.list_id===lCtx.id;}),'item via contexto');
+var lc2=askL('Marca carvão');
+eq(lc2.intent,'list_check_item','ctx check sem lista');
+ok(DB.getListItems(A.id,lCtx.id,{}).filter(function(x){return x.title==='Carvão';})[0].checked,'marcado via contexto');
 /* --- whatsapp --- */
 var PHONE='+5511999990003';
 var lk=DB.waGenerateLinkCode(A.id);
