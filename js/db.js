@@ -8076,6 +8076,143 @@ window.Juntos = window.Juntos || {};
       });
       return made;
     },
+    /* ============ VISÃO GERAL (camada de agregação; sem fonte própria) ============
+       Consome AgendaService + HabitService + serviços financeiros oficiais.
+       Uma chamada por render (sem recálculo entre cards); sempre fresco,
+       sem cache persistente. Datas locais, sem UTC. */
+    ovCommitmentTypes: function () { return ['invoice', 'installment', 'recurring', 'goal', 'planning_item']; },
+    ovFinancialCommitments: function (userId, from, to, limit) {
+      var evs = DB.getCalendarEvents(userId, { from: from, to: to });
+      return evs.filter(function (e) {
+        return DB.ovCommitmentTypes().indexOf(e.event_type) >= 0 &&
+          ['previsto', 'pendente', 'vencido', 'planejado'].indexOf(e.status) >= 0;
+      }).slice(0, limit || 4).map(function (e) {
+        return { id: e.id, date: e.event_date, title: e.title, amount: e.amount, status: e.status, type: e.event_type, route: e.route };
+      });
+    },
+    ovDayFinance: function (userId, date, vision) {
+      var ym = date.slice(0, 7);
+      var rows = DB.listTx(userId, { from: ym, to: ym }).filter(function (t) { return t.date === date; });
+      var income = 0, expense = 0, byCat = {};
+      rows.forEach(function (t) {
+        if (t.type === 'income') income = Math.round((income + t.amount) * 100) / 100;
+        else expense = Math.round((expense + t.amount) * 100) / 100;
+        if (t.type === 'expense') {
+          var k = t.category_id;
+          byCat[k] = byCat[k] || { category_id: k, name: '', value: 0 };
+          byCat[k].value = Math.round((byCat[k].value + t.amount) * 100) / 100;
+        }
+      });
+      var db = read();
+      Object.keys(byCat).forEach(function (k) {
+        var c = db.categories.find(function (x) { return x.id === k; });
+        byCat[k].name = c ? ((c.icon ? c.icon + ' ' : '') + c.name) : 'Categoria';
+      });
+      var cats = Object.keys(byCat).map(function (k) { return byCat[k]; }).sort(function (a, b) { return b.value - a.value; });
+      return { date: date, income: income, expense: expense, result: Math.round((income - expense) * 100) / 100, count: rows.length, byCat: cats };
+    },
+    ovWeekRange: function (date) {
+      var d = (date && DB.agendaParseDay(date)) ? date : DB.agendaToday();
+      var dt = new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+      var dow = (dt.getDay() + 6) % 7;
+      var mon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() - dow);
+      var days = [];
+      for (var i = 0; i < 7; i++) {
+        var x = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i);
+        days.push(DB.agendaFmt(x.getFullYear(), x.getMonth() + 1, x.getDate()));
+      }
+      return days;
+    },
+    getOverviewDay: function (userId, date, vision) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var d = (date && DB.agendaParseDay(date)) ? date : DB.agendaToday();
+      var fin = DB.ovDayFinance(userId, d, vision || 'couple');
+      var agd = DB.agendaOccurrences(userId, d, d, { vision: 'couple' });
+      var hab = DB.habitTodayStatus(userId, d);
+      var nowT = now().slice(0, 16);
+      var isToday = (d === DB.agendaToday());
+      var next = null;
+      DB.agendaUpcoming(userId, { from: d, days: 2, limit: 5, vision: 'couple' }).forEach(function (o) {
+        if (next) return;
+        if (o.date > d) { next = DB.agendaOccurrencePublic(userId, o); return; }
+        if (o.date < d) return;
+        if (!isToday) { next = DB.agendaOccurrencePublic(userId, o); return; }
+        if (!o.start_at || o.start_at.length <= 10 || o.start_at.slice(11, 16) >= nowT.slice(11, 16)) next = DB.agendaOccurrencePublic(userId, o);
+      });
+      var finCom = DB.ovFinancialCommitments(userId, d, DB.agendaAddDays(d, 30), 4);
+      var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
+        return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
+      });
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, next: next, commitments: finCom, recent: recent };
+    },
+    getOverviewWeek: function (userId, date, vision) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var days = DB.ovWeekRange(date);
+      var from = days[0], to = days[6];
+      var txs = [];
+      var yms = {};
+      days.forEach(function (dd) { yms[dd.slice(0, 7)] = true; });
+      Object.keys(yms).forEach(function (ym) {
+        DB.listTx(userId, { from: ym, to: ym }).forEach(function (t) {
+          if (t.date >= from && t.date <= to) txs.push(t);
+        });
+      });
+      var income = 0, expense = 0, biggest = null;
+      txs.forEach(function (t) {
+        if (t.type === 'income') income = Math.round((income + t.amount) * 100) / 100;
+        else {
+          expense = Math.round((expense + t.amount) * 100) / 100;
+          if (!biggest || t.amount > biggest.amount) biggest = t;
+        }
+      });
+      var perDay = days.map(function (dd) {
+        var agd = DB.agendaOccurrences(userId, dd, dd, { vision: 'couple' });
+        var hb = DB.habitTodayStatus(userId, dd);
+        var dayTx = txs.filter(function (t) { return t.date === dd; });
+        var di = 0, de = 0;
+        dayTx.forEach(function (t) { if (t.type === 'income') di += t.amount; else de += t.amount; });
+        return { date: dd, agenda: agd.length, habits_done: hb.done, habits_total: hb.total, income: Math.round(di * 100) / 100, expense: Math.round(de * 100) / 100 };
+      });
+      var finCom = DB.ovFinancialCommitments(userId, from, DB.agendaAddDays(to, 30), 6);
+      var upcoming = DB.getUpcomingOverview(userId, { limit: 6, days: 14 });
+      return { from: from, to: to, days: perDay, finance: { income: income, expense: expense, result: Math.round((income - expense) * 100) / 100, count: txs.length, biggest: biggest ? { id: biggest.id, description: biggest.description, amount: biggest.amount, category_id: biggest.category_id } : null }, commitments: finCom, upcoming: upcoming };
+    },
+    getOverviewMonth: function (userId, ym, vision) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var m = /^\d{4}-\d{2}$/.test(ym || '') ? ym : DB.agendaToday().slice(0, 7);
+      var v = vision || 'couple';
+      var d = DB.dashboardCalc(userId, { from: m, to: m, vision: v });
+      var av = DB.calculateAvailableToSpend(userId, { from: m, to: m, vision: v });
+      var first = m + '-01', last = m + '-' + DB.agendaDim(+m.slice(0, 4), +m.slice(5, 7));
+      var hs = DB.getHabitStats(userId, first, last);
+      var agd = DB.agendaOccurrences(userId, first, last, { vision: 'couple' });
+      var coup = agd.filter(function (o) { return o.visibility === 'COUPLE'; }).length;
+      var finCom = DB.ovFinancialCommitments(userId, DB.agendaToday() < first ? first : DB.agendaToday(), last, 6);
+      return { month: m, finance: { income: d.income, expense: d.expense, result: d.balance, available: av.available, count: d.incomeCount + d.expenseCount }, habits: { active: hs.active, consistency: hs.consistency, best_streak: hs.best_streak, items: hs.habits.slice(0, 6) }, agenda: { total: agd.length, couple: coup }, commitments: finCom };
+    },
+    getUpcomingOverview: function (userId, opt) {
+      opt = opt || {};
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var days = opt.days || 30, limit = opt.limit || 8;
+      var today = DB.agendaToday();
+      var out = [];
+      DB.agendaUpcoming(userId, { from: today, days: days, limit: limit, vision: 'couple' }).forEach(function (o) {
+        out.push({ kind: 'agenda', date: o.date, time: (o.start_at && o.start_at.length > 10) ? o.start_at.slice(11, 16) : null, title: o.title, who: o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal', key: o.key });
+      });
+      DB.ovFinancialCommitments(userId, today, DB.agendaAddDays(today, days), limit).forEach(function (e) {
+        out.push({ kind: 'financial', date: e.date, time: null, title: e.title, who: 'Financeiro', amount: e.amount, status: e.status, route: e.route });
+      });
+      out.sort(function (a, b) { return (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')); });
+      return out.slice(0, limit);
+    },
+    getOverviewSummary: function (userId, date) {
+      var d = DB.getOverviewDay(userId, date, 'couple');
+      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tx: d.finance.count, next: d.next };
+    },
     /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
        Fonte própria (habits + habit_completions). Tudo por user_id do
        autenticado (nunca do frontend); couple_id só p/ isolamento.

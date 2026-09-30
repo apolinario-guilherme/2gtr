@@ -289,7 +289,8 @@
     }
     return s;
   }
-  function pDash(v, me) {
+  function pDash(v, me) { return pOverview(v, me); }
+  function pDashLegacy(v, me) {
     var ctx = J.DB.myCouple(me.id);
     var solo = ctx.members.length < 2;
     var names = ctx.users.map(function (u) { return esc(u.nome); }).join(' & ') || esc(ctx.couple && ctx.couple.name);
@@ -569,6 +570,266 @@
     Array.prototype.forEach.call(v.querySelectorAll('[data-retry]'), function (b) { b.onclick = function () { render('dashboard'); }; });
     Array.prototype.forEach.call(v.querySelectorAll('.tx[data-id]'), function (b) { b.onclick = function () { openTxDetail(me, b.dataset.id); }; });
     Array.prototype.forEach.call(v.querySelectorAll('[data-trid]'), function (b) { b.onclick = function () { openTransferDetail(me, b.dataset.trid); }; });
+  }
+  /* ============ VISÃO GERAL / PLANNER (camada de agregação) ============
+     Consome OverviewAggregationService + serviços oficiais. Nenhum cálculo
+     próprio, nenhuma escrita além de HabitService.recordCompletion /
+     removeCompletion (checklist) e fluxos oficiais (modais/links). */
+  var ov = { mode: 'day', date: '', vision: 'couple' };
+  try {
+    var _ovp = JSON.parse(localStorage.getItem('juntos_ov_v1') || '{}');
+    ['mode', 'date', 'vision'].forEach(function (k) { if (_ovp[k] != null) ov[k] = _ovp[k]; });
+    if (['day', 'week', 'month'].indexOf(ov.mode) < 0) ov.mode = 'day';
+    if (['couple', 'me', 'partner'].indexOf(ov.vision) < 0) ov.vision = 'couple';
+  } catch (e) {}
+  function ovPersist() { try { localStorage.setItem('juntos_ov_v1', JSON.stringify(ov)); } catch (e) {} }
+  function ovDate() {
+    if (!ov.date || !J.DB.agendaParseDay(ov.date)) ov.date = todayISO();
+    return ov.date;
+  }
+  function ovGreet() { var h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; }
+  function ovDayTitle(d) {
+    var t = todayISO();
+    if (d === t) return 'Hoje';
+    if (d === J.DB.agendaAddDays(t, 1)) return 'Amanhã';
+    if (d === J.DB.agendaAddDays(t, -1)) return 'Ontem';
+    return agDayLabel(d);
+  }
+  function ovWhoBadge(vis) {
+    return vis === 'COUPLE' ? '<span class="pill">❤️ Casal</span>' : '<span class="pill">👤 Pessoal</span>';
+  }
+  function ovModeLabel() { return ov.mode === 'day' ? 'Dia' : ov.mode === 'week' ? 'Semana' : 'Mês'; }
+  function pOverview(v, me) {
+    var ctx = null, solo = false, partnerId = null, vMe = esc(me.nome.split(' ')[0]), vPa = 'Parceiro';
+    try {
+      ctx = J.DB.myCouple(me.id);
+      solo = ctx.members.length < 2;
+      partnerId = J.DB.memberIds(me.id).filter(function (x) { return x !== me.id; })[0] || null;
+      if (partnerId) vPa = esc(firstShort(me, partnerId));
+    } catch (e) {
+      v.innerHTML = '<div class="card"><h1>Visão Geral</h1><p class="muted">Crie ou entre em um casal para começar. <a href="#/settings/couple">Convidar parceiro ›</a></p></div>';
+      return;
+    }
+    var d = ovDate();
+    var day = null, week = null, mon = null, loadErr = null;
+    try {
+      day = J.DB.getOverviewDay(me.id, d, 'couple');
+      if (ov.mode === 'week') week = J.DB.getOverviewWeek(me.id, d, ov.vision);
+      if (ov.mode === 'month') mon = J.DB.getOverviewMonth(me.id, d.slice(0, 7), ov.vision);
+    } catch (e2) { loadErr = e2; }
+    var html = '<div class="card"><p class="muted" style="margin:0">' + ovGreet() + ', ' + vMe + ' 👋</p><h1 style="margin:4px 0">Visão Geral</h1>' +
+      '<p class="muted" style="margin:0">Seu dia, seus hábitos, seus compromissos e suas finanças.</p>' +
+      '<div class="per-row"><button class="pnav" id="ov-prev" aria-label="Período anterior">‹</button><strong id="ov-label">' +
+      esc(ov.mode === 'day' ? ovDayTitle(d) + ' • ' + dueLabel(d) : ov.mode === 'week' && week ? 'Semana ' + dueLabel(week.from) + ' – ' + dueLabel(week.to) : monthLabel(d.slice(0, 7))) +
+      '</strong><button class="pnav" id="ov-next" aria-label="Próximo período">›</button></div>' +
+      '<div class="seg" role="group" aria-label="Alcance"><button data-ovm="day" class="' + (ov.mode === 'day' ? 'on' : '') + '">Dia</button><button data-ovm="week" class="' + (ov.mode === 'week' ? 'on' : '') + '">Semana</button><button data-ovm="month" class="' + (ov.mode === 'month' ? 'on' : '') + '">Mês</button></div>' +
+      '<div class="seg" role="group" aria-label="Visão"><button data-ovv="couple" class="' + (ov.vision === 'couple' ? 'on' : '') + '">Casal</button><button data-ovv="me" class="' + (ov.vision === 'me' ? 'on' : '') + '">' + vMe + '</button><button data-ovv="partner" class="' + (ov.vision === 'partner' ? 'on' : '') + '">' + vPa + '</button></div>' +
+      '<div class="qa-grid" role="group" aria-label="Ações rápidas"><button data-ovqa="ag">+ Compromisso</button><button data-ovqa="hb">✓ Hábito</button><button data-ovqa="tx">+ Movimentação</button></div>' +
+      (solo ? '<p class="muted">Falta 1 pessoa aqui. <a href="#/settings/couple">Convidar parceiro ›</a></p>' : '') + '</div>';
+    if (loadErr || !day) {
+      v.innerHTML = html + '<div class="card"><b>Visão Geral</b><div class="alert">Não foi possível carregar sua visão geral. Tente novamente.</div><button class="btn ghost" data-ovretry>Tentar novamente</button></div>';
+      bindOverview(v, me);
+      return;
+    }
+    if (ov.mode === 'day') html += ovDayHtml(me, day);
+    else if (ov.mode === 'week') html += ovWeekHtml(me, day, week);
+    else html += ovMonthHtml(me, day, mon);
+    v.innerHTML = html;
+    bindOverview(v, me);
+  }
+  function ovDayHtml(me, day) {
+    var s = '';
+    // Hoje (resumo rápido)
+    s += blk('Hoje', function () {
+      var nx = day.next ? '<br>Próximo: <b>' + esc((day.next.start || '') + (day.next.start ? ' • ' : '') + day.next.title) + '</b>' : '<br><span class="muted">Sem próximos compromissos.</span>';
+      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
+    });
+    // Próximo compromisso (destaque)
+    s += blk('Próximo', function () {
+      if (!day.next) return '<div class="card"><b>Próximo compromisso</b><p class="muted">Seu dia está livre.</p><button class="btn ghost sm" data-ovqa="ag" style="max-width:230px">Adicionar compromisso</button></div>';
+      var n = day.next;
+      return '<div class="card"><b>Próximo compromisso</b><h2>' + esc((n.start || '') + (n.start ? ' • ' : '') + n.title) + '</h2>' +
+        '<p class="muted">' + esc(ovDayTitle(n.date) + ' • ' + dueLabel(n.date)) + (n.location ? ' • 📍 ' + esc(n.location) : '') + ' • ' + (n.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</p><p><a href="#/agenda">Ver agenda ›</a></p></div>';
+    });
+    var pair = '';
+    pair += blk('Compromissos', function () { return ovAgendaCard(day); });
+    pair += blk('Hábitos', function () { return ovHabitsCard(day); });
+    s += '<div class="ov-grid">' + pair + '</div>';
+    s += blk('Finanças', function () { return ovFinDayCard(day); });
+    var pair2 = '';
+    pair2 += blk('Timeline', function () { return ovTimelineCard(day); });
+    pair2 += blk('Compromissos financeiros', function () { return ovCommitCard(day); });
+    s += '<div class="ov-grid">' + pair2 + '</div>';
+    s += blk('Recentes', function () { return ovRecentCard(me, day); });
+    return s;
+  }
+  function ovAgendaCard(day) {
+    var s = '<div class="card"><div class="row between"><b>Compromissos</b><a href="#/agenda">Ver tudo ›</a></div>';
+    if (!day.agenda.length) return s + '<p class="muted">Agenda livre — sem compromissos neste dia.</p><button class="btn ghost sm" data-ovqa="ag" style="max-width:230px">+ Adicionar compromisso</button></div>';
+    s += day.agenda.slice(0, 5).map(function (o) {
+      return '<p><b>' + esc(o.start || '––:––') + '</b> ' + esc(o.title) + '<br><span class="muted">' + esc(o.all_day ? 'Dia inteiro' : (o.start || '') + (o.end && o.end !== o.start ? ' — ' + o.end : '')) + '</span> ' + ovWhoBadge(o.visibility) + '</p>';
+    }).join('');
+    if (day.agenda.length > 5) s += '<p class="muted">+' + (day.agenda.length - 5) + ' outros. <a href="#/agenda">Ver tudo ›</a></p>';
+    return s + '</div>';
+  }
+  function ovHabitsCard(day) {
+    var done = day.habits.done, total = day.habits.total;
+    var pct = total ? Math.round(done / total * 100) : 0;
+    var s = '<div class="card"><div class="row between"><b>Hábitos de hoje</b><span class="muted">' + done + '/' + total + '</span></div>';
+    if (!total) return s + '<p class="muted">Nenhum hábito para hoje.</p><p><a href="#/habits">+ Criar hábito ›</a></p></div>';
+    s += '<div class="bar" role="img" aria-label="' + done + ' de ' + total + ' hábitos concluídos"><div style="width:' + pct + '%"></div></div>';
+    s += day.habits.items.map(function (i) {
+      var lbl = (i.done ? '✓ ' : '○ ') + i.name + (i.target ? ' • ' + i.target : '');
+      if (i.unit === 'BOOLEAN') {
+        return '<div class="ov-row"><button class="chk' + (i.done ? ' done' : '') + '" data-ovhb="' + i.id + '" aria-pressed="' + !!i.done + '" aria-label="' + esc((i.done ? 'Desmarcar ' : 'Concluir ') + i.name) + '">' + (i.done ? '✓' : '') + '</button><span>' + esc(lbl) + '</span></div>';
+      }
+      return '<div class="ov-row"><button class="chk' + (i.done ? ' done' : '') + '" data-ovhbq="' + i.id + '" aria-label="' + esc('Registrar ' + i.name) + '">' + (i.done ? '✓' : '○') + '</button><span>' + esc(lbl) + (i.value != null && !i.done ? ' • atual: ' + esc(String(i.value)) : '') + '</span></div>';
+    }).join('');
+    return s + '<p><a href="#/habits">Ver hábitos ›</a></p></div>';
+  }
+  function ovFinDayCard(day) {
+    var f = day.finance;
+    var s = '<div class="card"><div class="row between"><b>Finanças de hoje</b><a href="#/transactions">Ver movimentações ›</a></div>' +
+      '<p>Receitas <b class="pos">' + BRL(f.income) + '</b> • Despesas <b class="neg">' + BRL(f.expense) + '</b><br>Resultado <b>' + BRL(f.result) + '</b> <span class="muted">• ' + f.count + (f.count === 1 ? ' movimentação' : ' movimentações') + ' do casal</span></p>';
+    if (f.byCat.length) {
+      s += '<details><summary>Ver detalhes</summary><p class="muted">Despesas por categoria hoje:</p>' +
+        f.byCat.slice(0, 5).map(function (c) { return '<p>' + esc(c.name) + ' — <b>' + BRL(c.value) + '</b></p>'; }).join('') + '</details>';
+    } else if (!f.count) s += '<p class="muted">Nenhuma movimentação neste dia.</p>';
+    return s + '</div>';
+  }
+  function ovCommitCard(day) {
+    var s = '<div class="card"><div class="row between"><b>Compromissos financeiros</b><a href="#/calendar">Ver calendário ›</a></div>';
+    if (!day.commitments.length) return s + '<p class="muted">Nenhum compromisso financeiro próximo.</p></div>';
+    s += day.commitments.map(function (c) {
+      return '<p><b>' + esc(dueLabel(c.date)) + '</b> ' + esc(c.title) + '<br><b>' + BRL(c.amount) + '</b> <span class="muted">• ' + esc(c.status) + '</span></p>';
+    }).join('');
+    return s + '</div>';
+  }
+  function ovRecentCard(me, day) {
+    var s = '<div class="card"><div class="row between"><b>Movimentações recentes</b><a href="#/transactions">Ver todas ›</a></div>';
+    if (!day.recent.length) return s + '<p class="muted">Nenhuma movimentação recente.</p></div>';
+    s += day.recent.map(function (t) {
+      var ic = t.type === 'income' ? '💰' : '🧾';
+      var nm = '';
+      try { nm = J.DB.catName(me.id, t.category_id); } catch (e) { nm = ''; }
+      return '<p><span aria-hidden="true">' + ic + '</span> <b>' + esc(t.description) + '</b> <span class="muted">• ' + esc(dueLabel(t.date)) + (nm ? ' • ' + esc(nm) : '') + '</span><br><b class="' + (t.type === 'income' ? 'pos' : 'neg') + '">' + (t.type === 'income' ? '+' : '−') + ' ' + BRL(t.amount) + '</b></p>';
+    }).join('');
+    return s + '</div>';
+  }
+  function ovTimelineCard(day) {
+    var evs = [];
+    day.agenda.forEach(function (o) { evs.push({ t: o.start || null, k: 'age', title: o.title, who: o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal', ico: '📅' }); });
+    day.habits.items.forEach(function (i) { evs.push({ t: null, k: 'hab', title: (i.done ? '✓ ' : '○ ') + i.name, who: 'Hábito', ico: '🌱' }); });
+    day.commitments.slice(0, 3).forEach(function (c) { evs.push({ t: null, k: 'fin', title: c.title + ' • ' + BRL(c.amount), who: 'Financeiro', ico: '💳' }); });
+    if (!evs.length) return '<div class="card"><b>Hoje</b><p class="muted">Nada por aqui — dia livre.</p></div>';
+    evs.sort(function (a, b) { return (a.t || '99:99').localeCompare(b.t || '99:99'); });
+    return '<div class="card"><b>Linha do tempo</b><ul class="ov-tl">' + evs.slice(0, 9).map(function (e) {
+      return '<li><span class="ov-t">' + esc(e.t || '··:··') + '</span><span><span aria-hidden="true">' + e.ico + '</span> ' + esc(e.title) + '<br><span class="muted">' + esc(e.who) + '</span></span></li>';
+    }).join('') + '</ul></div>';
+  }
+  function ovWeekHtml(me, day, week) {
+    var s = blk('Semana', function () {
+      return '<div class="card"><b>Esta semana</b><p class="muted">' + esc(dueLabel(week.from) + ' – ' + dueLabel(week.to)) + '</p>' +
+        week.days.map(function (dd) {
+          var sel = dd.date === ov.date ? ' <span class="pill ok">ver</span>' : '';
+          return '<button class="tx" data-ovday="' + dd.date + '" aria-label="Ver ' + esc(dueLabel(dd.date)) + '"><span class="tx-mid"><b>' + esc(ovDayTitle(dd.date)) + '</b><small>' + dd.agenda + (dd.agenda === 1 ? ' evento' : ' eventos') + ' • ' + dd.habits_done + '/' + dd.habits_total + ' hábitos</small></span><b>' + BRL(dd.income - dd.expense) + '</b>' + sel + '</button>';
+        }).join('') + '</div>';
+    });
+    s += blk('Finanças da semana', function () {
+      var f = week.finance;
+      var b = '<div class="card"><b>Finanças da semana</b><p>Receitas <b class="pos">' + BRL(f.income) + '</b> • Despesas <b class="neg">' + BRL(f.expense) + '</b><br>Resultado <b>' + BRL(f.result) + '</b> <span class="muted">• do casal</span></p>';
+      if (f.biggest) b += '<p class="muted">Maior despesa: <b>' + esc(f.biggest.description) + '</b> ' + BRL(f.biggest.amount) + '</p>';
+      return b + '<p><a href="#/reports">Ver detalhes ›</a></p></div>';
+    });
+    var pair = '';
+    pair += blk('Hábitos', function () { return ovHabitsCard(day); });
+    pair += blk('Próximo', function () {
+      if (!week.upcoming.length) return '<div class="card"><b>Próximos eventos</b><p class="muted">Nada marcado por aqui.</p></div>';
+      return '<div class="card"><b>Próximos eventos</b>' + week.upcoming.map(function (e) {
+        return '<p><b>' + esc(dueLabel(e.date)) + '</b> ' + esc(e.time || '') + ' ' + esc(e.title) + ' <span class="muted">• ' + esc(e.who) + '</span></p>';
+      }).join('') + '<p><a href="#/calendar">Ver calendário ›</a></p></div>';
+    });
+    s += '<div class="ov-grid">' + pair + '</div>';
+    return s;
+  }
+  function ovMonthHtml(me, day, mon) {
+    var mode = '';
+    try { mode = J.DB.moneyMode(me.id); } catch (e) { mode = 'SEPARATE'; }
+    var s = blk('Mês', function () {
+      return '<div class="card"><b>' + esc(monthLabel(mon.month)) + '</b><p><b>' + mon.agenda.total + '</b> compromissos (' + mon.agenda.couple + ' do casal) • <b>' +
+        (mon.habits.consistency == null ? '—' : String(mon.habits.consistency).replace('.', ',') + '%') + '</b> hábitos • <b>' + BRL(mon.finance.expense) + '</b> despesas</p></div>';
+    });
+    s += blk('Finanças do mês', function () {
+      var f = mon.finance;
+      var tag = mode === 'JOINT' ? 'do casal' : '• ' + esc(ovModeVisionLabel(me));
+      var b = '<div class="card"><b>Finanças de ' + esc(monthLabel(mon.month).split(' ')[0].toLowerCase()) + '</b> <span class="muted">' + tag + '</span>' +
+        '<p>Receitas <b class="pos">' + BRL(f.income) + '</b> • Despesas <b class="neg">' + BRL(f.expense) + '</b><br>Resultado <b>' + BRL(f.result) + '</b> • Disponível <b>' + BRL(f.available) + '</b></p>';
+      if (mode === 'SEPARATE') b += '<p class="muted">Acertos entre vocês: <a href="#/settlements">ver acertos ›</a></p>';
+      return b + '<p><a href="#/reports">Ver finanças ›</a></p></div>';
+    });
+    var pair = '';
+    pair += blk('Hábitos no mês', function () {
+      if (!mon.habits.items.length) return '<div class="card"><b>Evolução dos hábitos</b><p class="muted">Sem hábitos ativos. <a href="#/habits">Criar hábito ›</a></p></div>';
+      return '<div class="card"><b>Evolução dos hábitos</b>' + mon.habits.items.map(function (h) {
+        return '<p>' + esc(h.name) + ' — <b>' + (h.pct == null ? '—' : String(h.pct).replace('.', ',') + '%') + '</b></p><div class="bar" role="img" aria-label="' + esc(h.name + ': ' + (h.pct == null ? 'sem dados' : h.pct + '%')) + '"><div style="width:' + Math.min(100, h.pct || 0) + '%"></div></div>';
+      }).join('') + '<p><a href="#/habits">Ver hábitos ›</a></p></div>';
+    });
+    pair += blk('Compromissos financeiros', function () { return ovCommitCard({ commitments: mon.commitments }); });
+    s += '<div class="ov-grid">' + pair + '</div>';
+    return s;
+  }
+  function ovModeVisionLabel(me) {
+    if (ov.vision === 'me') return 'sua visão';
+    if (ov.vision === 'partner') return 'visão do parceiro';
+    return 'do casal';
+  }
+  function bindOverview(v, me) {
+    var pv = document.getElementById('ov-prev');
+    if (pv) pv.onclick = function () {
+      if (ov.mode === 'day') ov.date = J.DB.agendaAddDays(ovDate(), -1);
+      else if (ov.mode === 'week') ov.date = J.DB.agendaAddDays(ovDate(), -7);
+      else ov.date = J.DB.shiftMonth(ovDate().slice(0, 7), -1) + '-01';
+      ovPersist(); render('dashboard');
+    };
+    var nx = document.getElementById('ov-next');
+    if (nx) nx.onclick = function () {
+      if (ov.mode === 'day') ov.date = J.DB.agendaAddDays(ovDate(), 1);
+      else if (ov.mode === 'week') ov.date = J.DB.agendaAddDays(ovDate(), 7);
+      else ov.date = J.DB.shiftMonth(ovDate().slice(0, 7), 1) + '-01';
+      ovPersist(); render('dashboard');
+    };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovm]'), function (b) {
+      b.onclick = function () { ov.mode = b.dataset.ovm; ovPersist(); render('dashboard'); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovv]'), function (b) {
+      b.onclick = function () { ov.vision = b.dataset.ovv; ovPersist(); render('dashboard'); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovqa]'), function (b) {
+      b.onclick = function () {
+        var k = b.dataset.ovqa;
+        if (k === 'ag') openAgendaModal(me, null, null);
+        else if (k === 'hb') location.hash = '#/habits';
+        else if (k === 'tx') openTxModal(me, null, 'expense');
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovhb]'), function (b) {
+      b.onclick = function () {
+        var id = b.dataset.ovhb, d = ovDate();
+        try {
+          var st = J.DB.habitOccurrenceStatus(me.id, id, d);
+          if (st.done && st.completion_id) { J.DB.removeCompletion(me.id, st.completion_id); toast('Hábito desmarcado.'); }
+          else { J.DB.recordCompletion(me.id, id, { completion_date: d }); toast('Hábito concluído! 🌱'); }
+          render('dashboard');
+        } catch (e) { toast('Não foi possível registrar.'); }
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovhbq]'), function (b) {
+      b.onclick = function () { openHabitRecord(me, b.dataset.ovhbq, ovDate()); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovday]'), function (b) {
+      b.onclick = function () { ov.date = b.dataset.ovday; ov.mode = 'day'; ovPersist(); render('dashboard'); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovretry]'), function (b) { b.onclick = function () { render('dashboard'); }; });
   }
   function blk(label, fn) {
     try { return fn(); }

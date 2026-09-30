@@ -19,3 +19,6 @@
 ## Habitos pessoais (rotina privada, sem logica financeira)
 - Fonte propria + RLS por dono, recorrencia/streaks/consistencia, pausa/arquivo, lembretes no NotificationEngine, calendario unificado com toggle, PersonalAssistantService neutro.
 - Testes (101/101 PASS): CRUD+privacidade, validacao, registros (parcial/duplicidade/correcao/desfazer), streaks, recorrencia, pausa/arquivo, calendario/evolucao/stats, notificacoes (3 tipos+scan+streak+deeplink), calendario unificado, PA service, regressao financeira, 6 telas + form + detalhe + dashboard + FAB + Mais + privacidade por URL, OF off, diagnose. Desktop/mobile. Console limpo.
+## Visao Geral / Planner (camada de agregacao, sem fonte propria)
+- OverviewAggregationService + /dashboard como planner (Dia/Semana/Mes, checklist de habitos, timeline, financas por periodo, respeito a SEPARATE/JOINT e privacidade). Dashboard financeiro antigo preservado sem rota.
+- Testes (73/73 PASS): agregacao dia/semana/mes, upcoming, leitura nao cria tx, privacidade (servico + UI), checklist marcar/desmarcar, navegacao temporal, 10 rotas de regressao, JOINT/SEPARATE, OF off, diagnose. Desktop/mobile (DOM sem overflow; corte do screenshot e artefato da largura minima do headless). Console limpo.
