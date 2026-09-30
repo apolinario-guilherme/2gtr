@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t55</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a><span class="nav-group">Minha vida</span><a href="#/agenda" data-r="agenda"><span class="nl">Agenda</span></a><a href="#/tasks" data-r="tasks"><span class="nl">Tarefas</span></a><a href="#/lists" data-r="lists"><span class="nl">Listas</span></a><a href="#/routines" data-r="routines"><span class="nl">Rotinas</span></a><a href="#/habits" data-r="habits"><span class="nl">Hábitos</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=904"></script>
+<script src="js/auth.js?cb=904"></script>
+<script src="js/router.js?cb=904"></script>
+<script src="js/app.js?cb=904"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function hides(t,m){ok(html().indexOf(t)<0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana R','ana.r@t.t','senha123');
+var B=Auth.register('Bruno R','bruno.r@t.t','senha123');
+DB.createCouple(A.id,'Casal R');
+var inv=DB.createInvite(A.id); DB.acceptInvite(B.id,inv.code);
+as(A.id);
+var TODAY=DB.agendaToday();
+/* --- CRUD + defaults --- */
+var r1=DB.createRoutine(A.id,{name:'Rotina da manhã'});
+eq(r1.visibility,'PERSONAL','default personal');
+eq(r1.status,'ACTIVE','default active');
+eq(r1.frequency_type,'DAILY','default daily');
+eq(r1.preferred_time,null,'sem horario ok');
+var r2=DB.createRoutine(A.id,{name:'Domingo de organização',visibility:'COUPLE',frequency_type:'SPECIFIC_DAYS',frequency_config:{daysOfWeek:[0]},preferred_time:'09:00'});
+throws(function(){DB.createRoutine(A.id,{name:'X'});},'nome curto');
+throws(function(){DB.createRoutine(A.id,{name:'Ok',visibility:'TRIO'});},'vis invalida');
+throws(function(){DB.createRoutine(A.id,{name:'Ok',frequency_type:'YEARLY'});},'freq invalida');
+throws(function(){DB.createRoutine(A.id,{name:'Ok',preferred_time:'99:99'});},'hora invalida');
+var i1=DB.addRoutineItem(A.id,r1.id,{title:'Arrumar cama'});
+eq(i1.item_type,'ACTION','default action');
+eq(i1.required,true,'default required');
+var i2=DB.addRoutineItem(A.id,r1.id,{title:'Ler 20 minutos',required:false});
+DB.updateRoutineItem(A.id,i1.id,{description:'todos os dias'});
+eq(DB.getRoutineItems(A.id,r1.id).filter(function(x){return x.id===i1.id;})[0].description,'todos os dias','update item');
+DB.reorderRoutineItems(A.id,r1.id,[i2.id,i1.id]);
+eq(DB.getRoutineItems(A.id,r1.id)[0].id,i2.id,'reorder');
+ok(DB.moveRoutineItem(A.id,i2.id,'down')===true,'move');
+throws(function(){DB.addRoutineItem(A.id,r1.id,{title:''});},'item vazio');
+throws(function(){DB.addRoutineItem(A.id,r1.id,{title:'X',item_type:'LINKED_ENTITY'});},'link sem entidade');
+/* --- recorrencia --- */
+var wd=new Date().getDay();
+var rW=DB.createRoutine(A.id,{name:'Semanal',frequency_type:'WEEKLY'});
+ok(DB.routineIsDueOnDate(rW,TODAY),'weekly hoje');
+ok(!DB.routineIsDueOnDate(rW,DB.agendaAddDays(TODAY,1)),'weekly amanha nao');
+ok(DB.routineIsDueOnDate(rW,DB.agendaAddDays(TODAY,7)),'weekly +7');
+var rS=DB.createRoutine(A.id,{name:'Dias',frequency_type:'SPECIFIC_DAYS',frequency_config:{daysOfWeek:[wd]}});
+ok(DB.routineIsDueOnDate(rS,TODAY),'spec hoje');
+ok(!DB.routineIsDueOnDate(rS,DB.agendaAddDays(TODAY,1))||wd===new Date(new Date().getTime()+864e5).getDay(),'spec coerente');
+var rM=DB.createRoutine(A.id,{name:'Mensal',frequency_type:'MONTHLY',frequency_config:{dayOfMonth:31},start_date:'2026-01-15'});
+ok(DB.routineIsDueOnDate(rM,'2026-02-28'),'fev clamp 31->28');
+ok(!DB.routineIsDueOnDate(rM,'2026-02-27'),'fev 27 nao');
+ok(DB.routineIsDueOnDate(rM,'2026-03-31'),'mar 31 sim');
+ok(DB.routineNextOccurrence(A.id,r1.id,TODAY)===TODAY,'next hoje');
+DB.pauseRoutine(A.id,r1.id);
+eq(DB.getRoutine(A.id,r1.id).status,'PAUSED','pausa');
+ok(!DB.routineIsDueOnDate(DB.getRoutine(A.id,r1.id),TODAY),'pausada nao devida');
+DB.resumeRoutine(A.id,r1.id);
+eq(DB.getRoutine(A.id,r1.id).status,'ACTIVE','retoma');
+ok(DB.routineIsDueOnDate(DB.getRoutine(A.id,r1.id),TODAY),'devida de novo');
+/* --- execucoes --- */
+var ex1=DB.getOrCreateExecution(A.id,r1.id,TODAY);
+var ex1b=DB.getOrCreateExecution(A.id,r1.id,TODAY);
+eq(ex1.id,ex1b.id,'idempotente');
+eq(ex1.routine_name_snapshot,'Rotina da manhã','snapshot');
+DB.startExecution(A.id,ex1.id);
+eq(DB.getExecution(A.id,ex1.id).status,'IN_PROGRESS','inicia');
+var pend=DB.getExecution(A.id,ex1.id).items.filter(function(x){return x.status==='PENDING';});
+ok(pend.length>=2,'itens materializados');
+var first=pend[0];
+DB.completeRoutineItem(A.id,ex1.id,first.id,{});
+eq(DB.getExecution(A.id,ex1.id).items.filter(function(x){return x.id===first.id;})[0].status,'COMPLETED','conclui item');
+eq(DB.getExecution(A.id,ex1.id).items.filter(function(x){return x.id===first.id;})[0].completed_by,A.id,'completed_by');
+DB.reopenRoutineItem(A.id,ex1.id,first.id);
+eq(DB.getExecution(A.id,ex1.id).items.filter(function(x){return x.id===first.id;})[0].status,'PENDING','reabre');
+DB.skipRoutineItem(A.id,ex1.id,first.id);
+eq(DB.getExecution(A.id,ex1.id).items.filter(function(x){return x.id===first.id;})[0].status,'SKIPPED','pula');
+throws(function(){DB.completeExecution(A.id,ex1.id,{});},'forca regra required');
+DB.completeExecution(A.id,ex1.id,{force:true});
+eq(DB.getExecution(A.id,ex1.id).status,'COMPLETED','conclui forcado');
+/* --- privacidade --- */
+as(B.id);
+throws(function(){DB.getRoutine(B.id,r1.id);},'parceiro nao ve personal');
+throws(function(){DB.getOrCreateExecution(B.id,r1.id,TODAY);},'parceiro nao executa personal');
+eq(DB.getRoutine(B.id,r2.id).name,'Domingo de organização','casal visivel');
+var exB=DB.getOrCreateExecution(B.id,r2.id,TODAY);
+as(A.id);
+var exA=DB.getOrCreateExecution(A.id,r2.id,TODAY);
+eq(exA.id,exB.id,'execucao compartilhada');
+var itC=DB.addRoutineItem(A.id,r2.id,{title:'Conferir contas',assigned_to:B.id});
+var exA2=DB.getExecution(A.id,exA.id);
+var ixC=exA2.items.filter(function(x){return x.routine_item_id===itC.id;})[0];
+DB.completeRoutineItem(A.id,exA.id,ixC.id,{});
+as(B.id);
+eq(DB.getExecution(B.id,exB.id).items.filter(function(x){return x.routine_item_id===itC.id;})[0].status,'COMPLETED','B ve conclusao de A');
+as(A.id);
+/* --- vinculo HABIT --- */
+var h1=DB.createHabit(A.id,{name:'Leitura noite',frequency_type:'daily',target_unit:'BOOLEAN',target_count:1,start_date:TODAY});
+var ih=DB.addRoutineItem(A.id,r1.id,{title:'Ler',item_type:'LINKED_ENTITY',linked_entity_type:'HABIT',linked_entity_id:h1.id});
+var exH=DB.getOrCreateExecution(A.id,r1.id,DB.agendaAddDays(TODAY,1));
+var ixH=exH.items.filter(function(x){return x.routine_item_id===ih.id;})[0];
+DB.completeRoutineItem(A.id,exH.id,ixH.id,{});
+ok(DB.getExecution(A.id,exH.id).items.filter(function(x){return x.id===ixH.id;})[0].status==='COMPLETED','habito via rotina');
+var hc0=JSON.parse(localStorage.getItem('juntos_db_v1')).habit_completions.filter(function(c){return c.habit_id===h1.id;}).length;
+DB.completeRoutineItem(A.id,exH.id,ixH.id,{});
+var hc1=JSON.parse(localStorage.getItem('juntos_db_v1')).habit_completions.filter(function(c){return c.habit_id===h1.id;}).length;
+eq(hc1,hc0,'sem segunda conclusao');
+/* --- vinculo TASK --- */
+var t1=DB.createTask(A.id,{title:'Revisar orçamento'});
+var it2=DB.addRoutineItem(A.id,r2.id,{title:'Revisar',item_type:'LINKED_ENTITY',linked_entity_type:'TASK',linked_entity_id:t1.id});
+var exT=DB.getOrCreateExecution(A.id,r2.id,TODAY);
+var ixT=exT.items.filter(function(x){return x.routine_item_id===it2.id;})[0];
+DB.completeRoutineItem(A.id,exT.id,ixT.id,{});
+eq(DB.getTask(A.id,t1.id).status,'COMPLETED','tarefa via rotina');
+/* --- vinculo LIST (sem marcar itens) --- */
+var ll=DB.createList(A.id,{name:'Mercado R'});
+var li1=DB.addItem(A.id,ll.id,{title:'Café'});
+var il=DB.addRoutineItem(A.id,r2.id,{title:'Conferir mercado',item_type:'LINKED_ENTITY',linked_entity_type:'LIST',linked_entity_id:ll.id});
+var exL=DB.getExecution(A.id,exT.id);
+var ixL=exL.items.filter(function(x){return x.routine_item_id===il.id;})[0];
+DB.completeRoutineItem(A.id,exT.id,ixL.id,{});
+ok(!DB.getListItems(A.id,ll.id,{}).filter(function(x){return x.id===li1.id;})[0].checked,'lista intacta');
+/* --- vinculo AGENDA --- */
+var ag=DB.createAgendaEvent(A.id,{title:'Dentista R',date:TODAY,visibility:'COUPLE'});
+var ia=DB.addRoutineItem(A.id,r2.id,{title:'Ir ao dentista',item_type:'LINKED_ENTITY',linked_entity_type:'AGENDA_EVENT',linked_entity_id:ag.id});
+var exAg=DB.getExecution(A.id,exT.id);
+var ixA=exAg.items.filter(function(x){return x.routine_item_id===ia.id;})[0];
+DB.completeRoutineItem(A.id,exT.id,ixA.id,{});
+eq(DB.getExecution(A.id,exT.id).items.filter(function(x){return x.id===ixA.id;})[0].status,'COMPLETED','agenda ack');
+/* --- sincronizacao externa --- */
+var h2=DB.createHabit(A.id,{name:'Agua R',frequency_type:'daily',target_unit:'BOOLEAN',target_count:1,start_date:TODAY});
+var ih2=DB.addRoutineItem(A.id,r1.id,{title:'Beber agua',item_type:'LINKED_ENTITY',linked_entity_type:'HABIT',linked_entity_id:h2.id});
+DB.recordCompletion(A.id,h2.id,{completion_date:TODAY});
+var exS2=DB.getExecution(A.id,ex1.id);
+ok(exS2.items.filter(function(x){return x.routine_item_id===ih2.id;})[0].status==='COMPLETED','sync externo reflete');
+/* --- financas intactas --- */
+var tx0=DB.listTx(A.id,{}).length;
+DB.completeRoutineItem(A.id,exT.id,ixT.id,{});
+eq(DB.listTx(A.id,{}).length,tx0,'rotina nao cria tx');
+/* --- overview + calendario + notif --- */
+var day=DB.getOverviewDay(A.id,TODAY,'couple');
+ok(Array.isArray(day.routines),'overview rotinas');
+var cal=DB.getCalendarEvents(A.id,{from:TODAY,to:DB.agendaAddDays(TODAY,7)});
+var rtEvs=cal.filter(function(e){return e.event_type==='routine';});
+ok(rtEvs.length>=1,'rotina no calendario');
+ok(rtEvs.every(function(e){return e.amount===0;}),'sem valor');
+var det=DB.getEventDetails(A.id,rtEvs[0].id);
+ok(det.actions[0].route.indexOf('#/routines')===0,'detalhe rotina');
+DB.notifScan(A.id,{});
+ok(DB.notifList(A.id,{type:'routine_due'}).length>=1,'due scan');
+/* --- IA --- */
+var conv=DB.aiCreateConversation(A.id,'R');
+function ask(t){return DB.aiProcessMessage(A.id,conv.id,t,{channel:'web'});}
+var q1=ask('Quais rotinas tenho hoje?');
+eq(q1.intent,'routine_today','intent hoje');
+var q2=ask('Cria uma rotina da noite com separar roupa e conferir agenda');
+eq(q2.intent,'routine_create','intent criar');
+ok(!!q2.pendingAction,'draft confirma');
+ask('sim');
+ok(DB.searchRoutines(A.id,'noite').length>=1,'criada via IA');
+var q3=ask('Começar rotina da manhã');
+eq(q3.intent,'routine_start','intent start');
+var q4=ask('Pausa a rotina da noite');
+eq(q4.intent,'routine_pause','intent pausa');
+var q5=ask('Onde fica a tela de rotinas?');
+eq(q5.intent,'product_navigation','nav');
+eq(q5.navigationTarget,'#/routines','nav rotinas');
+/* --- conversa com contexto (rotina fresca, execucao aberta) --- */
+var rC=DB.createRoutine(A.id,{name:'Rotina conversa'});
+DB.addRoutineItem(A.id,rC.id,{title:'Arrumar cama'});
+DB.addRoutineItem(A.id,rC.id,{title:'Beber água'});
+var conv2=DB.aiCreateConversation(A.id,'R2');
+function ask2(t){return DB.aiProcessMessage(A.id,conv2.id,t,{channel:'web'});}
+ask2('Começar rotina conversa');
+var qc=ask2('Já arrumei a cama');
+eq(qc.intent,'routine_complete_item','contexto resolve');
+/* --- whatsapp --- */
+var PHONE='+5511999990004';
+var lk=DB.waGenerateLinkCode(A.id);
+DB.waConsumeLinkCode(PHONE,lk.code);
+function wa(t,iid){return DB.whatsappWebhookReceive('local-sim',{messageId:iid,from:PHONE,type:'text',text:t});}
+var w1=wa('/rotinas','wr1');
+eq(w1.intent,'routine_today','wa rotinas');
+var w2=wa('Quais rotinas tenho hoje?','wr2');
+eq(w2.intent,'routine_today','wa hoje');
+/* --- UI --- */
+location.hash='#/routines';
+App.render('routines');
+shows('Rotinas','pagina');
+shows('+ Nova rotina','criar');
+shows('Hoje','aba hoje');
+document.getElementById('rt-new').onclick();
+ok(!!document.getElementById('f-rn'),'form abre');
+document.getElementById('f-rn').value='Rotina UI';
+document.getElementById('sv').onclick();
+var cru=DB.searchRoutines(A.id,'Rotina UI')[0];
+ok(!!cru,'criada via UI');
+App.render('routines/'+cru.id);
+shows('Rotina UI','detalhe');
+shows('Adicionar item','quick add');
+document.getElementById('rt-add').value='Item UI';
+document.getElementById('rt-addf').onsubmit({preventDefault:function(){}});
+shows('Item UI','item via UI');
+var tgl=document.querySelector('[data-rtdone]');
+ok(!!tgl,'toggle existe');
+tgl.onclick();
+shows('✓','concluido via UI');
+App.render('dashboard');
+shows('Continuar','dash card');
+App.render('more');
+shows('Rotinas','mais');
+ok(document.querySelector('#side-nav a[data-r="routines"]'),'sidebar');
+as(B.id);
+App.render('routines');
+hides('Rotina da manhã','B nao ve personal');
+as(A.id);
+/* --- regressao --- */
+App.render('agenda'); shows('Agenda','agenda ok');
+App.render('tasks'); shows('Tarefas','tasks ok');
+App.render('lists'); shows('Listas','lists ok');
+App.render('habits'); shows('Meus hábitos','habitos ok');
+App.render('transactions'); shows('Receitas','tx ok');
+App.render('reports'); shows('Relatórios','reports ok');
+App.render('notifications'); shows('Notificações','notif ok');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(A.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>

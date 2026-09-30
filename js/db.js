@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -224,6 +224,11 @@ window.Juntos = window.Juntos || {};
     if (!db.tasks) { db.tasks = []; changed = true; }
     if (!db.lists) { db.lists = []; changed = true; }
     if (!db.list_items) { db.list_items = []; changed = true; }
+    if (!db.routines) { db.routines = []; changed = true; }
+    if (!db.routine_items) { db.routine_items = []; changed = true; }
+    if (!db.routine_executions) { db.routine_executions = []; changed = true; }
+    if (!db.routine_item_executions) { db.routine_item_executions = []; changed = true; }
+    if (!db.routine_contexts) { db.routine_contexts = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5944,14 +5949,21 @@ window.Juntos = window.Juntos || {};
         { key: 'task_archive', kind: 'write' },
         { key: 'list_create', kind: 'write' }, { key: 'list_add_item', kind: 'write' },
         { key: 'list_check_item', kind: 'write' }, { key: 'list_uncheck_item', kind: 'write' },
-        { key: 'list_view', kind: 'read' }, { key: 'list_search', kind: 'read' }
+        { key: 'list_view', kind: 'read' }, { key: 'list_search', kind: 'read' },
+        { key: 'routine_list', kind: 'read' }, { key: 'routine_today', kind: 'read' },
+        { key: 'routine_detail', kind: 'read' },
+        { key: 'routine_create', kind: 'write' }, { key: 'routine_start', kind: 'write' },
+        { key: 'routine_complete_item', kind: 'write' }, { key: 'routine_skip_item', kind: 'write' },
+        { key: 'routine_complete', kind: 'write' }, { key: 'routine_pause', kind: 'write' },
+        { key: 'routine_resume', kind: 'write' }, { key: 'routine_update', kind: 'write' },
+        { key: 'routine_link', kind: 'write' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6236,6 +6248,22 @@ window.Juntos = window.Juntos || {};
       else if (has(['minhas tarefas', 'lista de tarefas', 'tarefas do casal', 'atribuido a mim', 'atribuida a mim', 'tarefas pendentes'])) out.intent = 'task_list';
       else if (has(['detalhe da tarefa', 'detalhes da tarefa', 'sobre a tarefa'])) out.intent = 'task_detail';
       else if ((has(['altera', 'alterar', 'muda', 'mudar', 'edita', 'editar']) && has(['tarefa', 'tarefas']))) out.intent = 'task_update';
+      else if ((has(['rotina', 'rotinas']) && has(['pausa', 'pausar', 'pause', 'interrompe'])) || /(pausa|pausar|pause).{0,40}rotina/.test(s)) out.intent = 'routine_pause';
+      else if ((has(['rotina', 'rotinas']) && has(['retoma', 'retomar', 'reativa', 'reativar', 'volta'])) || /(retoma|reativa).{0,40}rotina/.test(s)) out.intent = 'routine_resume';
+      else if ((has(['rotina', 'rotinas']) && has(['comeca', 'começar', 'comecar', 'inicia', 'iniciar', 'start', 'bora'])) || /(comeca|comecar|inicia|start).{0,40}rotina/.test(s)) out.intent = 'routine_start';
+      else if ((has(['rotina', 'rotinas']) && has(['terminei', 'termine', 'conclui', 'concluí', 'finalizei', 'completei'])) || /(terminei|minha rotina).{0,40}(termin|conclui|pronta)/.test(s) || /terminei (minha|a) rotina/.test(s)) out.intent = 'routine_complete';
+      else if ((has(['rotina', 'rotinas']) && has(['pula', 'pular', 'pule'])) || /(pula|pular|pule).{0,60}rotina/.test(s)) out.intent = 'routine_skip_item';
+      else if ((has(['rotina', 'rotinas']) && has(['cria', 'criar', 'crie', 'nova', 'novo', 'monta', 'montar'])) || /(cria|criar|crie|monta).{2,60}rotina/.test(s)) out.intent = 'routine_create';
+      else if ((has(['rotina', 'rotinas']) && has(['coloca', 'colocar', 'coloque', 'adiciona', 'adicionar', 'vincula', 'vincular', 'inclui'])) || /(coloca|vincula|adiciona).{2,60}(na |na)?rotina/.test(s)) out.intent = 'routine_link';
+      else if (has(['rotina', 'rotinas']) && has(['falta', 'faltam', 'pendente', 'pendentes', 'o que'])) out.intent = 'routine_detail';
+      else if (has(['rotina', 'rotinas']) && has(['como esta', 'como está', 'andamento', 'status', 'detalhe', 'detalhes', 'mostra', 'mostre'])) out.intent = 'routine_detail';
+      else if (has(['quais rotinas', 'minhas rotinas', 'rotinas tenho', 'rotinas temos', 'rotina hoje', 'rotinas hoje', 'proxima rotina', 'próxima rotina']) || (has(['rotina', 'rotinas']) && has(['tenho', 'temos', 'quais', 'juntos', 'nossa', 'nossas']))) out.intent = 'routine_today';
+      else if (has(['rotina', 'rotinas']) && has(['lista', 'listas', 'todas', 'ativas', 'pausadas'])) out.intent = 'routine_list';
+      else if ((has(['altera', 'alterar', 'muda', 'mudar', 'edita', 'editar', 'horario']) && has(['rotina', 'rotinas']))) out.intent = 'routine_update';
+      else if (/^(pula|pular|pule)\b/.test(s) && DB.routineHasPendingContext(userId)) out.intent = 'routine_skip_item';
+      else if (/^(falta|faltam|o que falta|o que)\b/.test(s) && DB.routineHasPendingContext(userId)) out.intent = 'routine_detail';
+      else if (/^(comeca|comecar|inicia|iniciar|bora|vamos)\b/.test(s) && DB.routineHasPendingContext(userId)) out.intent = 'routine_start';
+      else if (/^(ja|terminei|conclui|fiz|pronto|feito|terminei)\b/.test(s) && DB.routineHasPendingContext(userId) && !has(['fatura', 'boleto', 'cartao', 'conta', 'meta', 'orcamento', 'transacao', 'despesa', 'receita', 'compromisso', 'reuniao', 'consulta', 'tarefa', 'habito', 'lista', 'mercado', 'pagamento', 'gasto', 'pix'])) out.intent = 'routine_complete_item';
       else if ((has(['marca', 'marcar', 'marque', 'comprei', 'já comprei', 'ja comprei']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(marca|marcar|marque|comprei|compra feita) .{2,60} (na lista|do mercado|da lista)/.test(s)) out.intent = 'list_check_item';
       else if ((has(['adiciona', 'adicionar', 'adicione', 'coloca', 'colocar', 'coloque', 'inclui', 'incluir']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(adiciona|coloque|inclui) .{2,80} (na lista|no mercado|na viagem)/.test(s)) out.intent = 'list_add_item';
       else if ((has(['cria', 'criar', 'crie', 'nova lista', 'nova check']) && has(['lista', 'listas', 'mercado', 'viagem', 'checklist', 'compras'])) || /(cria|criar|crie) .{2,60} lista/.test(s)) out.intent = 'list_create';
@@ -6379,6 +6407,7 @@ window.Juntos = window.Juntos || {};
       if (/^habit_/.test(intent)) return 'HABITS';
       if (/^task_/.test(intent)) return 'TASKS';
       if (/^list_/.test(intent)) return 'LISTS';
+      if (/^routine_/.test(intent)) return 'ROUTINES';
       if (/^(account_|card_|invoice_|installment_|recurring_|settlement_|cash_flow|transaction_|category_|budget_|financial_|income_|expense_|report_|openfinance_|planning_question|create_|mark_|update_)/.test(intent)) return 'FINANCE';
       if (/^(goal_|contribute_)/.test(intent)) return 'GOALS';
       if (/^planning_/.test(intent)) return 'PLANNING';
@@ -6449,6 +6478,7 @@ window.Juntos = window.Juntos || {};
       return [
         { match: ['tarefa', 'tarefas'], label: 'Tarefas', route: '#/tasks' },
         { match: ['lista', 'listas', 'mercado', 'checklist'], label: 'Listas', route: '#/lists' },
+        { match: ['rotina', 'rotinas'], label: 'Rotinas', route: '#/routines' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
         { match: ['notifica'], label: 'Notificações', route: '#/notifications' },
@@ -6627,6 +6657,15 @@ window.Juntos = window.Juntos || {};
         if (!td) throw new Error('Tarefa não encontrada.');
         var tf = DB.getTask(userId, td.id);
         out = { id: tf.id, title: tf.title, status: tf.status, priority: tf.priority, visibility: tf.visibility, due_date: tf.due_date, due_time: tf.due_time, assigned_to: tf.assigned_to, recurrence: tf.recurrence_type };
+      } else if (name === 'routine_today' || name === 'routine_list') {
+        var rrows = name === 'routine_today' ? DB.getRelevantRoutines(userId, 10) : DB.getRoutines(userId, { status: 'ACTIVE', limit: 20 }).map(function (r) { return { id: r.id, name: r.name, visibility: r.visibility, preferred_time: r.preferred_time }; });
+        out = { routines: rrows };
+      } else if (name === 'routine_detail') {
+        var rd = DB.aiFindRoutine(userId, args.routine_name || '')[0];
+        if (!rd) throw new Error('Rotina não encontrada.');
+        var rex = null;
+        try { rex = DB.getOrCreateExecution(userId, rd.id, DB.agendaToday()); } catch (eR) {}
+        out = rex ? { id: rd.id, name: rd.name, visibility: rd.visibility, status: rd.status, execution: { id: rex.id, status: rex.status, total: rex.total, done: rex.done, items: rex.items.map(function (it) { return { title: it.title, status: it.status, required: it.required }; }) } } : { id: rd.id, name: rd.name, visibility: rd.visibility, status: rd.status };
       } else if (name === 'list_view' || name === 'list_search') {
         var lq = args.list_name || args.query || '';
         var lrows = lq ? DB.searchLists(userId, lq, 10) : DB.getLists(userId, { status: 'ACTIVE', limit: 10 });
@@ -6776,6 +6815,26 @@ window.Juntos = window.Juntos || {};
           DB.validateTask(userId, { title: p.title, description: p.description, visibility: 'COUPLE', priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, source_type: 'AI' });
         }
         if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === p.assigned_to; })) throw new Error('Pessoa inválida.');
+      } else if (actionType === 'routine_create') {
+        DB.validateRoutine(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', frequency_type: p.frequency_type, frequency_config: p.frequency_config, preferred_time: p.preferred_time, start_date: p.start_date, end_date: p.end_date });
+        (p.items || []).forEach(function (it) { DB.validateRoutineItem(userId, it); });
+      } else if (actionType === 'routine_update') {
+        var ru = db.routines.find(function (x) { return x.id === p.routine_id && x.couple_id === cid && !x.deleted_at; });
+        if (!ru || !DB.routineCanAct(db, userId, ru)) throw new Error('Rotina inválida.');
+      } else if (actionType === 'routine_pause' || actionType === 'routine_resume' || actionType === 'routine_archive') {
+        var rp = db.routines.find(function (x) { return x.id === p.routine_id && x.couple_id === cid && !x.deleted_at; });
+        if (!rp || !DB.routineCanAct(db, userId, rp)) throw new Error('Rotina inválida.');
+      } else if (actionType === 'routine_start' || actionType === 'routine_complete') {
+        var rs = db.routines.find(function (x) { return x.id === p.routine_id && x.couple_id === cid && !x.deleted_at; });
+        if (!rs || !DB.routineCanAct(db, userId, rs)) throw new Error('Rotina inválida.');
+      } else if (actionType === 'routine_complete_item' || actionType === 'routine_skip_item') {
+        var ri = db.routine_item_executions.find(function (x) { return x.id === p.item_execution_id; });
+        if (!ri) throw new Error('Item inválido.');
+        DB.routineExecGuard(db, userId, ri.routine_execution_id);
+      } else if (actionType === 'routine_link') {
+        var rl = db.routines.find(function (x) { return x.id === p.routine_id && x.couple_id === cid && !x.deleted_at; });
+        if (!rl || !DB.routineCanAct(db, userId, rl)) throw new Error('Rotina inválida.');
+        DB.routineResolveLink(userId, p.linked_entity_type, p.linked_entity_id);
       } else if (actionType === 'list_create') {
         DB.validateList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' });
       } else if (actionType === 'list_add_item') {
@@ -6900,6 +6959,36 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'task_archive') {
           DB.archiveTask(userId, p.task_id);
           res = { task_id: p.task_id };
+        } else if (r.action_type === 'routine_create') {
+          var srcR = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var nr = DB.createRoutine(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', frequency_type: p.frequency_type, frequency_config: p.frequency_config, preferred_time: p.preferred_time, start_date: p.start_date }, { source_type: srcR });
+          (p.items || []).slice(0, 30).forEach(function (it) { DB.addRoutineItem(userId, nr.id, it); });
+          res = { routine_id: nr.id };
+        } else if (r.action_type === 'routine_start') {
+          var exS = DB.getOrCreateExecution(userId, p.routine_id, p.date || DB.agendaToday());
+          DB.startExecution(userId, exS.id);
+          res = { routine_id: p.routine_id, execution_id: exS.id };
+        } else if (r.action_type === 'routine_complete_item') {
+          DB.completeRoutineItem(userId, p.execution_id, p.item_execution_id, { idempotency_key: 'ai:' + r.id });
+          res = { execution_id: p.execution_id };
+        } else if (r.action_type === 'routine_skip_item') {
+          DB.skipRoutineItem(userId, p.execution_id, p.item_execution_id);
+          res = { execution_id: p.execution_id };
+        } else if (r.action_type === 'routine_complete') {
+          DB.completeExecution(userId, p.execution_id, {});
+          res = { execution_id: p.execution_id };
+        } else if (r.action_type === 'routine_pause') {
+          DB.pauseRoutine(userId, p.routine_id);
+          res = { routine_id: p.routine_id };
+        } else if (r.action_type === 'routine_resume') {
+          DB.resumeRoutine(userId, p.routine_id);
+          res = { routine_id: p.routine_id };
+        } else if (r.action_type === 'routine_update') {
+          DB.updateRoutine(userId, p.routine_id, p.patch || {});
+          res = { routine_id: p.routine_id };
+        } else if (r.action_type === 'routine_link') {
+          var nl2 = DB.addRoutineItem(userId, p.routine_id, { title: p.title, item_type: 'LINKED_ENTITY', linked_entity_type: p.linked_entity_type, linked_entity_id: p.linked_entity_id, assigned_to: p.assigned_to || null, required: p.required !== undefined ? !!p.required : true });
+          res = { routine_id: p.routine_id, item_id: nl2.id };
         } else if (r.action_type === 'list_create') {
           var srcL = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
           var nl = DB.createList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' }, { source_type: srcL });
@@ -7292,6 +7381,173 @@ window.Juntos = window.Juntos || {};
             params = { title: atitle.charAt(0).toUpperCase() + atitle.slice(1), description: '', visibility: 'COUPLE', priority: 'NORMAL', due_date: (!aw2.clarification && aw2.date) ? aw2.date : null, due_time: (!aw2.clarification && aw2.start) ? aw2.start : null, assigned_to: apart, recurrence: { type: 'NONE' } };
             label = 'Criar tarefa "' + params.title + '" para o seu par' + (params.due_date ? ' (' + params.due_date.split('-').reverse().join('/') + ')' : '');
           }
+        } else if (det.intent === 'routine_create') {
+          var rcRaw = rawText.replace(/(cria|criar|crie|uma rotina|nova rotina|monta|montar|para nós|pra nos|para nos|nos dois|nós dois|do casal|compartilhada|compartilhado|juntos|juntas|todos os dias|todo dia|diariamente|toda semana|mensal|todo mês|por favor)/gi, ' ').replace(/\s+/g, ' ').trim();
+          var rcFreq = 'DAILY', rcCfg = { interval: 1 }, rcStart = today;
+          var rcCouple = /(para nos|pra nos|nos dois|do casal|casal|compartilhada|compartilhado|juntos|juntas|nossa|nosso|para nós|nós dois)\b/.test(s);
+          var wdMap = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+          var wdFound = null;
+          Object.keys(wdMap).forEach(function (k) { if (new RegExp('\\b' + k + '\\b').test(s)) wdFound = wdMap[k]; });
+          if (wdFound != null) { rcFreq = 'SPECIFIC_DAYS'; rcCfg = { interval: 1, daysOfWeek: [wdFound] }; }
+          else if (/(mensal|todo mes|todo mês)/.test(s)) {
+            rcFreq = 'MONTHLY';
+            var dmR = s.match(/dia\s?(\d{1,2})\b/);
+            if (dmR) rcCfg = { interval: 1, dayOfMonth: Math.min(31, Math.max(1, +dmR[1])) };
+          }
+          var rcTime = null, tmR = s.match(/às?\s?(\d{1,2})(?::(\d{2}))?\s?h\b/);
+          if (tmR) { var rhh = Math.min(23, +tmR[1]); rcTime = ('0' + rhh).slice(-2) + ':' + (tmR[2] || '00'); }
+          var rcItems = [];
+          var withM = rawText.match(/com\s+(.+)$/i);
+          if (withM) {
+            withM[1].split(/,|\be\b/).forEach(function (pie) {
+              var t = pie.replace(/(todos os dias|todo dia|diariamente|toda semana|mensal|para nós|pra nos|do casal|por favor|[0-9\/]+)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+              if (t.length >= 2) rcItems.push({ title: t.charAt(0).toUpperCase() + t.slice(1) });
+            });
+            rcItems = rcItems.slice(0, 30);
+          }
+          var rcName = rcRaw.replace(/(com\s+.+$)/i, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Nova rotina';
+          if (/^(nova rotina|uma rotina|rotina)$/i.test(rcName)) rcName = 'Nova rotina';
+          rcName = rcName.charAt(0).toUpperCase() + rcName.slice(1);
+          if (!rcItems.length) throw { clarification: 'Posso criar a rotina "' + rcName + '" (' + (rcCouple ? 'casal' : 'pessoal') + '). Quais itens você quer incluir?' };
+          params = { name: rcName, description: '', visibility: rcCouple ? 'COUPLE' : 'PERSONAL', frequency_type: rcFreq, frequency_config: rcCfg, preferred_time: rcTime, start_date: rcStart, items: rcItems };
+          label = 'Criar rotina "' + rcName + '" (' + rcFreq.toLowerCase() + ', ' + (rcCouple ? 'casal' : 'pessoal') + ') com ' + rcItems.length + ' itens';
+        } else if (det.intent === 'routine_start') {
+          var stCands = DB.aiFindRoutine(userId, rawText);
+          var stCtx = null;
+          try { stCtx = DB.routineGetContext(userId, convId); } catch (eSC) {}
+          var stR = stCands.length === 1 ? stCands[0] : null;
+          if (!stR && stCtx) { try { stR = DB.getRoutine(userId, (DB.getExecution(userId, stCtx.entity_id) || {}).routine_id); } catch (eSR) {} }
+          if (!stR) {
+            if (!stCands.length) throw { clarification: 'Qual rotina você quer começar? Ex: "começar rotina da manhã".' };
+            throw { clarification: 'Qual delas? ' + stCands.slice(0, 3).map(function (r) { return '"' + r.name + '"'; }).join(', ') + '?' };
+          }
+          if (!DB.routineIsDueOnDate(stR, today)) {
+            var nxS = DB.routineNextOccurrence(userId, stR.id, today);
+            throw { clarification: '"' + stR.name + '" não está prevista para hoje.' + (nxS ? ' Próxima: ' + nxS.split('-').reverse().join('/') + '.' : '') };
+          }
+          var exS = DB.getOrCreateExecution(userId, stR.id, today);
+          DB.startExecution(userId, exS.id);
+          var exSF = DB.getExecution(userId, exS.id);
+          try { DB.routineSetContext(userId, convId, opts.channel || 'web', exS.id, 30); } catch (eCX) {}
+          try { DB.logSecurityEvent(userId, 'ai_action', { action: 'routine_started', entity_type: 'routine', entity_id: stR.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (eS2) {}
+          return { answer: '*' + stR.name + '*\n' + exSF.items.slice(0, 12).map(function (it) { return (it.status === 'COMPLETED' ? '✓ ' : '○ ') + it.title; }).join('\n'), facts: [{ label: 'itens', value: exSF.total }], tools: ['routine_start'], intent: det.intent, domain: 'ROUTINES' };
+        } else if (det.intent === 'routine_complete_item' || det.intent === 'routine_skip_item') {
+          var ciCands = DB.aiFindRoutine(userId, rawText);
+          var ciCtx = null;
+          try { ciCtx = DB.routineGetContext(userId, convId); } catch (eCC) {}
+          var ciEx = null, ciR = null;
+          if (ciCands.length === 1) {
+            ciR = ciCands[0];
+            ciEx = DB.getOrCreateExecution(userId, ciR.id, today);
+          } else if (ciCtx) {
+            try { ciEx = DB.getExecution(userId, ciCtx.entity_id); ciR = DB.getRoutine(userId, ciEx.routine_id); } catch (eCE) {}
+          }
+          if (!ciEx) {
+            if (ciCands.length > 1) throw { clarification: 'De qual rotina? ' + ciCands.slice(0, 3).map(function (r) { return '"' + r.name + '"'; }).join(', ') + '?' };
+            throw { clarification: 'De qual rotina? Ex: "já bebi água na rotina da manhã".' };
+          }
+          var pend = ciEx.items.filter(function (it) { return it.status === 'PENDING'; });
+          if (!pend.length) throw { clarification: 'Nada pendente em "' + ciR.name + '".' };
+          var scored = pend.map(function (it) {
+            var tn = DB.aiNorm(it.title);
+            var words = tn.split(' ').filter(function (w) { return w.length >= 3; });
+            var hit = tn.length >= 3 && s.indexOf(tn) >= 0;
+            if (!hit) hit = words.some(function (w) { return new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(s); });
+            return { it: it, hit: hit };
+          }).filter(function (x) { return x.hit; });
+          if (!scored.length) throw { clarification: 'O que ' + (det.intent === 'routine_skip_item' ? 'pular' : 'marcar') + ' em "' + ciR.name + '"? Falta: ' + pend.slice(0, 5).map(function (it) { return '"' + it.title + '"'; }).join(', ') + '.' };
+          if (scored.length > 1) throw { clarification: 'Qual deles? ' + scored.slice(0, 3).map(function (x) { return '"' + x.it.title + '"'; }).join(', ') + '?' };
+          var ciOne = scored[0].it;
+          var ciAfter;
+          if (det.intent === 'routine_skip_item') {
+            ciAfter = DB.skipRoutineItem(userId, ciEx.id, ciOne.id);
+            try { DB.routineSetContext(userId, convId, opts.channel || 'web', ciEx.id, 30); } catch (eCX2) {}
+            return { answer: 'Pulei "' + ciOne.title + '" (' + ciAfter.done + ' de ' + ciAfter.total + ').', facts: [], tools: ['routine_skip_item'], intent: det.intent, domain: 'ROUTINES' };
+          }
+          ciAfter = DB.completeRoutineItem(userId, ciEx.id, ciOne.id, { idempotency_key: 'ai:' + messageId });
+          try { DB.routineSetContext(userId, convId, opts.channel || 'web', ciEx.id, 30); } catch (eCX3) {}
+          var ciPend2 = ciAfter.items.filter(function (it) { return it.status === 'PENDING'; });
+          return { answer: '*' + ciR.name + '*\n' + ciAfter.items.slice(0, 12).map(function (it) { return (it.status === 'COMPLETED' ? '✓ ' : it.status === 'SKIPPED' ? '– ' : '○ ') + it.title; }).join('\n') + '\n' + ciAfter.done + ' de ' + ciAfter.total + ' concluídos.' + (ciAfter.status === 'COMPLETED' ? ' Rotina concluída!' : ''), facts: [], tools: ['routine_complete_item'], intent: det.intent, domain: 'ROUTINES' };
+        } else if (det.intent === 'routine_complete') {
+          var coCands = DB.aiFindRoutine(userId, rawText);
+          var coCtx = null;
+          try { coCtx = DB.routineGetContext(userId, convId); } catch (eCO) {}
+          var coEx = null, coR = null;
+          if (coCands.length === 1) { coR = coCands[0]; coEx = DB.getOrCreateExecution(userId, coR.id, today); }
+          else if (coCtx) { try { coEx = DB.getExecution(userId, coCtx.entity_id); coR = DB.getRoutine(userId, coEx.routine_id); } catch (eCO2) {} }
+          if (!coEx) throw { clarification: 'Qual rotina você terminou?' };
+          try {
+            var coAfter = DB.completeExecution(userId, coEx.id, {});
+            return { answer: 'Rotina "' + coR.name + '" concluída! (' + coAfter.done + ' de ' + coAfter.total + ')', facts: [], tools: ['routine_complete'], intent: det.intent, domain: 'ROUTINES' };
+          } catch (eMiss) {
+            throw { clarification: String((eMiss && eMiss.message) || eMiss) + ' Quer pular algum item?' };
+          }
+        } else if (det.intent === 'routine_pause' || det.intent === 'routine_resume') {
+          var ppCands = DB.aiFindRoutine(userId, rawText);
+          var ppCtx = null;
+          try { ppCtx = DB.routineGetContext(userId, convId); } catch (ePP) {}
+          var ppR = ppCands.length === 1 ? ppCands[0] : null;
+          if (!ppR && ppCtx) { try { ppR = DB.getRoutine(userId, (DB.getExecution(userId, ppCtx.entity_id) || {}).routine_id); } catch (ePP2) {} }
+          if (!ppR) {
+            if (ppCands.length > 1) throw { clarification: 'Qual delas? ' + ppCands.slice(0, 3).map(function (r) { return '"' + r.name + '"'; }).join(', ') + '?' };
+            throw { clarification: 'Qual rotina? Ex: "pausa a rotina da noite".' };
+          }
+          params = { routine_id: ppR.id, routine_name: ppR.name };
+          label = (det.intent === 'routine_pause' ? 'Pausar "' + ppR.name + '" (sem novas ocorrências, histórico preservado)' : 'Retomar "' + ppR.name + '"');
+        } else if (det.intent === 'routine_update') {
+          var upCands = DB.aiFindRoutine(userId, rawText);
+          if (upCands.length !== 1) {
+            if (!upCands.length) throw { clarification: 'Qual rotina você quer alterar?' };
+            throw { clarification: 'Qual delas? ' + upCands.slice(0, 3).map(function (r) { return '"' + r.name + '"'; }).join(', ') + '?' };
+          }
+          var upPatch = {};
+          var upTm = s.match(/às?\s?(\d{1,2})(?::(\d{2}))?\s?h\b/);
+          if (upTm) upPatch.preferred_time = ('0' + Math.min(23, +upTm[1])).slice(-2) + ':' + (upTm[2] || '00');
+          if (/(todo dia|todos os dias|diariamente)/.test(s)) { upPatch.frequency_type = 'DAILY'; upPatch.frequency_config = { interval: 1 }; }
+          else if (/(toda semana|semanal)/.test(s)) { upPatch.frequency_type = 'WEEKLY'; upPatch.frequency_config = { interval: 1 }; }
+          else if (/(mensal|todo mes)/.test(s)) { upPatch.frequency_type = 'MONTHLY'; upPatch.frequency_config = { interval: 1 }; }
+          var unR = DB.aiNorm(rawText).match(/para\s+["']?([^"']{3,60})$/);
+          if (unR && unR[1].indexOf('rotina') < 0) upPatch.name = unR[1].trim().charAt(0).toUpperCase() + unR[1].trim().slice(1);
+          if (!upPatch.preferred_time && !upPatch.frequency_type && !upPatch.name) throw { clarification: 'O que mudar? (horário, frequência ou nome)' };
+          params = { routine_id: upCands[0].id, routine_name: upCands[0].name, patch: upPatch };
+          label = 'Alterar "' + upCands[0].name + '"';
+        } else if (det.intent === 'routine_link') {
+          var lkCands = DB.aiFindRoutine(userId, rawText);
+          var lkCtx = null;
+          try { lkCtx = DB.routineGetContext(userId, convId); } catch (eLK) {}
+          var lkR = lkCands.length === 1 ? lkCands[0] : null;
+          if (!lkR && lkCtx) { try { lkR = DB.getRoutine(userId, (DB.getExecution(userId, lkCtx.entity_id) || {}).routine_id); } catch (eLK2) {} }
+          if (!lkR) {
+            if (lkCands.length > 1) throw { clarification: 'Em qual rotina? ' + lkCands.slice(0, 3).map(function (r) { return '"' + r.name + '"'; }).join(', ') + '?' };
+            throw { clarification: 'Em qual rotina? Ex: "coloca leitura na rotina da noite".' };
+          }
+          var lkType = null, lkId = null, lkLabel = null;
+          if (/(habito|hábito|leitura|ler|medita|corre|estuda)/.test(s)) {
+            var hC = DB.aiFindHabit(userId, rawText);
+            if (hC.length !== 1) {
+              if (!hC.length) throw { clarification: 'Qual hábito? Não encontrei nenhum com esse nome.' };
+              throw { clarification: 'Qual hábito? ' + hC.slice(0, 3).map(function (h) { return '"' + h.name + '"'; }).join(', ') + '?' };
+            }
+            lkType = 'HABIT'; lkId = hC[0].id; lkLabel = hC[0].name;
+          } else if (/(tarefa)/.test(s)) {
+            var tC = DB.aiFindTask(userId, rawText);
+            if (tC.length !== 1) {
+              if (!tC.length) throw { clarification: 'Qual tarefa?' };
+              throw { clarification: 'Qual tarefa? ' + tC.slice(0, 3).map(function (t) { return '"' + t.title + '"'; }).join(', ') + '?' };
+            }
+            lkType = 'TASK'; lkId = tC[0].id; lkLabel = tC[0].title;
+          } else if (/(lista|mercado)/.test(s)) {
+            var lC = DB.aiFindList(userId, rawText);
+            if (lC.length !== 1) {
+              if (!lC.length) throw { clarification: 'Qual lista?' };
+              throw { clarification: 'Qual lista? ' + lC.slice(0, 3).map(function (l) { return '"' + l.name + '"'; }).join(', ') + '?' };
+            }
+            lkType = 'LIST'; lkId = lC[0].id; lkLabel = lC[0].name;
+          } else {
+            throw { clarification: 'Vincular o quê? Diga um hábito, tarefa ou lista. Ex: "coloca leitura na rotina da noite".' };
+          }
+          params = { routine_id: lkR.id, routine_name: lkR.name, title: lkLabel, linked_entity_type: lkType, linked_entity_id: lkId, required: true };
+          label = 'Vincular "' + lkLabel + '" à rotina "' + lkR.name + '"';
         } else if (det.intent === 'list_create') {
           var ln = rawText.replace(/(cria|criar|crie|uma lista|nova lista|de coisas|para levar|para nos|pra nos|para nós|nos dois|nós dois|do casal|compartilhada|de mercado|de viagem|tipo|checklist|compras|geral)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Nova lista';
           var lCouple = /(para nos|pra nos|nos dois|nós dois|do casal|casal|compartilhada|para nós)\b/.test(s);
@@ -7405,7 +7661,16 @@ window.Juntos = window.Juntos || {};
         list_create: 'Lista "' + (p.name || '') + '" criada' + (p.items && p.items.length ? ' com ' + p.items.length + ' itens' : '') + '.',
         list_add_item: (p.items && p.items.length ? 'Adicionei à lista ' + (p.list_name || '') + ': ' + p.items.map(function (x) { return x.title; }).join(', ') + '.' : 'Item adicionado à lista ' + (p.list_name || '') + '.'),
         list_check_item: 'Item "' + (p.title || '') + '" marcado como concluído.',
-        list_uncheck_item: 'Item "' + (p.title || '') + '" desmarcado.'
+        list_uncheck_item: 'Item "' + (p.title || '') + '" desmarcado.',
+        routine_create: 'Rotina "' + (p.name || '') + '" criada' + (p.items && p.items.length ? ' com ' + p.items.length + ' itens' : '') + '.',
+        routine_start: 'Rotina "' + (p.routine_name || '') + '" iniciada.',
+        routine_complete_item: 'Item "' + (p.title || '') + '" concluído na rotina.',
+        routine_skip_item: 'Item "' + (p.title || '') + '" pulado na rotina.',
+        routine_complete: 'Rotina concluída.',
+        routine_pause: 'Rotina pausada.',
+        routine_resume: 'Rotina retomada.',
+        routine_update: 'Rotina atualizada.',
+        routine_link: 'Item vinculado à rotina.'
       };
       return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed', domain: DB.aiDomainOf(action.action_type) };
     },
@@ -7675,6 +7940,29 @@ window.Juntos = window.Juntos || {};
         tools.push('notification_status'); toolOut = ant;
         if (!ant.unread) answer = 'Tudo tranquilo: nenhuma notificação não lida.';
         else answer = ant.unread + ' não lidas' + (ant.top.length ? ': ' + ant.top.map(function (x) { return x.title; }).join('; ') + '.' : '.') + ' Abra Notificações no app para ver tudo.';
+      } else if (det.intent === 'routine_today' || det.intent === 'routine_list') {
+        var rres = DB.aiRunTool(userId, det.intent === 'routine_today' ? 'routine_today' : 'routine_list', {});
+        tools.push(det.intent === 'routine_today' ? 'routine_today' : 'routine_list'); toolOut = rres;
+        if (!rres.routines.length) answer = det.intent === 'routine_today' ? 'Nenhuma rotina prevista para hoje.' : 'Você ainda não tem rotinas. Quer criar uma? Ex: "cria uma rotina da manhã".';
+        else {
+          F('rotinas', rres.routines.length);
+          answer = (det.intent === 'routine_today' ? 'Rotinas de hoje: ' : 'Suas rotinas: ') + rres.routines.slice(0, 6).map(function (r) { return r.name + (r.done != null && r.total ? ' (' + r.done + ' de ' + r.total + ')' : '') + (r.preferred_time ? ' às ' + r.preferred_time : ''); }).join('; ') + '.';
+        }
+        navTarget = '#/routines';
+      } else if (det.intent === 'routine_detail') {
+        var rdN = DB.aiFindRoutine(userId, rawText)[0];
+        if (!rdN) { answer = 'Qual rotina? Ex: "como está minha rotina da manhã?".'; }
+        else {
+          var rdT = DB.aiRunTool(userId, 'routine_detail', { routine_name: rdN.name });
+          tools.push('routine_detail'); toolOut = rdT;
+          if (!rdT.execution) answer = '"' + rdN.name + '": ' + rdN.status.toLowerCase() + ', ' + (rdN.visibility === 'COUPLE' ? 'do casal' : 'pessoal') + '.';
+          else {
+            var rdp = rdT.execution.items.filter(function (i) { return i.status === 'PENDING'; });
+            F('pendentes', rdp.length);
+            answer = '*' + rdN.name + '* (' + rdT.execution.done + ' de ' + rdT.execution.total + ')' + (rdp.length ? ' — falta: ' + rdp.slice(0, 5).map(function (i) { return i.title; }).join(', ') + '.' : ' — tudo concluído!');
+          }
+        }
+        navTarget = '#/routines';
       } else if (det.intent === 'list_view' || det.intent === 'list_search') {
         var lq = rawText.replace(/(quais listas|minhas listas|mostra|mostre|tem alguma|quais itens|o que falta|lista do|lista da|do mercado|da viagem|compartilhada|eu tenho|você|voce)/gi, ' ').trim().slice(0, 60);
         var lres = DB.aiRunTool(userId, 'list_view', { list_name: lq });
@@ -8104,7 +8392,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -8941,10 +9229,12 @@ window.Juntos = window.Juntos || {};
       var finCom = DB.ovFinancialCommitments(userId, d, DB.agendaAddDays(d, 30), 4);
       var tsk = DB.taskTodayStatus(userId, d);
       var lst = DB.getRelevantLists(userId, 3);
+      var rtn = [];
+      try { rtn = DB.getRelevantRoutines(userId, 3); } catch (eR) {}
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -9011,7 +9301,7 @@ window.Juntos = window.Juntos || {};
     },
     getOverviewSummary: function (userId, date) {
       var d = DB.getOverviewDay(userId, date, 'couple');
-      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], tx: d.finance.count, next: d.next };
+      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], routines: (d.routines || []).length, tx: d.finance.count, next: d.next };
     },
     /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
        Fonte própria (habits + habit_completions). Tudo por user_id do
@@ -10059,10 +10349,10 @@ window.Juntos = window.Juntos || {};
       var db = read(), cid = DB.myCoupleId(userId);
       if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
       data = data || {};
-      var name = String(data.name || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim();
+      var name = String(data.name || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
       if (name.length < 2) throw new Error('Dê um nome à lista.');
       if (name.length > 80) throw new Error('Nome muito longo (máx 80 caracteres).');
-      var desc = String(data.description || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var desc = String(data.description || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
       var tp = String(data.list_type || 'GENERAL').toUpperCase();
       if (DB.LIST_TYPES().indexOf(tp) < 0) throw new Error('Tipo inválido.');
       var vis = String(data.visibility || 'PERSONAL').toUpperCase();
@@ -10071,10 +10361,10 @@ window.Juntos = window.Juntos || {};
     },
     validateListItem: function (userId, data) {
       data = data || {};
-      var title = String(data.title || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim();
+      var title = String(data.title || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
       if (title.length < 1) throw new Error('Descreva o item.');
       if (title.length > 140) throw new Error('Item muito longo (máx 140 caracteres).');
-      var desc = String(data.description || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var desc = String(data.description || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
       var q = null;
       if (data.quantity != null && data.quantity !== '') {
         q = Number(String(data.quantity).replace(',', '.'));
@@ -10421,6 +10711,14 @@ window.Juntos = window.Juntos || {};
       try { logAudit(read(), g.list.couple_id, userId, 'list_item', itemId, 'task_linked', { task_id: t.id }); } catch (e) {}
       return t;
     },
+    routineHasPendingContext: function (userId) {
+      try {
+        var ctx = DB.routineGetContext(userId, null);
+        if (!ctx) return false;
+        var ex = DB.getExecution(userId, ctx.entity_id);
+        return ex.items.some(function (it) { return it.status === 'PENDING'; });
+      } catch (e) { return false; }
+    },
     aiFindList: function (userId, q) {
       if (!q) return [];
       var rows = DB.getLists(userId, { status: 'ACTIVE', limit: 100 });
@@ -10431,6 +10729,736 @@ window.Juntos = window.Juntos || {};
       var items = DB.getListItems(userId, listId, {});
       var nq = DB.aiNorm(q);
       return items.filter(function (it) { return DB.aiNorm(it.title).indexOf(nq) >= 0; });
+    },
+    /* ============ ROTINAS (orquestrar acoes; fonte oficial RoutineService) ============
+       Rotina organiza sequencias recorrentes de acoes. Habito acompanha
+       comportamento; tarefa = fazer; lista = itens; agenda = compromissos.
+       A rotina apenas REFERENCIA entidades via LINKED_ENTITY e delega aos
+       servicos oficiais (HabitService/TaskService/ListService/Agenda).
+       Nunca duplica logica desses servicos; nunca cria financa; nunca cria
+       tarefa/entidade automaticamente. Execucoes sao materializadas por
+       demanda (getOrCreateExecution, idempotente) com snapshot de historico. */
+    ROUTINE_FREQS: function () { return ['DAILY', 'WEEKLY', 'MONTHLY', 'SPECIFIC_DAYS', 'CUSTOM']; },
+    ROUTINE_STATUSES: function () { return ['ACTIVE', 'PAUSED', 'ARCHIVED']; },
+    ROUTINE_ITEM_TYPES: function () { return ['ACTION', 'LINKED_ENTITY']; },
+    ROUTINE_LINK_TYPES: function () { return ['TASK', 'HABIT', 'AGENDA_EVENT', 'LIST']; },
+    routineVisible: function (db, userId, r) {
+      if (!r || r.deleted_at) return false;
+      if (r.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return r.owner_user_id === userId;
+    },
+    routineCanAct: function (db, userId, r) {
+      if (!DB.routineVisible(db, userId, r)) return false;
+      if (r.visibility === 'COUPLE') return true;
+      return r.owner_user_id === userId;
+    },
+    routineWriteGuard: function (db, userId, routineId) {
+      var cid = DB.myCoupleId(userId);
+      var r = db.routines.find(function (x) { return x.id === routineId && x.couple_id === cid && !x.deleted_at; });
+      if (!r || !DB.routineCanAct(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'routine_write', { entity_type: 'routine', entity_id: routineId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return r;
+    },
+    routineItemGuard: function (db, userId, itemId) {
+      var cid = DB.myCoupleId(userId);
+      var it = db.routine_items.find(function (x) { return x.id === itemId && !x.deleted_at; });
+      if (!it) { try { DB.logAuthorizationFailure(userId, 'routine_item_read', { entity_type: 'routine_item', entity_id: itemId }); } catch (e) {} throw new Error('Acesso negado.'); }
+      var r = db.routines.find(function (x) { return x.id === it.routine_id && x.couple_id === cid && !x.deleted_at; });
+      if (!r || !DB.routineCanAct(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'routine_item_write', { entity_type: 'routine_item', entity_id: itemId }); } catch (e2) {}
+        throw new Error('Acesso negado.');
+      }
+      return { item: it, routine: r };
+    },
+    routineExecGuard: function (db, userId, execId) {
+      var cid = DB.myCoupleId(userId);
+      var ex = db.routine_executions.find(function (x) { return x.id === execId; });
+      if (!ex || ex.couple_id !== cid) { try { DB.logAuthorizationFailure(userId, 'routine_exec_read', { entity_type: 'routine_execution', entity_id: execId }); } catch (e) {} throw new Error('Acesso negado.'); }
+      var r = db.routines.find(function (x) { return x.id === ex.routine_id && x.couple_id === cid && !x.deleted_at; });
+      if (!r || !DB.routineCanAct(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'routine_exec_write', { entity_type: 'routine_execution', entity_id: execId }); } catch (e2) {}
+        throw new Error('Acesso negado.');
+      }
+      if (r.visibility === 'PERSONAL' && ex.scope_key !== userId && ex.user_id !== userId) {
+        try { DB.logAuthorizationFailure(userId, 'routine_exec_write', { entity_type: 'routine_execution', entity_id: execId }); } catch (e3) {}
+        throw new Error('Acesso negado.');
+      }
+      return { execution: ex, routine: r };
+    },
+    validateRoutine: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var name = String(data.name || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name.length < 2) throw new Error('Dê um nome à rotina.');
+      if (name.length > 80) throw new Error('Nome muito longo (máx 80 caracteres).');
+      var desc = String(data.description || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var fq = String(data.frequency_type || 'DAILY').toUpperCase();
+      if (DB.ROUTINE_FREQS().indexOf(fq) < 0) throw new Error('Frequência inválida.');
+      var cfg = data.frequency_config || {};
+      var out = { interval: Math.max(1, Math.min(30, parseInt(cfg.interval, 10) || 1)), daysOfWeek: [], dayOfMonth: null };
+      if (fq === 'SPECIFIC_DAYS' || (fq === 'CUSTOM' && cfg.daysOfWeek)) {
+        var dw = (Array.isArray(cfg.daysOfWeek) ? cfg.daysOfWeek : String(cfg.daysOfWeek || '').split(',')).map(function (x) { return parseInt(x, 10); }).filter(function (x) { return x >= 0 && x <= 6; });
+        dw = dw.filter(function (x, ix) { return dw.indexOf(x) === ix; }).sort();
+        if (!dw.length) throw new Error('Escolha ao menos um dia da semana.');
+        out.daysOfWeek = dw;
+      }
+      if (cfg.dayOfMonth != null && cfg.dayOfMonth !== '') {
+        var dm = parseInt(cfg.dayOfMonth, 10);
+        if (!(dm >= 1 && dm <= 31)) throw new Error('Dia do mês inválido.');
+        out.dayOfMonth = dm;
+      }
+      var pt = data.preferred_time ? String(data.preferred_time).slice(0, 5) : null;
+      if (pt && !/^([01]\d|2[0-3]):[0-5]\d$/.test(pt)) throw new Error('Horário preferencial inválido.');
+      var sd = data.start_date ? String(data.start_date).slice(0, 10) : DB.agendaToday();
+      if (!DB.agendaParseDay(sd)) throw new Error('Data de início inválida.');
+      var ed = data.end_date ? String(data.end_date).slice(0, 10) : null;
+      if (ed) {
+        if (!DB.agendaParseDay(ed)) throw new Error('Data de fim inválida.');
+        if (ed < sd) throw new Error('Fim anterior ao início.');
+      }
+      return { couple_id: cid, name: name, description: desc, visibility: vis, frequency_type: fq, frequency_config: out, preferred_time: pt, start_date: sd, end_date: ed };
+    },
+    validateRoutineItem: function (userId, data) {
+      data = data || {};
+      var title = String(data.title || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title.length < 1) throw new Error('Descreva o item da rotina.');
+      if (title.length > 140) throw new Error('Item muito longo (máx 140 caracteres).');
+      var desc = String(data.description || '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var tp = String(data.item_type || 'ACTION').toUpperCase();
+      if (DB.ROUTINE_ITEM_TYPES().indexOf(tp) < 0) throw new Error('Tipo de item inválido.');
+      var lt = null, li = null;
+      if (tp === 'LINKED_ENTITY') {
+        lt = String(data.linked_entity_type || '').toUpperCase();
+        if (DB.ROUTINE_LINK_TYPES().indexOf(lt) < 0) throw new Error('Entidade vinculada inválida.');
+        li = data.linked_entity_id ? String(data.linked_entity_id) : null;
+        if (!li) throw new Error('Escolha a entidade vinculada.');
+      }
+      return { title: title, description: desc, item_type: tp, linked_entity_type: lt, linked_entity_id: li, required: data.required === undefined ? true : !!data.required };
+    },
+    routineResolveLink: function (userId, type, entityId) {
+      type = String(type || '').toUpperCase();
+      if (DB.ROUTINE_LINK_TYPES().indexOf(type) < 0) throw new Error('Entidade vinculada inválida.');
+      if (type === 'TASK') return { label: DB.getTask(userId, entityId).title };
+      if (type === 'HABIT') return { label: DB.getHabit(userId, entityId).name };
+      if (type === 'LIST') return { label: DB.getList(userId, entityId).name };
+      if (type === 'AGENDA_EVENT') {
+        var db = read(), cid = DB.myCoupleId(userId);
+        var ev = db.agenda_events.find(function (x) { return x.id === entityId && x.couple_id === cid && !x.deleted_at; });
+        if (!ev) throw new Error('Compromisso inválido.');
+        if (ev.visibility !== 'COUPLE' && ev.owner_user_id !== userId) throw new Error('Acesso negado.');
+        return { label: ev.title };
+      }
+      throw new Error('Entidade vinculada inválida.');
+    },
+    createRoutine: function (userId, data, opt) {
+      DB.requireAuthz(userId, 'routine_create', null);
+      opt = opt || {};
+      var v = DB.validateRoutine(userId, data);
+      var db = read();
+      var r = { id: id('rt'), couple_id: v.couple_id, created_by: userId, owner_user_id: userId, name: v.name, description: v.description, visibility: v.visibility, status: 'ACTIVE', frequency_type: v.frequency_type, frequency_config: v.frequency_config, preferred_time: v.preferred_time, start_date: v.start_date, end_date: v.end_date, source_type: opt.source_type || 'MANUAL', source_id: opt.source_id || null, created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+      db.routines.push(r);
+      logAudit(db, v.couple_id, userId, 'routine', r.id, 'created', { name: r.name, visibility: r.visibility, frequency: r.frequency_type });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'routine', { action: 'routine_created', entity_type: 'routine', entity_id: r.id, metadata: { visibility: r.visibility } }); } catch (e) {}
+      try { DB.emitRoutineEvent(userId, 'routine_created', r, {}); } catch (e2) {}
+      return r;
+    },
+    getRoutine: function (userId, routineId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var r = db.routines.find(function (x) { return x.id === routineId && x.couple_id === cid && !x.deleted_at; });
+      if (!r || !DB.routineVisible(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'routine_read', { entity_type: 'routine', entity_id: routineId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return r;
+    },
+    getRoutines: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.routines.filter(function (r) {
+        if (r.couple_id !== cid || r.deleted_at) return false;
+        if (!DB.routineVisible(db, userId, r)) return false;
+        if (f.status && r.status !== String(f.status).toUpperCase()) return false;
+        if (!f.include_archived && r.status === 'ARCHIVED') return false;
+        if (f.visibility && r.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.frequency_type && r.frequency_type !== String(f.frequency_type).toUpperCase()) return false;
+        if (f.due && !DB.routineIsDueOnDate(r, String(f.due).slice(0, 10))) return false;
+        if (f.search) {
+          var q = String(f.search).toLowerCase();
+          var items = db.routine_items.filter(function (it) { return it.routine_id === r.id && !it.deleted_at; });
+          var hay = (r.name + ' ' + (r.description || '') + ' ' + items.map(function (it) { return it.title; }).join(' ')).toLowerCase();
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+      rows.sort(function (a, b) { return (b.updated_at + b.id).localeCompare(a.updated_at + a.id); });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    getPersonalRoutines: function (userId, f) { return DB.getRoutines(userId, Object.assign({}, f, { visibility: 'PERSONAL' })); },
+    getCoupleRoutines: function (userId, f) { return DB.getRoutines(userId, Object.assign({}, f, { visibility: 'COUPLE' })); },
+    searchRoutines: function (userId, q, limit) { return DB.getRoutines(userId, { search: q, limit: limit || 20 }); },
+    updateRoutine: function (userId, routineId, data) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      data = data || {};
+      var visBefore = r.visibility, freqBefore = r.frequency_type;
+      var merged = { name: r.name, description: r.description, visibility: r.visibility, frequency_type: r.frequency_type, frequency_config: r.frequency_config, preferred_time: r.preferred_time, start_date: r.start_date, end_date: r.end_date };
+      ['name', 'description', 'visibility', 'frequency_type', 'preferred_time', 'start_date', 'end_date'].forEach(function (k) { if (data[k] !== undefined) merged[k] = data[k]; });
+      if (data.frequency_config !== undefined) merged.frequency_config = data.frequency_config;
+      var v = DB.validateRoutine(userId, merged);
+      r.name = v.name; r.description = v.description; r.visibility = v.visibility;
+      r.frequency_type = v.frequency_type; r.frequency_config = v.frequency_config;
+      r.preferred_time = v.preferred_time; r.start_date = v.start_date; r.end_date = v.end_date;
+      r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'updated', { name: r.name });
+      write(db);
+      if (visBefore !== r.visibility) {
+        try { DB.logSecurityEvent(userId, 'routine', { action: r.visibility === 'COUPLE' ? 'routine_shared' : 'routine_privatized', entity_type: 'routine', entity_id: r.id, metadata: { from: visBefore, to: r.visibility } }); } catch (e) {}
+      }
+      if (freqBefore !== r.frequency_type) {
+        try { DB.logSecurityEvent(userId, 'routine', { action: 'routine_frequency_changed', entity_type: 'routine', entity_id: r.id, metadata: { from: freqBefore, to: r.frequency_type } }); } catch (e2) {}
+      }
+      try { DB.emitRoutineEvent(userId, 'routine_updated', r, {}); } catch (e3) {}
+      return r;
+    },
+    pauseRoutine: function (userId, routineId) {
+      DB.requireAuthz(userId, 'routine_pause', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      r.status = 'PAUSED'; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'paused', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_paused', r, {}); } catch (e) {}
+      return r;
+    },
+    resumeRoutine: function (userId, routineId) {
+      DB.requireAuthz(userId, 'routine_pause', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      r.status = 'ACTIVE'; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'resumed', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_resumed', r, {}); } catch (e) {}
+      return r;
+    },
+    archiveRoutine: function (userId, routineId) {
+      DB.requireAuthz(userId, 'routine_archive', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      r.status = 'ARCHIVED'; r.archived_at = now(); r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'archived', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_archived', r, {}); } catch (e) {}
+      return r;
+    },
+    deleteRoutine: function (userId, routineId) {
+      DB.requireAuthz(userId, 'routine_delete', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      r.deleted_at = now(); r.updated_at = now();
+      db.routine_items.forEach(function (it) { if (it.routine_id === r.id && !it.deleted_at) { it.deleted_at = now(); it.updated_at = now(); } });
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'deleted', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'routine', { action: 'routine_deleted', entity_type: 'routine', entity_id: r.id }); } catch (e) {}
+      return true;
+    },
+    getRoutineItems: function (userId, routineId) {
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      void r;
+      return db.routine_items.filter(function (it) { return it.routine_id === routineId && !it.deleted_at; })
+        .sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)) || (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+    },
+    routineNextPosition: function (db, routineId) {
+      var max = -1;
+      db.routine_items.forEach(function (it) { if (it.routine_id === routineId && !it.deleted_at && it.position != null && it.position > max) max = it.position; });
+      return max + 1;
+    },
+    addRoutineItem: function (userId, routineId, data) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      var v = DB.validateRoutineItem(userId, data || {});
+      var asg = (data && data.assigned_to !== undefined && data.assigned_to) ? String(data.assigned_to) : null;
+      if (asg && !db.members.some(function (m) { return m.couple_id === r.couple_id && m.user_id === asg; })) throw new Error('Responsável inválido.');
+      var label = null;
+      if (v.item_type === 'LINKED_ENTITY') label = DB.routineResolveLink(userId, v.linked_entity_type, v.linked_entity_id).label;
+      var it = { id: id('ri'), routine_id: routineId, title: v.title, description: v.description, position: DB.routineNextPosition(db, routineId), item_type: v.item_type, linked_entity_type: v.linked_entity_type, linked_entity_id: v.linked_entity_id, linked_label_snapshot: label, assigned_to: asg, required: v.required, created_at: now(), updated_at: now(), deleted_at: null };
+      db.routine_items.push(it);
+      r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine_item', it.id, 'added', { routine_id: routineId, title: it.title, item_type: it.item_type });
+      write(db);
+      return it;
+    },
+    updateRoutineItem: function (userId, itemId, data) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var g = DB.routineItemGuard(db, userId, itemId);
+      data = data || {};
+      var v = DB.validateRoutineItem(userId, { title: data.title !== undefined ? data.title : g.item.title, description: data.description !== undefined ? data.description : g.item.description, item_type: data.item_type !== undefined ? data.item_type : g.item.item_type, linked_entity_type: data.linked_entity_type !== undefined ? data.linked_entity_type : g.item.linked_entity_type, linked_entity_id: data.linked_entity_id !== undefined ? data.linked_entity_id : g.item.linked_entity_id, required: data.required !== undefined ? data.required : g.item.required });
+      g.item.title = v.title; g.item.description = v.description; g.item.item_type = v.item_type;
+      g.item.linked_entity_type = v.linked_entity_type; g.item.linked_entity_id = v.linked_entity_id;
+      g.item.linked_label_snapshot = v.item_type === 'LINKED_ENTITY' ? DB.routineResolveLink(userId, v.linked_entity_type, v.linked_entity_id).label : null;
+      g.item.required = v.required;
+      if (data.assigned_to !== undefined) {
+        var asg = data.assigned_to ? String(data.assigned_to) : null;
+        if (asg && !db.members.some(function (m) { return m.couple_id === g.routine.couple_id && m.user_id === asg; })) throw new Error('Responsável inválido.');
+        var before = g.item.assigned_to;
+        g.item.assigned_to = asg;
+        var notifyAsg = (g.routine.visibility === 'COUPLE' && asg && asg !== before && asg !== userId) ? asg : null;
+      }
+      g.item.updated_at = now(); g.routine.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item', g.item.id, 'updated', { title: g.item.title });
+      write(db);
+      if (notifyAsg) {
+        try { DB.notifCreate(notifyAsg, { type: 'routine_assigned_item', title: 'Item de rotina para você', body: '"' + g.item.title + '" (' + g.routine.name + ') foi atribuído a você.', priority: 'attention', user_id: notifyAsg, related_entity_type: 'routine', related_entity_id: g.routine.id, idempotency_key: ['routine', 'assigned', g.routine.couple_id, g.item.id, notifyAsg].join('|'), payload: { routine_id: g.routine.id, item_id: g.item.id } }); } catch (eN) {}
+      }
+      return g.item;
+    },
+    removeRoutineItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var g = DB.routineItemGuard(db, userId, itemId);
+      g.item.deleted_at = now(); g.item.updated_at = now(); g.routine.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item', g.item.id, 'removed', {});
+      write(db);
+      return true;
+    },
+    reorderRoutineItems: function (userId, routineId, order) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      if (!Array.isArray(order) || !order.length) throw new Error('Ordem inválida.');
+      if (order.length > 200) throw new Error('Rotina muito grande para reordenar.');
+      var seen = {};
+      order.forEach(function (iid, ix) {
+        if (seen[iid]) throw new Error('Ordem com item duplicado.');
+        seen[iid] = true;
+        var it = db.routine_items.find(function (x) { return x.id === iid && x.routine_id === routineId && !x.deleted_at; });
+        if (!it) throw new Error('Item não pertence a esta rotina.');
+        it.position = ix; it.updated_at = now();
+      });
+      r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'routine', r.id, 'reordered', { count: order.length });
+      write(db);
+      return true;
+    },
+    moveRoutineItem: function (userId, itemId, direction) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var g = DB.routineItemGuard(db, userId, itemId);
+      var rows = db.routine_items.filter(function (it) { return it.routine_id === g.routine.id && !it.deleted_at; });
+      rows.sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)); });
+      var ix = rows.findIndex(function (x) { return x.id === itemId; });
+      var jx = direction === 'up' ? ix - 1 : ix + 1;
+      if (ix < 0 || jx < 0 || jx >= rows.length) return false;
+      var a = rows[ix], b = rows[jx], tp = a.position;
+      a.position = b.position; b.position = tp;
+      a.updated_at = now(); b.updated_at = now(); g.routine.updated_at = now();
+      write(db);
+      return true;
+    },
+    linkRoutineEntity: function (userId, routineId, data) {
+      return DB.addRoutineItem(userId, routineId, { title: data.title, description: data.description || '', item_type: 'LINKED_ENTITY', linked_entity_type: data.linked_entity_type, linked_entity_id: data.linked_entity_id, assigned_to: data.assigned_to || null, required: data.required !== undefined ? !!data.required : true });
+    },
+    unlinkRoutineEntity: function (userId, itemId) {
+      DB.requireAuthz(userId, 'routine_update', null);
+      var db = read();
+      var g = DB.routineItemGuard(db, userId, itemId);
+      g.item.item_type = 'ACTION'; g.item.linked_entity_type = null; g.item.linked_entity_id = null; g.item.linked_label_snapshot = null;
+      g.item.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item', g.item.id, 'unlinked', {});
+      write(db);
+      return g.item;
+    },
+    /* ---- Recorrencia (primitivas de calendario compartilhadas; regras da rotina) ---- */
+    routineWeekday: function (dateStr) {
+      var p = DB.agendaParseDay(dateStr);
+      return new Date(p.y, p.m - 1, p.d).getDay();
+    },
+    routineDiffDays: function (a, b) {
+      var pa = DB.agendaParseDay(a), pb = DB.agendaParseDay(b);
+      return Math.round((new Date(pb.y, pb.m - 1, pb.d) - new Date(pa.y, pa.m - 1, pa.d)) / 864e5);
+    },
+    routineIsDueOnDate: function (r, dateStr) {
+      if (!r || r.status !== 'ACTIVE' || r.deleted_at) return false;
+      var d = String(dateStr || '').slice(0, 10);
+      if (!DB.agendaParseDay(d)) return false;
+      if (d < r.start_date) return false;
+      if (r.end_date && d > r.end_date) return false;
+      var cfg = r.frequency_config || {}, iv = Math.max(1, cfg.interval || 1);
+      var fq = r.frequency_type || 'DAILY';
+      if (fq === 'SPECIFIC_DAYS') return (cfg.daysOfWeek || []).indexOf(DB.routineWeekday(d)) >= 0;
+      if (fq === 'WEEKLY') {
+        if (DB.routineWeekday(d) !== DB.routineWeekday(r.start_date)) return false;
+        return Math.floor(DB.routineDiffDays(r.start_date, d) / 7) % iv === 0;
+      }
+      if (fq === 'MONTHLY') {
+        var want = cfg.dayOfMonth || DB.agendaParseDay(r.start_date).d;
+        var pd = DB.agendaParseDay(d), dim = DB.agendaDim(pd.y, pd.m);
+        if (pd.d !== Math.min(want, dim)) return false;
+        return ((pd.y - DB.agendaParseDay(r.start_date).y) * 12 + (pd.m - DB.agendaParseDay(r.start_date).m)) % iv === 0;
+      }
+      if (fq === 'CUSTOM') {
+        if (cfg.daysOfWeek && cfg.daysOfWeek.length) return cfg.daysOfWeek.indexOf(DB.routineWeekday(d)) >= 0;
+        if (cfg.dayOfMonth) {
+          var pc = DB.agendaParseDay(d), dimc = DB.agendaDim(pc.y, pc.m);
+          return pc.d === Math.min(cfg.dayOfMonth, dimc);
+        }
+        return DB.routineDiffDays(r.start_date, d) % iv === 0;
+      }
+      return DB.routineDiffDays(r.start_date, d) % iv === 0;
+    },
+    routineNextOccurrence: function (userId, routineId, from) {
+      var r = DB.getRoutine(userId, routineId);
+      var cur = (from && DB.agendaParseDay(from)) ? from : DB.agendaToday();
+      for (var i = 0; i <= 370; i++) {
+        var d = DB.agendaAddDays(cur, i);
+        if (DB.routineIsDueOnDate(r, d)) return d;
+      }
+      return null;
+    },
+    routineOccurrencesForPeriod: function (userId, routineId, from, to, limit) {
+      var r = DB.getRoutine(userId, routineId);
+      var out = [], guard = 0;
+      var cur = DB.agendaParseDay(from) ? from : DB.agendaToday();
+      var end = DB.agendaParseDay(to) ? to : DB.agendaAddDays(cur, 30);
+      while (cur <= end && guard++ < 400) {
+        if (DB.routineIsDueOnDate(r, cur)) { out.push(cur); if (out.length >= (limit || 200)) break; }
+        cur = DB.agendaAddDays(cur, 1);
+      }
+      return out;
+    },
+    /* ---- Execucoes (materializacao idempotente + snapshot) ---- */
+    routineScopeKey: function (r, userId) { return r.visibility === 'COUPLE' ? 'couple' : userId; },
+    routineFindExecution: function (db, routineId, scopeKey, dateStr) {
+      return db.routine_executions.find(function (x) { return x.routine_id === routineId && x.scope_key === scopeKey && x.scheduled_date === dateStr; }) || null;
+    },
+    routineMaterializeItems: function (db, r, ex) {
+      var items = db.routine_items.filter(function (it) { return it.routine_id === r.id && !it.deleted_at; });
+      items.forEach(function (it) {
+        var has = db.routine_item_executions.some(function (e) { return e.routine_execution_id === ex.id && e.routine_item_id === it.id; });
+        if (!has) db.routine_item_executions.push({ id: id('rx'), routine_execution_id: ex.id, routine_item_id: it.id, item_title_snapshot: it.title, item_type_snapshot: it.item_type, linked_entity_type_snapshot: it.linked_entity_type, linked_entity_id_snapshot: it.linked_entity_id, status: 'PENDING', completed_by: null, completed_at: null, linked_action_result: null, created_at: now(), updated_at: now() });
+      });
+    },
+    getOrCreateExecution: function (userId, routineId, dateStr) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      var db = read();
+      var r = DB.routineWriteGuard(db, userId, routineId);
+      var d = (dateStr && DB.agendaParseDay(dateStr)) ? dateStr : DB.agendaToday();
+      var scope = DB.routineScopeKey(r, userId);
+      var ex = DB.routineFindExecution(db, routineId, scope, d);
+      if (!ex) {
+        ex = { id: id('re'), routine_id: routineId, couple_id: r.couple_id, user_id: userId, scope_key: scope, scheduled_date: d, status: 'PENDING', routine_name_snapshot: r.name, started_at: null, completed_at: null, created_at: now(), updated_at: now() };
+        db.routine_executions.push(ex);
+        logAudit(db, r.couple_id, userId, 'routine_execution', ex.id, 'created', { date: d });
+      }
+      DB.routineMaterializeItems(db, r, ex);
+      write(db);
+      return DB.getExecution(userId, ex.id);
+    },
+    startExecution: function (userId, execId) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      if (g.execution.status === 'PENDING') {
+        g.execution.status = 'IN_PROGRESS'; g.execution.started_at = now(); g.execution.updated_at = now();
+        DB.routineMaterializeItems(db, g.routine, g.execution);
+        logAudit(db, g.routine.couple_id, userId, 'routine_execution', g.execution.id, 'started', {});
+        write(db);
+        try { DB.emitRoutineEvent(userId, 'routine_execution_started', g.routine, { execution_id: g.execution.id }); } catch (e) {}
+      }
+      return DB.getExecution(userId, execId);
+    },
+    getExecution: function (userId, execId) {
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      DB.routineMaterializeItems(db, g.routine, g.execution);
+      var items = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === g.execution.id; });
+      var defs = {};
+      db.routine_items.forEach(function (it) { if (it.routine_id === g.routine.id) defs[it.id] = it; });
+      var changed = false;
+      items.forEach(function (e) {
+        if (e.status !== 'PENDING') return;
+        var st = DB.routineLinkedState(userId, e.linked_entity_type_snapshot, e.linked_entity_id_snapshot, g.execution.scheduled_date);
+        if (st === 'done') {
+          e.status = 'COMPLETED'; e.completed_at = now(); e.linked_action_result = 'external:sync'; e.updated_at = now();
+          logAudit(db, g.routine.couple_id, userId, 'routine_item_execution', e.id, 'synced', {});
+          changed = true;
+        }
+      });
+      if (changed) {
+        var req = items.filter(function (e) { var d = defs[e.routine_item_id]; return !d || d.deleted_at ? false : (d.required !== false); });
+        if (req.length && req.every(function (e) { return e.status !== 'PENDING'; }) && g.execution.status !== 'COMPLETED') {
+          g.execution.status = 'COMPLETED'; g.execution.completed_at = now(); g.execution.updated_at = now();
+          logAudit(db, g.routine.couple_id, userId, 'routine_execution', g.execution.id, 'completed', { via: 'sync' });
+        }
+        write(db);
+      }
+      var rows = items.map(function (e) {
+        var d = defs[e.routine_item_id] || null;
+        return { id: e.id, routine_item_id: e.routine_item_id, title: d && !d.deleted_at ? d.title : e.item_title_snapshot, description: d && !d.deleted_at ? d.description : '', item_type: e.item_type_snapshot, linked_entity_type: e.linked_entity_type_snapshot, linked_entity_id: e.linked_entity_id_snapshot, assigned_to: d ? d.assigned_to : null, required: d ? d.required !== false : true, removed: !d || !!d.deleted_at, status: e.status, completed_by: e.completed_by, completed_at: e.completed_at };
+      });
+      rows.sort(function (a, b) {
+        var pa = (defs[a.routine_item_id] && defs[a.routine_item_id].position != null) ? defs[a.routine_item_id].position : 1e9;
+        var pb = (defs[b.routine_item_id] && defs[b.routine_item_id].position != null) ? defs[b.routine_item_id].position : 1e9;
+        return pa - pb;
+      });
+      var total = rows.filter(function (x) { return !x.removed; }).length;
+      var done = rows.filter(function (x) { return !x.removed && x.status === 'COMPLETED'; }).length;
+      return { id: g.execution.id, routine_id: g.routine.id, routine_name: g.routine.name, visibility: g.routine.visibility, status: g.execution.status, scheduled_date: g.execution.scheduled_date, preferred_time: g.routine.preferred_time, started_at: g.execution.started_at, completed_at: g.execution.completed_at, total: total, done: done, pending: total - done, items: rows };
+    },
+    routineLinkedState: function (userId, type, entityId, dateStr) {
+      if (!type || !entityId) return 'none';
+      try {
+        if (type === 'HABIT') {
+          var db = read();
+          return db.habit_completions.some(function (c) { return c.habit_id === entityId && c.user_id === userId && c.completion_date === dateStr; }) ? 'done' : 'pending';
+        }
+        if (type === 'TASK') {
+          var t = DB.getTask(userId, entityId);
+          return t.status === 'COMPLETED' ? 'done' : 'pending';
+        }
+      } catch (e) { return 'unknown'; }
+      return 'unknown';
+    },
+    completeRoutineItem: function (userId, execId, itemExecId, opt) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      opt = opt || {};
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      if (g.execution.status === 'COMPLETED' || g.execution.status === 'SKIPPED') throw new Error('Execução já encerrada.');
+      var e = db.routine_item_executions.find(function (x) { return x.id === itemExecId && x.routine_execution_id === execId; });
+      if (!e) throw new Error('Item não encontrado nesta execução.');
+      var res = null;
+      if (e.item_type_snapshot === 'LINKED_ENTITY') {
+        var lt = e.linked_entity_type_snapshot, li = e.linked_entity_id_snapshot;
+        if (lt === 'HABIT') {
+          var already = db.habit_completions.some(function (c) { return c.habit_id === li && c.user_id === userId && c.completion_date === g.execution.scheduled_date; });
+          if (!already) {
+            var nc = DB.recordCompletion(userId, li, { completion_date: g.execution.scheduled_date });
+            res = 'habit:' + nc.id;
+          } else res = 'habit:existing';
+        } else if (lt === 'TASK') {
+          var t = DB.getTask(userId, li);
+          if (t.status !== 'COMPLETED') {
+            if (t.recurrence_type && t.recurrence_type !== 'NONE') DB.completeTask(userId, { task_id: li, date: g.execution.scheduled_date });
+            else DB.completeTask(userId, li);
+          }
+          res = 'task:' + li;
+        } else if (lt === 'LIST' || lt === 'AGENDA_EVENT') {
+          res = (lt === 'LIST' ? 'list:' : 'agenda:') + li;
+        }
+      }
+      e.status = 'COMPLETED'; e.completed_by = userId; e.completed_at = now();
+      db = read();
+      g = DB.routineExecGuard(db, userId, execId);
+      e = db.routine_item_executions.find(function (x) { return x.id === itemExecId && x.routine_execution_id === execId; });
+      if (!e) throw new Error('Item não encontrado nesta execução.');
+      if (e.status === 'COMPLETED') return DB.getExecution(userId, execId);
+      if (g.execution.status === 'PENDING') { g.execution.status = 'IN_PROGRESS'; g.execution.started_at = now(); }
+      e.status = 'COMPLETED'; e.completed_by = userId; e.completed_at = now();
+      e.linked_action_result = res; e.updated_at = now();
+      if (opt.idempotency_key) e.idempotency_key = String(opt.idempotency_key).slice(0, 120);
+      g.execution.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item_execution', e.id, 'completed', { via: res || 'action' });
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_item_completed', g.routine, { execution_id: execId, item_id: e.routine_item_id }); } catch (e2) {}
+      DB.routineMaybeCompleteExecution(userId, execId);
+      return DB.getExecution(userId, execId);
+    },
+    skipRoutineItem: function (userId, execId, itemExecId) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      if (g.execution.status === 'COMPLETED' || g.execution.status === 'SKIPPED') throw new Error('Execução já encerrada.');
+      var e = db.routine_item_executions.find(function (x) { return x.id === itemExecId && x.routine_execution_id === execId; });
+      if (!e) throw new Error('Item não encontrado nesta execução.');
+      if (e.status === 'SKIPPED') return DB.getExecution(userId, execId);
+      if (g.execution.status === 'PENDING') { g.execution.status = 'IN_PROGRESS'; g.execution.started_at = now(); }
+      e.status = 'SKIPPED'; e.completed_by = userId; e.completed_at = now(); e.updated_at = now();
+      g.execution.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item_execution', e.id, 'skipped', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_item_skipped', g.routine, { execution_id: execId }); } catch (e2) {}
+      DB.routineMaybeCompleteExecution(userId, execId);
+      return DB.getExecution(userId, execId);
+    },
+    reopenRoutineItem: function (userId, execId, itemExecId) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      var e = db.routine_item_executions.find(function (x) { return x.id === itemExecId && x.routine_execution_id === execId; });
+      if (!e) throw new Error('Item não encontrado nesta execução.');
+      e.status = 'PENDING'; e.completed_by = null; e.completed_at = null; e.linked_action_result = null; e.updated_at = now();
+      if (g.execution.status === 'COMPLETED') { g.execution.status = 'IN_PROGRESS'; g.execution.completed_at = null; }
+      g.execution.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_item_execution', e.id, 'reopened', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_item_reopened', g.routine, { execution_id: execId }); } catch (e2) {}
+      return DB.getExecution(userId, execId);
+    },
+    routineMaybeCompleteExecution: function (userId, execId) {
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      var items = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === execId; });
+      var defs = {};
+      db.routine_items.forEach(function (it) { if (it.routine_id === g.routine.id && !it.deleted_at) defs[it.id] = it; });
+      var req = items.filter(function (e) { var d = defs[e.routine_item_id]; return d && d.required !== false; });
+      if (req.length && req.every(function (e) { return e.status === 'COMPLETED' || e.status === 'SKIPPED'; })) {
+        if (g.execution.status !== 'COMPLETED') {
+          g.execution.status = 'COMPLETED'; g.execution.completed_at = now(); g.execution.updated_at = now();
+          logAudit(db, g.routine.couple_id, userId, 'routine_execution', g.execution.id, 'completed', {});
+          write(db);
+          try { DB.emitRoutineEvent(userId, 'routine_execution_completed', g.routine, { execution_id: execId }); } catch (e) {}
+        }
+      }
+      return true;
+    },
+    getExecutionProgress: function (userId, execId) {
+      var ex = DB.getExecution(userId, execId);
+      return { total: ex.total, done: ex.done, pending: ex.pending, pct: ex.total ? Math.round(ex.done / ex.total * 100) : 0, label: ex.done + ' de ' + ex.total };
+    },
+    completeExecution: function (userId, execId, opt) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      opt = opt || {};
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      if (g.execution.status === 'COMPLETED') return DB.getExecution(userId, execId);
+      var items = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === execId; });
+      var defs = {};
+      db.routine_items.forEach(function (it) { if (it.routine_id === g.routine.id && !it.deleted_at) defs[it.id] = it; });
+      var pendReq = items.filter(function (e) { var d = defs[e.routine_item_id]; return d && d.required !== false && e.status === 'PENDING'; });
+      if (pendReq.length && !opt.force) {
+        var names = pendReq.slice(0, 5).map(function (e) { var d = defs[e.routine_item_id]; return '"' + (d ? d.title : e.item_title_snapshot) + '"'; }).join(', ');
+        throw new Error('Ainda faltam itens obrigatórios: ' + names + '.');
+      }
+      g.execution.status = 'COMPLETED'; g.execution.completed_at = now(); g.execution.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_execution', g.execution.id, 'completed', { force: !!opt.force });
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_execution_completed', g.routine, { execution_id: execId }); } catch (e) {}
+      return DB.getExecution(userId, execId);
+    },
+    skipExecution: function (userId, execId) {
+      DB.requireAuthz(userId, 'routine_execute', null);
+      var db = read();
+      var g = DB.routineExecGuard(db, userId, execId);
+      g.execution.status = 'SKIPPED'; g.execution.completed_at = now(); g.execution.updated_at = now();
+      logAudit(db, g.routine.couple_id, userId, 'routine_execution', g.execution.id, 'skipped', {});
+      write(db);
+      try { DB.emitRoutineEvent(userId, 'routine_execution_skipped', g.routine, { execution_id: execId }); } catch (e) {}
+      return DB.getExecution(userId, execId);
+    },
+    getTodayExecutions: function (userId, dateStr) {
+      var d = (dateStr && DB.agendaParseDay(dateStr)) ? dateStr : DB.agendaToday();
+      return DB.getRoutines(userId, { status: 'ACTIVE', due: d }).map(function (r) {
+        var ex = DB.getOrCreateExecution(userId, r.id, d);
+        return { routine: { id: r.id, name: r.name, visibility: r.visibility, preferred_time: r.preferred_time, status: r.status }, execution: ex };
+      });
+    },
+    getRelevantRoutines: function (userId, limit) {
+      var d = DB.agendaToday();
+      var rows = DB.getRoutines(userId, { status: 'ACTIVE', due: d });
+      var db = read();
+      var out = rows.map(function (r) {
+        var scope = DB.routineScopeKey(r, userId);
+        var ex = DB.routineFindExecution(db, r.id, scope, d);
+        var total = db.routine_items.filter(function (it) { return it.routine_id === r.id && !it.deleted_at; }).length;
+        var done = 0, started = false;
+        if (ex) {
+          started = ex.status !== 'PENDING';
+          if (ex.status === 'COMPLETED') done = total;
+          else done = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === ex.id && e.status === 'COMPLETED'; }).length;
+        }
+        return { id: r.id, name: r.name, visibility: r.visibility, status: r.status, preferred_time: r.preferred_time, total: total, done: done, pending: total - done, execution_id: ex ? ex.id : null, exec_status: ex ? ex.status : null, started: started };
+      }).filter(function (x) { return x.exec_status !== 'COMPLETED' && x.exec_status !== 'SKIPPED'; });
+      out.sort(function (a, b) {
+        var sa = a.started ? 0 : 1, sb = b.started ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        var ta = a.preferred_time || '99', tb = b.preferred_time || '99';
+        if (ta !== tb) return ta < tb ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      return out.slice(0, limit || 3);
+    },
+    routineProcessDue: function (userId, nowISO) {
+      var today = (nowISO || now()).slice(0, 10);
+      var made = [];
+      var rows = DB.getRoutines(userId, { status: 'ACTIVE', due: today });
+      rows.forEach(function (r) {
+        try {
+          var rr = DB.notifCreate(userId, { type: 'routine_due', title: 'Rotina de hoje: ' + r.name, body: '"' + r.name + '"' + (r.preferred_time ? ' às ' + r.preferred_time : '') + ' está prevista para hoje.', priority: 'info', user_id: userId, related_entity_type: 'routine', related_entity_id: r.id, idempotency_key: ['routine', 'due', r.couple_id, r.id, today].join('|'), payload: { routine_id: r.id, date: today } });
+          if (rr && rr.id) made.push(rr.id);
+        } catch (e) {}
+        try {
+          var db = read();
+          var scope = DB.routineScopeKey(r, userId);
+          var ex = DB.routineFindExecution(db, r.id, scope, today);
+          if (ex && (ex.status === 'IN_PROGRESS' || ex.status === 'PENDING') && r.preferred_time) {
+            var hh = (nowISO || now()).slice(11, 16);
+            if (hh >= r.preferred_time) {
+              var rm = DB.notifCreate(userId, { type: 'routine_reminder', title: 'Lembrete: ' + r.name, body: 'Sua rotina "' + r.name + '" está em andamento.', priority: 'attention', user_id: userId, related_entity_type: 'routine', related_entity_id: r.id, idempotency_key: ['routine', 'reminder', r.couple_id, r.id, today].join('|'), payload: { routine_id: r.id, execution_id: ex.id } });
+              if (rm && rm.id) made.push(rm.id);
+            }
+          }
+          if (ex && r.visibility === 'COUPLE') {
+            db.routine_item_executions.filter(function (e) { return e.routine_execution_id === ex.id && e.status === 'PENDING'; }).forEach(function (e) {
+              var def = db.routine_items.find(function (it) { return it.id === e.routine_item_id && !it.deleted_at; });
+              if (def && def.assigned_to && def.assigned_to !== userId) {
+                try {
+                  var ra = DB.notifCreate(def.assigned_to, { type: 'routine_assigned_item', title: 'Item de rotina para você', body: '"' + def.title + '" (' + r.name + ') está na rotina de hoje.', priority: 'attention', user_id: def.assigned_to, related_entity_type: 'routine', related_entity_id: r.id, idempotency_key: ['routine', 'assigned', r.couple_id, def.id, today, def.assigned_to].join('|'), payload: { routine_id: r.id, item_id: def.id } });
+                  if (ra && ra.id) made.push(ra.id);
+                } catch (e2) {}
+              }
+            });
+          }
+        } catch (e3) {}
+      });
+      return made;
+    },
+    emitRoutineEvent: function (userId, kind, routine, extra) {
+      extra = extra || {};
+      var allowed = ['routine_created', 'routine_updated', 'routine_paused', 'routine_resumed', 'routine_archived', 'routine_execution_started', 'routine_execution_completed', 'routine_execution_skipped', 'routine_item_completed', 'routine_item_reopened', 'routine_item_skipped'];
+      if (allowed.indexOf(kind) < 0) return null;
+      var db = read();
+      logAudit(db, routine.couple_id, userId, 'routine', routine.id, kind, { execution_id: extra.execution_id || null });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'routine', { action: kind, entity_type: 'routine', entity_id: routine.id }); } catch (e) {}
+      return true;
+    },
+    aiFindRoutine: function (userId, q) {
+      if (!q) return [];
+      var rows = DB.getRoutines(userId, { limit: 100 });
+      var nq = DB.aiNorm(q);
+      return rows.filter(function (r) { var n = DB.aiNorm(r.name); return n.length >= 3 && (nq.indexOf(n) >= 0 || n.indexOf(nq) >= 0); });
+    },
+    routineSetContext: function (userId, conversationId, channel, executionId, ttlMin) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      var exp = new Date(Date.now() + (ttlMin || 30) * 60000).toISOString();
+      db.routine_contexts = (db.routine_contexts || []).filter(function (c) { return !(c.user_id === userId && c.conversation_id === conversationId); });
+      var row = { id: id('rc'), couple_id: cid, user_id: userId, conversation_id: conversationId, channel: channel || 'web', entity_type: 'ROUTINE_EXECUTION', entity_id: executionId, expires_at: exp, created_at: now() };
+      db.routine_contexts.push(row);
+      write(db);
+      return row;
+    },
+    routineGetContext: function (userId, conversationId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return null;
+      var t = now();
+      var rows = (db.routine_contexts || []).filter(function (c) { return !(c.expires_at && c.expires_at < t); })
+        .filter(function (c) { return c.couple_id === cid && c.user_id === userId && (!conversationId || c.conversation_id === conversationId); })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+      return rows[0] || null;
     },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
@@ -10479,7 +11507,10 @@ window.Juntos = window.Juntos || {};
         { key: 'task_overdue', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
         { key: 'task_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
         { key: 'task_completed', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
-        { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' }
+        { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' },
+        { key: 'routine_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
+        { key: 'routine_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
+        { key: 'routine_assigned_item', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'routines' }
       ];
     },
     notifTypeDef: function (type) {
@@ -10959,6 +11990,12 @@ window.Juntos = window.Juntos || {};
           var made3 = DB.habitProcessDue(userId, opt.nowISO || now());
           made3.forEach(function (id) { made.push(id); });
         } catch (e2) { /* hábitos indisponíveis: segue */ }
+      }
+      if (types.indexOf('routine_due') >= 0 || types.indexOf('routine_reminder') >= 0 || types.indexOf('routine_assigned_item') >= 0) {
+        try {
+          var madeR = DB.routineProcessDue(userId, opt.nowISO || now());
+          madeR.forEach(function (id) { made.push(id); });
+        } catch (eR2) { /* rotinas indisponiveis: segue */ }
       }
       if (types.indexOf('task_due') >= 0 || types.indexOf('task_overdue') >= 0) {
         try {
@@ -12349,7 +13386,7 @@ window.Juntos = window.Juntos || {};
        duplica: compra+parcela+fatura+pagamento são eventos distintos;
        pagamento/transferência/acerto nunca viram receita/despesa.
        Datas são strings YYYY-MM-DD (sem conversão de timezone). */
-    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda', 'habit', 'task'],
+    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda', 'habit', 'task', 'routine'],
     CALENDAR_STATES: ['realizado', 'previsto', 'planejado', 'pendente', 'vencido', 'pago', 'concluído', 'cancelado', 'pulado', 'info'],
     calValidateFilters: function (userId, opt) {
       opt = opt || {};
@@ -12601,6 +13638,20 @@ window.Juntos = window.Juntos || {};
           push(mk({ id: 'ag:' + o.key, event_type: 'agenda', source_type: 'agenda', source_id: o.event_id, title: o.title, description: who + (o.location ? ' • ' + o.location : '') + (o.all_day ? ' • dia inteiro' : ''), event_date: o.date, due_date: o.date, amount: 0, status: st, user_id: o.owner_user_id || null, is_recurring: o.is_recurring, related_entity_type: 'agenda', related_entity_id: o.event_id, metadata: { agenda: true, visibility: o.visibility, all_day: o.all_day, start_at: o.start_at, end_at: o.end_at, occurrence_date: o.date, cash_impact: 0 }, route: '#/agenda' }));
         });
       } catch (e) {}
+      /* 14. Rotinas: representacao agregada da fonte RoutineService (sem valor).
+         Cada ocorrencia vira um evento no dia; usa preferred_time quando ha. */
+      try {
+        DB.getRoutines(userId, { status: 'ACTIVE', limit: 100 }).forEach(function (rr) {
+          DB.routineOccurrencesForPeriod(userId, rr.id, from.slice(0, 10), to.slice(0, 10), 60).forEach(function (dd) {
+            var rst = 'previsto';
+            try {
+              var ex0 = DB.routineFindExecution(db, rr.id, DB.routineScopeKey(rr, userId), dd);
+              if (ex0 && ex0.status === 'COMPLETED') rst = 'concluído';
+            } catch (e0) {}
+            push(mk({ id: 'rt:' + rr.id + '@' + dd, event_type: 'routine', source_type: 'routine', source_id: rr.id, title: rr.name, description: (rr.visibility === 'COUPLE' ? 'Casal' : 'Pessoal') + (rr.preferred_time ? ' - ' + rr.preferred_time : '') + ' - rotina, sem valor financeiro.', event_date: dd, due_date: dd, amount: 0, status: rst, user_id: rr.owner_user_id || null, is_recurring: true, related_entity_type: 'routine', related_entity_id: rr.id, metadata: { routine: true, visibility: rr.visibility, preferred_time: rr.preferred_time, occurrence_date: dd, cash_impact: 0 }, route: '#/routines/' + rr.id }));
+          });
+        });
+      } catch (eRT) {}
       /* 13. Tarefas com prazo: representação da fonte TaskService (sem valor).
          Tarefas sem data não aparecem aqui; concluídas aparecem como tal. */
       try {
@@ -12691,6 +13742,10 @@ window.Juntos = window.Juntos || {};
         } catch (eag) { throw new Error('Evento não encontrado.'); }
       }
       else if (kind === 'task') actions = [{ label: 'Ver tarefa', route: '#/tasks' }, { label: 'Concluir', route: '#/tasks' }];
+      else if (kind === 'rt') {
+        var rtRef = ref.split('@');
+        actions = [{ label: 'Ver rotina', route: '#/routines/' + rtRef[0] }, { label: 'Executar hoje', route: '#/routines/' + rtRef[0] }];
+      }
       else if (kind === 'plan') actions = [{ label: 'Ver no planejamento', route: ev.route }, { label: 'Registrar despesa', route: '#/transactions' }];
       else actions = [{ label: 'Abrir origem', route: ev.route }];
       return { event: ev, actions: actions };
@@ -13444,7 +14499,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;
@@ -13555,6 +14610,28 @@ window.Juntos = window.Juntos || {};
     canRemoveListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
     canCheckListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
     canAssignListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
+    canViewRoutine: function (userId, routineId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!routineId) return true;
+      var db = read();
+      var r = db.routines.find(function (x) { return x.id === routineId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!r && DB.routineVisible(db, userId, r);
+    },
+    canCreateRoutine: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditRoutine: function (userId, routineId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !routineId) return !!c.member;
+      var db = read();
+      var r = db.routines.find(function (x) { return x.id === routineId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!r && DB.routineCanAct(db, userId, r);
+    },
+    canExecuteRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canCompleteRoutineItem: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canAssignRoutineItem: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canPauseRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canArchiveRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canDeleteRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
        financeira (audit_logs). Sem segredos; IP/UA só como hash. */

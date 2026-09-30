@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -925,7 +925,7 @@
     // Hoje (resumo rápido)
     s += blk('Hoje', function () {
       var nx = day.next ? '<br>Próximo: <b>' + esc((day.next.start || '') + (day.next.start ? ' • ' : '') + day.next.title) + '</b>' : '<br><span class="muted">Sem próximos compromissos.</span>';
-      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.tasks.total + '</b> tarefas • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
+      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.tasks.total + '</b> tarefas • <b>' + ((day.routines || []).length) + '</b> rotinas • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
     });
     // Próximo compromisso (destaque)
     s += blk('Próximo', function () {
@@ -940,6 +940,7 @@
     s += '<div class="ov-grid">' + pair + '</div>';
     s += blk('Tarefas', function () { return ovTasksCard(me, day); });
     s += blk('Listas', function () { return ovListsCard(me, day); });
+    s += blk('Rotinas', function () { return ovRoutinesCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
     pair2 += blk('Timeline', function () { return ovTimelineCard(day); });
@@ -2993,6 +2994,287 @@
     return '<div class="card"><b>📝 ' + esc(top.name) + '</b><p class="muted">' + top.pending + ' itens pendentes • <a href="#/lists/' + top.id + '">Ver lista ›</a></p></div>';
   }
   /* ============ ETAPA 6: CALENDÁRIO ============ */
+  /* ============ ROTINAS (só apresentação sobre RoutineService) ============
+     Rotina orquestra ações; nunca duplica Habit/Task/List/Agenda. */
+  var rt = { tab: 'today', vis: 'all', q: '', focus: false };
+  function rtFreqLbl(r) {
+    var c = r.frequency_config || {};
+    if (r.frequency_type === 'DAILY') return (c.interval > 1 ? 'A cada ' + c.interval + ' dias' : 'Todo dia');
+    if (r.frequency_type === 'WEEKLY') return 'Toda semana';
+    if (r.frequency_type === 'MONTHLY') return 'Todo mês' + (c.dayOfMonth ? ' (dia ' + c.dayOfMonth + ')' : '');
+    if (r.frequency_type === 'SPECIFIC_DAYS') {
+      var nm = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+      return (c.daysOfWeek || []).map(function (d) { return nm[d]; }).join(', ') || 'Dias específicos';
+    }
+    return 'Personalizada';
+  }
+  function pRoutines(v, me) {
+    var tabs = [['today', 'Hoje'], ['all', 'Todas'], ['PERSONAL', 'Pessoais'], ['COUPLE', 'Casal']];
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Rotinas</h1><button class="btn" id="rt-new" style="max-width:190px">+ Nova rotina</button></div>' +
+      '<div class="seg-scroll"><div class="seg" role="tablist" aria-label="Filtro">' +
+      tabs.map(function (x) { return '<button data-rttab="' + x[0] + '" class="' + ((rt.tab === x[0] && (x[0] === 'today' || x[0] === 'all')) || rt.tab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="seg" role="group" aria-label="Visibilidade"><button data-rtvis="all" class="' + (rt.vis === 'all' ? 'on' : '') + '">Todas</button><button data-rtvis="PERSONAL" class="' + (rt.vis === 'PERSONAL' ? 'on' : '') + '">Pessoais</button><button data-rtvis="COUPLE" class="' + (rt.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<input id="rt-q" placeholder="🔍 Buscar rotinas" value="' + esc(rt.q) + '" aria-label="Buscar rotinas"></div>';
+    var rows = [], rel = {}, errMsg = null;
+    try {
+      var vis = rt.vis === 'all' ? undefined : rt.vis;
+      if (rt.tab === 'today') {
+        var t = J.DB.getTodayExecutions(me.id, todayISO());
+        rows = t.map(function (x) { rel[x.routine.id] = x.execution; return { id: x.routine.id, name: x.routine.name, visibility: x.routine.visibility, preferred_time: x.routine.preferred_time, status: 'ACTIVE', frequency_type: '', frequency_config: {} }; });
+        if (vis) rows = rows.filter(function (r) { return r.visibility === vis; });
+        if (rt.q) { var qq = rt.q.toLowerCase(); rows = rows.filter(function (r) { return r.name.toLowerCase().indexOf(qq) >= 0; }); }
+      } else if (rt.tab === 'all' || rt.tab === 'PERSONAL' || rt.tab === 'COUPLE') {
+        var vv = rt.tab === 'all' ? vis : rt.tab;
+        rows = J.DB.getRoutines(me.id, { visibility: vv, search: rt.q || undefined, limit: 100 });
+      }
+    } catch (e) { errMsg = e; }
+    if (errMsg) { v.innerHTML = html + '<div class="card"><b>Rotinas</b><div class="alert">Não foi possível carregar suas rotinas.</div><button class="btn ghost" data-rtretry>Tentar novamente</button></div>'; bindRoutines(v, me); return; }
+    if (!rows.length) {
+      var emptyTxt = rt.tab === 'today' ? 'Nenhuma rotina prevista para hoje.' : 'Crie rotinas para organizar ações que você costuma fazer juntas. Exemplos: manhã, noite, organização da casa ou planejamento semanal.';
+      html += '<div class="card empty"><div class="ico">🔁</div><h2>' + esc(emptyTxt) + '</h2>' + (rt.tab === 'today' ? '' : '<button class="btn" id="rt-new2" style="max-width:220px;margin:0 auto">+ Nova rotina</button>') + '</div>';
+    } else {
+      html += rows.slice(0, 60).map(function (r) {
+        var prog = null;
+        try {
+          if (rel[r.id]) prog = { done: rel[r.id].done, total: rel[r.id].total };
+          else if (rt.tab === 'today') { var ex0 = J.DB.getOrCreateExecution(me.id, r.id, todayISO()); prog = { done: ex0.done, total: ex0.total }; }
+        } catch (e2) {}
+        var sub;
+        if (prog && prog.total) sub = prog.done + ' de ' + prog.total + ' hoje';
+        else if (r.status === 'PAUSED') sub = 'Pausada';
+        else if (rt.tab === 'today') sub = rtFreqLbl(r) + (r.preferred_time ? ' • ' + r.preferred_time : '');
+        else {
+          var nx = null;
+          try { nx = J.DB.routineNextOccurrence(me.id, r.id, todayISO()); } catch (e3) {}
+          sub = rtFreqLbl(r) + (nx ? ' • Próxima: ' + dueLabel(nx) : '') + (r.preferred_time ? ' • ' + r.preferred_time : '');
+        }
+        return '<a class="card dash-link" href="#/routines/' + r.id + '" aria-label="Abrir rotina ' + esc(r.name) + '"><div class="row between"><b>' + esc(r.name) + '</b><span class="pill">' + (r.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</span></div>' +
+          '<p class="muted">' + esc(sub) + (r.status === 'PAUSED' ? ' • Pausada' : '') + '</p></a>';
+      }).join('');
+    }
+    v.innerHTML = html;
+    bindRoutines(v, me);
+  }
+  function bindRoutines(v, me) {
+    var nw = document.getElementById('rt-new'); if (nw) nw.onclick = function () { openRoutineModal(me, null); };
+    var nw2 = document.getElementById('rt-new2'); if (nw2) nw2.onclick = function () { openRoutineModal(me, null); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-rttab]'), function (b) { b.onclick = function () { rt.tab = b.dataset.rttab; render('routines'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-rtvis]'), function (b) { b.onclick = function () { rt.vis = b.dataset.rtvis; render('routines'); }; });
+    var q = document.getElementById('rt-q'); if (q) q.onchange = function (e) { rt.q = e.target.value; render('routines'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-rtretry]'), function (b) { b.onclick = function () { render('routines'); }; });
+  }
+  function openRoutineModal(me, routineId) {
+    var r = null;
+    if (routineId) { try { r = J.DB.getRoutine(me.id, routineId); } catch (e) { toast('Rotina não encontrada.'); return; } }
+    var fq = r ? r.frequency_type : 'DAILY';
+    var cfg = (r && r.frequency_config) || {};
+    modalShell('<h2>' + (r ? 'Editar rotina' : 'Nova rotina') + '</h2><div id="me"></div>' +
+      '<label>Nome *</label><input id="f-rn" maxlength="80" value="' + esc(r ? r.name : '') + '">' +
+      '<label>Descrição</label><input id="f-rd" maxlength="500" value="' + esc(r ? (r.description || '') : '') + '">' +
+      '<label>É</label><div class="row"><label class="check"><input type="radio" name="rtvis" value="PERSONAL"' + ((!r || r.visibility === 'PERSONAL') ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="rtvis" value="COUPLE"' + ((r && r.visibility === 'COUPLE') ? ' checked' : '') + '> Do casal</label></div>' +
+      '<div class="row"><div><label>Frequência</label><select id="f-rf"><option value="DAILY">Todo dia</option><option value="WEEKLY">Toda semana</option><option value="MONTHLY">Todo mês</option><option value="SPECIFIC_DAYS">Dias específicos</option></select></div>' +
+      '<div><label>Horário preferencial</label><input id="f-rp" type="time" value="' + esc(r ? (r.preferred_time || '') : '') + '"></div></div>' +
+      '<div id="rt-wd" style="display:none"><label>Dias</label><div class="row" style="flex-wrap:wrap">' + [['1', 'SEG'], ['2', 'TER'], ['3', 'QUA'], ['4', 'QUI'], ['5', 'SEX'], ['6', 'SÁB'], ['0', 'DOM']].map(function (d) { return '<label class="check" style="flex:1 1 22%"><input type="checkbox" data-rwd="' + d[0] + '"' + ((cfg.daysOfWeek || []).indexOf(+d[0]) >= 0 ? ' checked' : '') + '> ' + d[1] + '</label>'; }).join('') + '</div></div>' +
+      '<div class="row"><div><label>Início</label><input id="f-rs" type="date" value="' + esc(r ? (r.start_date || '') : todayISO()) + '"></div>' +
+      '<div><label>Fim (opcional)</label><input id="f-re" type="date" value="' + esc(r && r.end_date ? r.end_date : '') + '"></div></div>' +
+      '<p class="muted">Rotina organiza ações; não vira compromisso da agenda nem cria tarefas sozinha.</p>' +
+      '<button class="btn" id="sv">' + (r ? 'Salvar' : 'Criar rotina') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    var fsel = document.getElementById('f-rf'); fsel.value = fq;
+    function paintW() { document.getElementById('rt-wd').style.display = fsel.value === 'SPECIFIC_DAYS' ? '' : 'none'; }
+    fsel.onchange = paintW; paintW();
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var vs = document.querySelector('input[name="rtvis"]:checked');
+        var wds = [];
+        if (fsel.value === 'SPECIFIC_DAYS') Array.prototype.forEach.call(document.querySelectorAll('[data-rwd]'), function (c) { if (c.checked) wds.push(+c.dataset.rwd); });
+        var data = { name: document.getElementById('f-rn').value, description: document.getElementById('f-rd').value, visibility: vs ? vs.value : 'PERSONAL', frequency_type: fsel.value, frequency_config: { interval: 1, daysOfWeek: wds }, preferred_time: document.getElementById('f-rp').value || null, start_date: document.getElementById('f-rs').value || null, end_date: document.getElementById('f-re').value || null };
+        if (!r && data.visibility === 'COUPLE' && !confirm('Essa rotina passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        if (r && data.visibility !== r.visibility && data.visibility === 'COUPLE' && !confirm('Essa rotina passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        if (r) { J.DB.updateRoutine(me.id, r.id, data); toast('Rotina atualizada!'); closeModal(); render(here()); }
+        else { var nr = J.DB.createRoutine(me.id, data); toast('Rotina criada! 🔁'); location.hash = '#/routines/' + nr.id; closeModal(); return; }
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function pRoutineDetail(v, me, routineId) {
+    var r;
+    try { r = J.DB.getRoutine(me.id, routineId); }
+    catch (e) { v.innerHTML = '<div class="card"><b>Rotina</b><div class="alert">Não foi possível carregar suas rotinas.</div><p><a href="#/routines">‹ Voltar para Rotinas</a></p></div>'; return; }
+    var dueToday = false;
+    try { dueToday = J.DB.routineIsDueOnDate(r, todayISO()); } catch (e2) {}
+    var ex = null;
+    if (dueToday && r.status === 'ACTIVE') { try { ex = J.DB.getOrCreateExecution(me.id, r.id, todayISO()); } catch (e3) {} }
+    else { ex = null; }
+    var items = [];
+    try { items = J.DB.getRoutineItems(me.id, r.id); } catch (e5) {}
+    var nx = null;
+    try { nx = J.DB.routineNextOccurrence(me.id, r.id, todayISO()); } catch (e6) {}
+    var head = '<p class="muted"><a href="#/routines">‹ Rotinas</a></p>' +
+      '<div class="card"><div class="row between" style="flex-wrap:wrap"><div><h1 style="margin:0">' + esc(r.name) + '</h1><p class="muted">' + esc(rtFreqLbl(r)) + ' • ' + (r.visibility === 'COUPLE' ? 'Do casal' : 'Pessoal') + (r.preferred_time ? ' • ' + esc(r.preferred_time) : '') + (r.status !== 'ACTIVE' ? ' • ' + (r.status === 'PAUSED' ? 'Pausada' : 'Arquivada') : '') + '</p></div>' +
+      '<span><button class="btn ghost sm" id="rt-edit">Editar</button></span></div>' +
+      (r.description ? '<p class="muted">' + esc(r.description) + '</p>' : '') +
+      (nx && !dueToday ? '<p class="muted">Próxima: <b>' + esc(dueLabel(nx)) + '</b></p>' : '') + '</div>';
+    if (!ex) {
+      v.innerHTML = head + '<div class="card"><b>Itens (' + items.length + ')</b>' + (items.length ? items.map(function (it) { return '<p>○ ' + esc(it.title) + (it.item_type === 'LINKED_ENTITY' ? ' <span class="muted">• vinculado</span>' : '') + '</p>'; }).join('') : '<p class="muted">Sem itens ainda.</p>') + '</div>' + rtDetailActions(r);
+      bindRoutineDetail(v, me, r, null);
+      return;
+    }
+    var pend = ex.items.filter(function (it) { return it.status === 'PENDING' && !it.removed; });
+    var prog = '<div class="bar" role="progressbar" aria-label="Progresso da execução"><span style="width:' + (ex.total ? Math.round(ex.done / ex.total * 100) : 0) + '%"></span></div>' +
+      '<p class="muted" aria-live="polite">Hoje • ' + ex.done + ' de ' + ex.total + (ex.status === 'COMPLETED' ? ' • Concluída' : ex.status === 'SKIPPED' ? ' • Pulada' : '') + '</p>';
+    function itemRow(it) {
+      var who = it.assigned_to ? J.DB.userName(me.id, it.assigned_to) : null;
+      var link = it.item_type === 'LINKED_ENTITY' && it.linked_entity_type === 'LIST' ? ' • <a href="#/lists/' + it.linked_entity_id + '">abrir lista ›</a>' : it.item_type === 'LINKED_ENTITY' && it.linked_entity_type === 'TASK' ? ' • <a href="#/tasks">ver tarefa ›</a>' : it.item_type === 'LINKED_ENTITY' && it.linked_entity_type === 'HABIT' ? ' • <a href="#/habits">ver hábito ›</a>' : '';
+      var st = it.status === 'COMPLETED' ? '✓' : it.status === 'SKIPPED' ? '–' : '';
+      return '<div class="ov-row"><button class="chk' + (it.status === 'COMPLETED' ? ' done' : '') + '" data-rtdone="' + it.id + '" aria-pressed="' + (it.status === 'COMPLETED') + '" aria-label="' + esc((it.status === 'COMPLETED' ? 'Reabrir ' : 'Concluir ') + it.title) + '">' + st + '</button>' +
+        '<span style="flex:1;min-width:0"><b>' + esc(it.title) + '</b>' + (it.required === false ? ' <span class="muted">(opcional)</span>' : '') + (who && r.visibility === 'COUPLE' ? '<br><span class="muted">👤 ' + esc(who) + '</span>' : '') + link + '</span>' +
+        '<span style="display:flex;gap:2px;flex:none">' +
+        (it.status === 'PENDING' ? '<button class="btn ghost sm" data-rtskip="' + it.id + '" style="max-width:64px">Pular</button>' : '<button class="btn ghost sm" data-rtredo="' + it.id + '" style="max-width:70px">Desfazer</button>') +
+        '<button class="btn ghost sm" data-rtedit="' + it.routine_item_id + '" style="max-width:64px">Editar</button></span></div>';
+    }
+    var body = '';
+    if (rt.focus && pend.length) {
+      var cur = pend[0];
+      body = '<div class="card center"><b>' + esc(r.name) + '</b><p class="muted">' + ex.done + ' de ' + ex.total + '</p><h2>' + esc(cur.title) + '</h2>' +
+        '<div class="row" style="justify-content:center"><button class="btn" id="fc-done" style="max-width:160px">Concluir</button><button class="btn ghost" id="fc-skip" style="max-width:160px">Pular</button></div>' +
+        '<p><button class="link" id="fc-all">Ver todos os itens</button></p></div>';
+    } else {
+      body = '<div class="card">' + prog +
+        '<form id="rt-addf"><input id="rt-add" placeholder="Adicionar item... (Enter adiciona)" autocomplete="off" aria-label="Adicionar item"></form></div>' +
+        (ex.items.filter(function (it) { return !it.removed; }).length ? '<div class="card"><div class="row between"><b>Itens de hoje</b><button class="btn ghost sm" id="rt-focus">Modo foco</button></div>' + ex.items.filter(function (it) { return !it.removed; }).map(itemRow).join('') + '</div>' : '<div class="card"><p class="muted">Adicione o primeiro item.</p></div>');
+    }
+    v.innerHTML = head + body + rtDetailActions(r, ex);
+    bindRoutineDetail(v, me, r, ex);
+  }
+  function rtDetailActions(r, ex) {
+    var h = '<div class="card"><div class="row" style="flex-wrap:wrap">';
+    if (ex && ex.status !== 'COMPLETED' && ex.status !== 'SKIPPED') {
+      h += '<button class="btn ghost sm" id="rt-finish">Concluir rotina</button><button class="btn ghost sm" id="rt-skipex">Pular hoje</button>';
+    }
+    if (r.status === 'ACTIVE') h += '<button class="btn ghost sm" id="rt-pause">Pausar</button>';
+    else if (r.status === 'PAUSED') h += '<button class="btn ghost sm" id="rt-resume">Retomar</button>';
+    if (r.status !== 'ARCHIVED') h += '<button class="btn ghost sm" id="rt-arch">Arquivar</button>';
+    return h + '</div></div>';
+  }
+  function bindRoutineDetail(v, me, r, ex) {
+    document.getElementById('rt-edit').onclick = function () { openRoutineModal(me, r.id); };
+    var addF = document.getElementById('rt-addf');
+    if (addF) addF.onsubmit = function (ev) {
+      ev.preventDefault();
+      var inp = document.getElementById('rt-add');
+      if (!inp.value.trim()) return;
+      try { J.DB.addRoutineItem(me.id, r.id, { title: inp.value.trim() }); toast('Item adicionado.'); render('routines/' + r.id); }
+      catch (e) { toast('Não foi possível adicionar.'); }
+    };
+    if (ex) {
+      Array.prototype.forEach.call(v.querySelectorAll('[data-rtdone]'), function (b) {
+        b.onclick = function () {
+          try {
+            var it = ex.items.filter(function (x) { return x.id === b.dataset.rtdone; })[0];
+            if (it && it.status === 'COMPLETED') J.DB.reopenRoutineItem(me.id, ex.id, it.id);
+            else J.DB.completeRoutineItem(me.id, ex.id, b.dataset.rtdone, {});
+            render('routines/' + r.id);
+          } catch (e2) { toast(e2.message || 'Não foi possível.'); }
+        };
+      });
+      Array.prototype.forEach.call(v.querySelectorAll('[data-rtskip]'), function (b) {
+        b.onclick = function () { try { J.DB.skipRoutineItem(me.id, ex.id, b.dataset.rtskip); render('routines/' + r.id); } catch (e3) { toast('Não foi possível.'); } };
+      });
+      Array.prototype.forEach.call(v.querySelectorAll('[data-rtredo]'), function (b) {
+        b.onclick = function () { try { J.DB.reopenRoutineItem(me.id, ex.id, b.dataset.rtredo); render('routines/' + r.id); } catch (e4) { toast('Não foi possível.'); } };
+      });
+      var fc = document.getElementById('rt-focus'); if (fc) fc.onclick = function () { rt.focus = true; render('routines/' + r.id); };
+      var fa = document.getElementById('fc-all'); if (fa) fa.onclick = function () { rt.focus = false; render('routines/' + r.id); };
+      var fd = document.getElementById('fc-done');
+      if (fd) fd.onclick = function () {
+        try {
+          var p = ex.items.filter(function (x) { return x.status === 'PENDING'; })[0];
+          if (p) J.DB.completeRoutineItem(me.id, ex.id, p.id, {});
+          render('routines/' + r.id);
+        } catch (e5) { toast(e5.message || 'Não foi possível.'); }
+      };
+      var fs = document.getElementById('fc-skip');
+      if (fs) fs.onclick = function () {
+        try {
+          var p2 = ex.items.filter(function (x) { return x.status === 'PENDING'; })[0];
+          if (p2) J.DB.skipRoutineItem(me.id, ex.id, p2.id);
+          render('routines/' + r.id);
+        } catch (e6) { toast('Não foi possível.'); }
+      };
+      var fin = document.getElementById('rt-finish');
+      if (fin) fin.onclick = function () { try { J.DB.completeExecution(me.id, ex.id, {}); toast('Rotina concluída!'); render('routines/' + r.id); } catch (e7) { toast(e7.message || 'Não foi possível.'); } };
+      var sk = document.getElementById('rt-skipex');
+      if (sk) sk.onclick = function () { try { J.DB.skipExecution(me.id, ex.id); toast('Execução de hoje pulada.'); render('routines/' + r.id); } catch (e8) { toast('Não foi possível.'); } };
+    }
+    Array.prototype.forEach.call(v.querySelectorAll('[data-rtedit]'), function (b) { b.onclick = function () { openRoutineItemModal(me, r.id, b.dataset.rtedit); }; });
+    var pa = document.getElementById('rt-pause'); if (pa) pa.onclick = function () { try { J.DB.pauseRoutine(me.id, r.id); toast('Rotina pausada.'); render('routines/' + r.id); } catch (e9) { toast('Não foi possível.'); } };
+    var rs = document.getElementById('rt-resume'); if (rs) rs.onclick = function () { try { J.DB.resumeRoutine(me.id, r.id); toast('Rotina retomada!'); render('routines/' + r.id); } catch (e10) { toast('Não foi possível.'); } };
+    var ar = document.getElementById('rt-arch'); if (ar) ar.onclick = function () { try { J.DB.archiveRoutine(me.id, r.id); toast('Rotina arquivada.'); location.hash = '#/routines'; } catch (e11) { toast('Não foi possível.'); } };
+  }
+  function openRoutineItemModal(me, routineId, itemId) {
+    var it;
+    try {
+      it = J.DB.getRoutineItems(me.id, routineId).filter(function (x) { return x.id === itemId; })[0];
+      if (!it) throw new Error('x');
+    } catch (e) { toast('Item não encontrado.'); return; }
+    var members = [];
+    try { members = J.DB.myCouple(me.id).users; } catch (e2) {}
+    var r;
+    try { r = J.DB.getRoutine(me.id, routineId); } catch (e3) { r = { visibility: 'PERSONAL' }; }
+    var tasks = [], habits = [], lists = [], agenda = [];
+    try { tasks = J.DB.getTasks(me.id, { limit: 100 }); } catch (e4) {}
+    try { habits = J.DB.getHabits(me.id, {}); } catch (e5) {}
+    try { lists = J.DB.getLists(me.id, { limit: 100 }); } catch (e6) {}
+    try {
+      var seen = {};
+      J.DB.agendaUpcoming(me.id, { from: todayISO(), days: 30, limit: 100, vision: 'couple' }).forEach(function (o) {
+        if (o.event_id && !seen[o.event_id]) { seen[o.event_id] = true; agenda.push({ id: o.event_id, title: o.title }); }
+      });
+    } catch (e7) {}
+    function entOpts(rows, label) {
+      return '<optgroup label="' + label + '">' + rows.slice(0, 40).map(function (x) {
+        var nm = x.title || x.name;
+        return '<option value="' + x.id + '">' + esc(String(nm).slice(0, 50)) + '</option>';
+      }).join('') + '</optgroup>';
+    }
+    modalShell('<h2>Editar item</h2><div id="me"></div>' +
+      '<label>Título</label><input id="f-it" maxlength="140" value="' + esc(it.title) + '">' +
+      '<label><input type="checkbox" id="f-ir"' + (it.required === false ? '' : ' checked') + '> Obrigatório para concluir a rotina</label>' +
+      (r.visibility === 'COUPLE' ? '<label>Responsável</label><select id="f-ia"><option value="">Sem responsável</option>' + members.map(function (u) { return '<option value="' + u.id + '"' + (it.assigned_to === u.id ? ' selected' : '') + '>' + esc(u.nome) + (u.id === me.id ? ' (você)' : '') + '</option>'; }).join('') + '</select>' : '') +
+      '<label>Vínculo (opcional)</label><select id="f-il"><option value="">Ação interna</option>' +
+      '<option value="HABIT"' + (it.linked_entity_type === 'HABIT' ? ' selected' : '') + '>Hábito</option>' +
+      '<option value="TASK"' + (it.linked_entity_type === 'TASK' ? ' selected' : '') + '>Tarefa</option>' +
+      '<option value="LIST"' + (it.linked_entity_type === 'LIST' ? ' selected' : '') + '>Lista</option>' +
+      '<option value="AGENDA_EVENT"' + (it.linked_entity_type === 'AGENDA_EVENT' ? ' selected' : '') + '>Compromisso</option></select>' +
+      '<select id="f-ie" aria-label="Entidade vinculada">' + entOpts(habits, 'Hábitos') + entOpts(tasks, 'Tarefas') + entOpts(lists, 'Listas') + entOpts(agenda, 'Compromissos') + '</select>' +
+      '<div class="row"><button class="btn ghost sm" id="it-up">↑ Subir</button><button class="btn ghost sm" id="it-down">↓ Descer</button><button class="btn ghost sm danger" id="it-del">Excluir</button></div>' +
+      '<button class="btn" id="sv">Salvar</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    if (it.linked_entity_id) { try { document.getElementById('f-ie').value = it.linked_entity_id; } catch (e8) {} }
+    document.getElementById('sv').onclick = function () {
+      try {
+        var lt = document.getElementById('f-il').value || null;
+        var patch = { title: document.getElementById('f-it').value, required: document.getElementById('f-ir').checked, item_type: lt ? 'LINKED_ENTITY' : 'ACTION', linked_entity_type: lt, linked_entity_id: lt ? document.getElementById('f-ie').value : null };
+        var sel = document.getElementById('f-ia');
+        if (sel) patch.assigned_to = sel.value || null;
+        J.DB.updateRoutineItem(me.id, itemId, patch);
+        closeModal(); toast('Item atualizado!'); render(here());
+      } catch (e9) { document.getElementById('me').innerHTML = err(e9); }
+    };
+    document.getElementById('it-del').onclick = function () {
+      try { J.DB.removeRoutineItem(me.id, itemId); closeModal(); toast('Item excluído.'); render(here()); }
+      catch (e10) { document.getElementById('me').innerHTML = err(e10); }
+    };
+    document.getElementById('it-up').onclick = function () { try { J.DB.moveRoutineItem(me.id, itemId, 'up'); closeModal(); render(here()); } catch (e11) {} };
+    document.getElementById('it-down').onclick = function () { try { J.DB.moveRoutineItem(me.id, itemId, 'down'); closeModal(); render(here()); } catch (e12) {} };
+  }
+  function ovRoutinesCard(me, day) {
+    var lst = (day && day.routines) || [];
+    if (!lst.length) return '';
+    var top = lst[0];
+    return '<div class="card"><b>🔁 ' + esc(top.name) + '</b><p class="muted">' + top.done + ' de ' + top.total + ' • <a href="#/routines/' + top.id + '">Continuar ›</a></p></div>';
+  }
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
@@ -3016,6 +3298,7 @@
     return '<span class="pill ' + m[0] + '">' + esc(m[1]) + '</span>';
   }
   function calTypeIcon(t) {
+    if (t === 'routine') return '🔁';
     return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅', habit: '🌱', task: '☑' }[t] || '•';
   }
   function occIcon(o) {
@@ -4459,7 +4742,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };
