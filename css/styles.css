@@ -78,6 +78,17 @@ html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text-1);font-size:var(--fs-body);line-height:var(--lh);-webkit-tap-highlight-color:transparent}
 .hidden{display:none!important}
 .crumb-sep{font-weight:600}
+/* ---- marca 2gtr (só apresentação; SVG inline nos templates) ---- */
+.brandlock{display:grid;justify-items:center;gap:6px;text-align:center;margin:6px 0 16px}
+.brandlock .appicon{border-radius:14px;box-shadow:var(--shadow-md)}
+.brandlock .bw{font-family:var(--font-display);font-weight:800;font-size:30px;letter-spacing:-.02em;color:var(--primary);line-height:1}
+.brandlock .tag{color:var(--text-2);font-size:14px}
+.brandlock.inv .bw{color:#fff}
+.brandlock.inv .tag{color:rgba(255,255,255,.85)}
+.boot{background:var(--primary);color:#fff}
+.boot .spinner{border-color:rgba(255,255,255,.25);border-top-color:#fff}
+.boot p{color:rgba(255,255,255,.85)}
+.boot .brandlock{margin:0}
 h1{font-family:var(--font-display);font-size:var(--fs-h1);margin:8px 0;letter-spacing:-.02em;font-weight:800}
 h2{font-family:var(--font-display);font-size:var(--fs-h2);margin:0 0 8px;letter-spacing:-.01em;font-weight:700}
 h3{font-family:var(--font-display);font-size:var(--fs-h3);margin:0 0 6px}
@@ -376,6 +387,7 @@ details.card summary::-webkit-details-marker{display:none}
   #sidebar{display:flex;flex-direction:column;width:264px;flex:none;min-height:100vh;background:var(--surface);color:var(--text-1);padding:24px 18px;position:sticky;top:0;height:100vh;border-right:1px solid var(--line)}
   .brand{margin-bottom:20px;display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:19px;font-weight:800;letter-spacing:-.01em;color:var(--text-1)}
   .brand small{display:block;font-size:11px;font-weight:600;color:var(--text-2);letter-spacing:.02em;margin-top:2px;font-family:var(--font)}
+  .brand-name{color:var(--primary)}
   #side-nav{display:flex;flex-direction:column;gap:4px;overflow:auto}
   #side-nav a{color:var(--text-2);text-decoration:none;padding:10px 12px;border-radius:var(--radius-md);font-weight:500;font-size:15px;display:flex;gap:12px;align-items:center}
   #side-nav a svg{flex:none}

@@ -23,6 +23,25 @@
     return '<div class="card empty"><div class="ico">' + icon + '</div><h2>' + titulo + '</h2><p class="muted">' + texto + '</p><p><span class="pill">Disponível na próxima etapa</span></p><a class="btn ghost" href="#/dashboard" style="text-decoration:none;text-align:center">Voltar ao início</a></div>';
   }
 
+  /* Marca 2gtr (só apresentação): fita "2" verde/rosa + "gtr". Variantes:
+     claro (fundo claro), inv (fundo escuro). Ids de gradiente únicos. */
+  var __logoN = 0;
+  function logoMark(size, icon) {
+    __logoN++;
+    var g = 'lg' + __logoN;
+    var bg = icon ? '<rect x="2" y="2" width="60" height="60" rx="16" fill="#FFFFFF"/>' : '';
+    return '<svg class="appicon" viewBox="0 0 64 64" width="' + size + '" height="' + size + '" aria-hidden="true">' +
+      '<defs><linearGradient id="' + g + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14A86F"/><stop offset="1" stop-color="#0A6E46"/></linearGradient></defs>' + bg +
+      '<path d="M20 21 C20 14 27 10 34 10 C42 10 47 15 47 22 C47 30 34 36 26 44 L46 44" fill="none" stroke="url(#' + g + ')" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M36 29 L27 39" fill="none" stroke="#ffffff" stroke-width="12.5" stroke-linecap="round"/>' +
+      '<path d="M36 29 L27 39" fill="none" stroke="#E85D9A" stroke-width="9" stroke-linecap="round"/></svg>';
+  }
+  function brandLockup(o) {
+    o = o || {};
+    var inv = !!o.inv;
+    return '<div class="brandlock' + (inv ? ' inv' : '') + '">' + logoMark(o.size || 56, true) +
+      '<div class="bw">gtr</div>' + (o.tag === false ? '' : '<div class="tag">Juntos nas suas finanças.</div>') + '</div>';
+  }
   function render(route) {
     var v = document.getElementById('view');
     var me = J.Auth.current();
@@ -60,21 +79,21 @@
 
   /* ---------- AUTH (etapa 1, preservado) ---------- */
   function pLogin(v) {
-    v.innerHTML = '<div class="card"><h1>Entrar ❤️</h1><p class="muted">Que bom ver vocês por aqui.</p><div id="e"></div><label>E-mail</label><input id="f-em" type="email" autocomplete="email"><label>Senha</label><input id="f-pw" type="password" autocomplete="current-password"><button class="btn" id="go">Entrar</button><p class="center"><a href="#/register">Criar conta</a> • <a href="#/forgot-password">Esqueci a senha</a></p></div>';
+    v.innerHTML = '<div class="card">' + brandLockup({ size: 56 }) + '<h1>Entrar ❤️</h1><p class="muted">Que bom ver vocês por aqui.</p><div id="e"></div><label>E-mail</label><input id="f-em" type="email" autocomplete="email"><label>Senha</label><input id="f-pw" type="password" autocomplete="current-password"><button class="btn" id="go">Entrar</button><p class="center"><a href="#/register">Criar conta</a> • <a href="#/forgot-password">Esqueci a senha</a></p></div>';
     document.getElementById('go').onclick = function () {
       try { var me = J.Auth.login(document.getElementById('f-em').value, document.getElementById('f-pw').value); J.Router.go(me); toast('Bem-vindo de volta!'); }
       catch (e) { document.getElementById('e').innerHTML = err(e); }
     };
   }
   function pRegister(v) {
-    v.innerHTML = '<div class="card"><h1>Criar conta ❤️</h1><p class="muted">Leva menos de 1 minuto.</p><div id="e"></div><label>Seu nome</label><input id="f-nm"><label>E-mail</label><input id="f-em" type="email"><label>Senha (6+ caracteres)</label><input id="f-pw" type="password"><button class="btn" id="go">Criar conta</button><p class="center"><a href="#/login">Já tenho conta</a></p></div>';
+    v.innerHTML = '<div class="card">' + brandLockup({ size: 56 }) + '<h1>Criar conta ❤️</h1><p class="muted">Leva menos de 1 minuto.</p><div id="e"></div><label>Seu nome</label><input id="f-nm"><label>E-mail</label><input id="f-em" type="email"><label>Senha (6+ caracteres)</label><input id="f-pw" type="password"><button class="btn" id="go">Criar conta</button><p class="center"><a href="#/login">Já tenho conta</a></p></div>';
     document.getElementById('go').onclick = function () {
       try { var me = J.Auth.register(document.getElementById('f-nm').value, document.getElementById('f-em').value, document.getElementById('f-pw').value); location.hash = '#/onboarding'; toast('Conta criada! Vamos configurar.'); }
       catch (e) { document.getElementById('e').innerHTML = err(e); }
     };
   }
   function pForgot(v) {
-    v.innerHTML = '<div class="card"><h1>Recuperar senha</h1><p class="muted">Geramos um código de 6 dígitos (nesta etapa, sem e-mail — anote o código).</p><div id="e"></div><div id="s1"><label>E-mail</label><input id="f-em" type="email"><button class="btn" id="g1">Gerar código</button></div><div id="s2" class="hidden"><div class="code" id="code"></div><label>Código</label><input id="f-cd" inputmode="numeric"><label>Nova senha</label><input id="f-np" type="password"><button class="btn" id="g2">Definir nova senha</button></div><p class="center"><a href="#/login">Voltar</a></p></div>';
+    v.innerHTML = '<div class="card">' + brandLockup({ size: 48 }) + '<h1>Recuperar senha</h1><p class="muted">Geramos um código de 6 dígitos (nesta etapa, sem e-mail — anote o código).</p><div id="e"></div><div id="s1"><label>E-mail</label><input id="f-em" type="email"><button class="btn" id="g1">Gerar código</button></div><div id="s2" class="hidden"><div class="code" id="code"></div><label>Código</label><input id="f-cd" inputmode="numeric"><label>Nova senha</label><input id="f-np" type="password"><button class="btn" id="g2">Definir nova senha</button></div><p class="center"><a href="#/login">Voltar</a></p></div>';
     var email = '';
     document.getElementById('g1').onclick = function () {
       try { email = document.getElementById('f-em').value; var c = J.Auth.forgot(email); document.getElementById('s1').classList.add('hidden'); document.getElementById('s2').classList.remove('hidden'); document.getElementById('code').textContent = c; toast('Código gerado. Anote com carinho.'); }
@@ -89,7 +108,7 @@
   /* ---------- ONBOARDING (etapa 1, preservado) ---------- */
   function pOnboarding(v, me) {
     if (ob.step === 1) {
-      v.innerHTML = '<div class="card center" style="padding:40px 24px"><div style="font-size:56px">❤️</div><h1>Bem-vindo ao 2gtr</h1><p class="muted">Organize as finanças de vocês de forma simples e transparente.</p><button class="btn" id="go">Começar</button></div>';
+      v.innerHTML = '<div class="card center" style="padding:40px 24px">' + brandLockup({ size: 72 }) + '<h1>Bem-vindo ao 2gtr</h1><p class="muted">Organize as finanças de vocês de forma simples e transparente.</p><button class="btn" id="go">Começar</button></div>';
       document.getElementById('go').onclick = function () { ob.step = 2; render('onboarding'); };
     } else if (!ob.choice) {
       v.innerHTML = '<div class="card"><h1>Como você quer começar?</h1><div id="e"></div><button class="opt" id="c1">🏠 <b>Sou o primeiro do casal</b><br><span class="muted">Criar o espaço do casal e convidar depois</span></button><button class="opt" id="c2">✉️ <b>Tenho um convite</b><br><span class="muted">Entrar com o código JNT-XXXXXX</span></button></div>';

@@ -10,3 +10,6 @@
 ## Fidelidade ao exemplo (só visual, zero logica)
 - Sidebar SVG + card do casal, topbar com casal, hero e donut no dashboard, tiles por categoria, bug mobile da sidebar corrigido.
 - Testes (22/22 PASS): formato do exemplo, valores intactos (acerto/dashboard/agregacao), regressao, OF off, diagnose. Telas desktop/mobile. Console limpo.
+## Logo oficial 2gtr (só visual, zero logica)
+- SVG vetorial (fita verde/rosa + gtr) com variante invertida; sidebar, boot, auth e onboarding; favicon data URI.
+- Testes (16/16 PASS): marca nas telas, valores intactos, regressao, OF off, diagnose. Telas desktop/mobile. Console limpo.

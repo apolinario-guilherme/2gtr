@@ -343,3 +343,6 @@ Transplante do sistema visual do prototipo OpenDesign (C:\Users\Guilherme\Deskto
 ## 38. Fidelidade ao exemplo (só apresentação; zero logica).
 
 Sidebar com icones SVG de linha + card "Espaco do casal" (paintShell preenche nomes via myCouple); topbar com eyebrow do casal; hero "Saldo de <mes>" + split Receitas/Despesas; donut SVG + legenda (top 6 + Outras) no dashboard; tiles de lancamento com cor deterministica por categoria (catColor); "Ultimos lancamentos / Ver tudo". Correcao real: sidebar aparecia no mobile (faltava display:none base). Nenhum calculo/banco/rota alterado; Open Finance segue invisivel e desativado.
+## 39. Logo oficial 2gtr (só apresentação; zero logica).
+
+Marca "2" em fita verde/rosa + "gtr" como SVG vetorial inline (logoMark/brandLockup em app.js, ids de gradiente unicos). Variantes: claro (fundo claro), inv/branco (boot em fundo verde-escuro). Aplicada em: sidebar (icone app + gtr), boot escuro, login, cadastro, recuperacao de senha, onboarding (com tagline "Juntos nas suas finanças."). Favicon via data URI (quadrado verde + "2"). Nenhum calculo/banco/rota alterado; Open Finance segue invisivel e desativado.
