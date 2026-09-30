@@ -25,3 +25,6 @@
 ## Home publica (apresentacao, sem dados reais)
 - Rota publica landing como / (default), autenticado segue p/ app, login/cadastro intactos, guard impede dados privados, CTAs conectados, SEO basico, menu mobile, sem Open Finance/investimentos.
 - Testes (57/57 PASS): todas as secoes, h1 unico, shell bare, CTAs register/login, scroll sem mudar hash, register+login funcionais, redirect autenticado, zero vazamento (tx/habito/nome/conta), guard, 9 rotas de regressao, OF off, diagnose, sem overflow no piso mensuravel (477<492; corte do screenshot e artefato da largura minima do headless; botoes com width:auto e grids 1col no mobile). Console limpo.
+## Area de Membros (estrutura, sem regras novas)
+- Publica x privada separadas; retorno pos-login; 404/403; robots dinamico; sidebar em grupos + colapso; bottomnav 5 itens SVG; hub Financas; menu do avatar; settings em grupos + preferencias + gestao do dinheiro; avatar validado; logout sem vazamento; offline; OF oculto.
+- Testes (74/74 PASS): publicas, guard+pending, login valido/invalido, logout, IDOR (habito/agenda/fatura/tx/outro casal), owner x member, grupos/aria-current/bottomnav/hubs, menu, colapso, 404/403, settings+avatar+prefs, troca de usuario, regressao (acerto, fatura, orcamento, meta, agenda, habitos, notif, automacao, assistente), OF off, diagnose, sem overflow. Desktop/mobile. Console limpo.

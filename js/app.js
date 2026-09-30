@@ -48,8 +48,9 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
+      if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
       document.getElementById('retry').onclick = function () { render(route); };
     }
@@ -64,17 +65,70 @@
     try { paintShell(me); } catch (e3) { /* shell nunca quebra a página */ }
     window.scrollTo(0, 0);
   }
-  /* Moldura estática (só apresentação): nomes do casal vindos dos serviços. */
+  /* Moldura estática = MemberLayout (só apresentação: nomes vindos dos serviços). */
+  function avatarHtml(me, size) {
+    if (me && me.avatar) return '<img class="avatar-img" src="' + me.avatar + '" alt="" style="width:' + size + 'px;height:' + size + 'px">';
+    return esc(((me && me.nome) || '?').charAt(0).toUpperCase());
+  }
   function paintShell(me) {
     var eb = document.getElementById('couple-eyebrow');
     var cn = document.getElementById('couple-card-name');
     var cm = document.getElementById('couple-card-members');
+    var mn = document.getElementById('me-card-name');
+    var mm = document.getElementById('me-card-mail');
+    var ma = document.getElementById('me-card-av');
+    var ab = document.getElementById('avatar-btn');
     if (!me) { if (eb) eb.textContent = ''; return; }
     var ctx = J.DB.myCouple(me.id);
     var cname = (ctx.couple && ctx.couple.name) || '';
     if (eb) eb.textContent = cname;
     if (cn) cn.textContent = cname || 'Seu casal';
     if (cm) cm.textContent = ctx.users.map(function (u) { return u.nome.split(' ')[0]; }).join(' & ');
+    if (mn) mn.textContent = me.nome.split(' ')[0];
+    if (mm) mm.textContent = me.email;
+    if (ma) { ma.innerHTML = avatarHtml(me, 28); ma.setAttribute('aria-label', me.nome); }
+    if (ab) { ab.innerHTML = avatarHtml(me, 34); ab.setAttribute('aria-label', 'Menu de ' + me.nome); }
+    try {
+      var sbe = document.getElementById('sidebar');
+      if (sbe) {
+        var col = localStorage.getItem('juntos_sb_v1') === '1';
+        sbe.classList.toggle('collapsed', col);
+        var tg = document.getElementById('sb-toggle');
+        if (tg) { tg.textContent = col ? '›' : '‹'; tg.setAttribute('aria-expanded', col ? 'false' : 'true'); tg.setAttribute('aria-label', col ? 'Expandir menu' : 'Recolher menu'); }
+        document.querySelectorAll('#side-nav a').forEach(function (a) {
+          var lbl = a.querySelector('.nl');
+          a.setAttribute('title', lbl ? lbl.textContent : '');
+        });
+      }
+    } catch (e) {}
+  }
+  function bindUserMenu() {
+    var ab = document.getElementById('avatar-btn');
+    if (!ab || ab.dataset.um) return;
+    ab.dataset.um = '1';
+    ab.setAttribute('aria-haspopup', 'menu');
+    ab.setAttribute('aria-expanded', 'false');
+    ab.onclick = function () {
+      var me = J.Auth.current();
+      if (!me) { location.hash = '#/login'; return; }
+      var old = document.getElementById('user-menu');
+      if (old) { old.remove(); ab.setAttribute('aria-expanded', 'false'); return; }
+      var ctx = J.Ctx.get();
+      var m = document.createElement('div');
+      m.id = 'user-menu'; m.setAttribute('role', 'menu');
+      m.innerHTML = '<div class="um-head"><b>' + esc(me.nome) + '</b><br><span class="muted">' + esc(me.email) + '</span>' +
+        (ctx.couple ? '<br><span class="muted">Casal: ' + esc(ctx.couple.name) + '</span>' : '') + '</div>' +
+        '<a href="#/settings/profile" role="menuitem">👤 Meu perfil</a>' +
+        '<a href="#/settings" role="menuitem">⚙️ Configurações</a>' +
+        '<button id="um-out" role="menuitem">Sair</button>';
+      document.getElementById('shell').appendChild(m);
+      ab.setAttribute('aria-expanded', 'true');
+      m.querySelectorAll('a').forEach(function (a) { a.onclick = function () { m.remove(); ab.setAttribute('aria-expanded', 'false'); ab.focus(); }; });
+      m.querySelector('#um-out').onclick = function () { m.remove(); J.Auth.logout(); };
+      document.addEventListener('keydown', function esc2(e) {
+        if (e.key === 'Escape' && document.getElementById('user-menu')) { document.getElementById('user-menu').remove(); ab.setAttribute('aria-expanded', 'false'); ab.focus(); document.removeEventListener('keydown', esc2); }
+      });
+    };
   }
 
   /* ============ HOME PÚBLICA (só apresentação; zero dados reais) ============
@@ -206,6 +260,61 @@
       var open = nav && nav.classList.toggle('open');
       burger.setAttribute('aria-expanded', open ? 'true' : 'false');
     };
+  }
+  /* ============ ÁREA DE MEMBROS: estados, públicas legais, hub e erros ============
+     emptyState/Skeleton/ErrorState reutilizáveis; privacidade/termos sem
+     juridiquês inventado; hub Finanças só organiza links existentes. */
+  function emptyState(icon, title, desc, ctaHtml) {
+    return '<div class="card empty"><div class="ico" aria-hidden="true">' + icon + '</div><h2>' + title + '</h2><p class="muted">' + desc + '</p>' + (ctaHtml || '') + '</div>';
+  }
+  function pNotFound(v) {
+    v.innerHTML = emptyState('🔍', 'Não encontramos esta página.', 'O endereço pode ter mudado ou não existe.', '<p><a class="btn" href="#/dashboard" style="text-decoration:none;text-align:center">Ir para a Visão Geral</a></p><p class="center"><a href="#/landing">Voltar para o início</a></p>');
+  }
+  function pForbidden(v) {
+    v.innerHTML = emptyState('🔒', 'Você não tem acesso a esta página.', 'Fale com quem criou o casal se precisar de outra permissão.', '<p><a class="btn" href="#/dashboard" style="text-decoration:none;text-align:center">Voltar para a Visão Geral</a></p>');
+  }
+  function pPrivacy(v) {
+    v.innerHTML = '<div class="lp"><header class="lp-head"><div class="lp-wrap lp-head-in"><a class="lp-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(30) + '<strong>2gtr</strong></a><div class="lp-head-cta"><a class="link" href="#/login">Entrar</a><button class="btn sm lp-btn" data-lgo="#/register">Começar agora</button></div></div></header>' +
+      '<main><section class="lp-sec"><div class="lp-wrap"><h1>Privacidade</h1><p class="lp-sub">Resumo de como o 2gtr trata seus dados nesta etapa do produto.</p>' +
+      '<div class="card"><b>Seus dados</b><p class="muted">Conta (nome e e-mail), dados financeiros que você registra, agenda, hábitos e preferências. Usamos o mínimo necessário para o app funcionar.</p></div>' +
+      '<div class="card"><b>O que é seu e o que é do casal</b><p class="muted">Hábitos e compromissos pessoais ficam visíveis só para você. Informações do casal (despesas compartilhadas, compromissos do casal, metas conjuntas) são visíveis para os dois membros.</p></div>' +
+      '<div class="card"><b>Onde ficam</b><p class="muted">Nesta etapa de demonstração, os dados ficam salvos neste navegador. Nada é exibido publicamente e nenhuma informação privada aparece na Home.</p></div>' +
+      '<p class="muted">Documento completo em breve.</p><p><a class="btn ghost" href="#/landing" style="text-decoration:none;text-align:center">Voltar para o início</a></p>' +
+      '</div></section></main><footer class="lp-foot"><p class="lp-copy">© 2gtr</p></footer></div>';
+    bindPublicCtas(v);
+  }
+  function pTerms(v) {
+    v.innerHTML = '<div class="lp"><header class="lp-head"><div class="lp-wrap lp-head-in"><a class="lp-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(30) + '<strong>2gtr</strong></a><div class="lp-head-cta"><a class="link" href="#/login">Entrar</a><button class="btn sm lp-btn" data-lgo="#/register">Começar agora</button></div></div></header>' +
+      '<main><section class="lp-sec"><div class="lp-wrap"><h1>Termos de uso</h1><p class="lp-sub">Regras básicas para usar o 2gtr.</p>' +
+      '<div class="card"><b>Uso pessoal</b><p class="muted">Use sua conta com responsabilidade e mantenha sua senha em segurança. O 2gtr organiza informações — não presta consultoria financeira, médica ou jurídica.</p></div>' +
+      '<div class="card"><b>Seus registros</b><p class="muted">Você é responsável pelos dados que cadastra. Confira valores importantes antes de tomar decisões.</p></div>' +
+      '<p class="muted">Documento completo em breve.</p><p><a class="btn ghost" href="#/landing" style="text-decoration:none;text-align:center">Voltar para o início</a></p>' +
+      '</div></section></main><footer class="lp-foot"><p class="lp-copy">© 2gtr</p></footer></div>';
+    bindPublicCtas(v);
+  }
+  function bindPublicCtas(v) {
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lgo]'), function (b) {
+      b.onclick = function () { location.hash = b.getAttribute('data-lgo'); };
+    });
+  }
+  function pFinanceHub(v, me) {
+    var items = [
+      ['transactions', '💸', 'Movimentações', 'Receitas e despesas'],
+      ['accounts', '🏦', 'Contas', 'Saldos e saldos por pessoa'],
+      ['cards', '💳', 'Cartões', 'Limites e uso'],
+      ['invoices', '🧾', 'Faturas', 'Vencimentos e pagamentos'],
+      ['installments', '🗓️', 'Parceladas', 'Compras em parcelas'],
+      ['budget', '📊', 'Orçamento', 'Limites por categoria'],
+      ['goals', '🎯', 'Metas', 'Objetivos e progresso'],
+      ['planning', '🗺️', 'Planejamento', 'Planejado x realizado'],
+      ['settlements', '⚖️', 'Acertos', 'Compensações do casal'],
+      ['recurring', '🔁', 'Recorrentes', 'Contas que se repetem'],
+      ['reports', '📈', 'Relatórios', 'Análises do período']
+    ];
+    v.innerHTML = '<div class="card"><h1>Finanças</h1><p class="muted">Tudo do dinheiro em um só lugar.</p></div>' +
+      '<div class="menu">' + items.map(function (x) {
+        return '<a href="#/' + x[0] + '">' + x[1] + ' ' + x[2] + ' <span>›</span></a>';
+      }).join('') + '</div>';
   }
   /* ---------- AUTH (etapa 1, preservado) ---------- */
   function pLogin(v) {
@@ -3907,8 +4016,37 @@
       } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
     };
   }
+  /* ============ MemberContext (só apresentação/autorização contextual) ============
+     Centraliza leitura de sessão + casal. Nunca substitui validação backend. */
+  function ctxOf(me) {
+    var c = { me: me, couple: null, members: [], users: [], role: null, isOwner: false, mode: 'SEPARATE' };
+    if (!me) return c;
+    try {
+      var ctx = J.DB.myCouple(me.id);
+      c.couple = ctx.couple || null; c.members = ctx.members || []; c.users = ctx.users || [];
+      var m = c.members.filter(function (x) { return x.user_id === me.id; })[0];
+      c.role = m ? m.role : null; c.isOwner = c.role === 'owner';
+      c.mode = J.DB.moneyMode(me.id);
+    } catch (e) {}
+    return c;
+  }
+  J.Ctx = {
+    _c: null,
+    get: function () {
+      var me = J.Auth.current();
+      if (!me) { this._c = ctxOf(null); return this._c; }
+      if (!this._c || !this._c.me || this._c.me.id !== me.id) this._c = ctxOf(me);
+      return this._c;
+    },
+    clear: function () { this._c = null; }
+  };
   function pMore(v) {
-    v.innerHTML = '<div class="menu"><a href="#/accounts">🏦 Contas <span>›</span></a><a href="#/cards">💳 Cartões <span>›</span></a><a href="#/installments">🗓️ Compras parceladas <span>›</span></a><a href="#/invoices">🧾 Faturas <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settlements">⚖️ Acertos <span>›</span></a><a href="#/recurring">🔁 Contas recorrentes <span>›</span></a><a href="#/agenda">📅 Agenda <span>›</span></a><a href="#/habits">🌱 Hábitos <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/reports">📈 Relatórios <span>›</span></a><a href="#/planning">🗺️ Planejamento <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>';
+    var me = J.Auth.current();
+    v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
+      '<div class="menu"><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
+    var out = document.getElementById('more-out');
+    if (out) out.onclick = function () { J.Auth.logout(); };
   }
   /* ============ CONFIGURAÇÕES: hub + subseções ============
      Áreas principais = usar o dinheiro. Configurações = definir como o
@@ -3916,43 +4054,84 @@
   function crumb(title) {
     return '<p class="muted"><a href="#/settings">‹ Configurações</a> <span class="crumb-sep">› ' + esc(title) + '</span></p>';
   }
-  var SETTING_SECTIONS = [
-    ['profile', '👤', 'Meu perfil', 'Nome, e-mail, avatar e conta'],
-    ['couple', '❤️', 'Casal', 'Participantes e gestão do dinheiro'],
-    ['financial', '💱', 'Preferências financeiras', 'Insights e preferências de visualização'],
-    ['automation', '⚙️', 'Automação', 'Regras e automações'],
-    ['notifications', '🔔', 'Notificações', 'Preferências de alertas'],
-    ['whatsapp', '📱', 'WhatsApp', 'Conexão e preferências'],
-    ['assistant', '🤖', 'Assistente financeiro', 'Conversas e privacidade'],
-    ['data', '📥', 'Dados', 'Importações e reconciliações'],
-    ['categories', '🏷️', 'Categorias', 'Categorias e subcategorias'],
-    ['privacy', '🔒', 'Privacidade e segurança', 'Senha, segurança e auditoria']
+  var SETTING_GROUPS = [
+    ['Conta', [['profile', '👤', 'Meu perfil', 'Nome, e-mail, avatar e conta'], ['preferences', '🎛️', 'Preferências', 'Visão padrão e período inicial'], ['privacy', '🔒', 'Privacidade e segurança', 'Senha, segurança e auditoria']]],
+    ['Casal', [['couple', '❤️', 'Casal', 'Participantes e convites'], ['money', '💱', 'Gestão do dinheiro', 'Dinheiro separado ou tudo junto']]],
+    ['Finanças', [['categories', '🏷️', 'Categorias', 'Categorias e subcategorias'], ['automation', '⚙️', 'Automação', 'Regras e automações'], ['financial', '💹', 'Preferências financeiras', 'Insights e visualização'], ['data', '📥', 'Dados', 'Importações e reconciliações']]],
+    ['Comunicação', [['notifications', '🔔', 'Notificações', 'Preferências de alertas'], ['whatsapp', '📱', 'WhatsApp', 'Conexão e preferências'], ['assistant', '🤖', 'Assistente financeiro', 'Conversas e privacidade']]]
   ];
   function pSettings(v, me) {
     var mode = J.DB.moneyMode(me.id);
     var modeLbl = mode === 'JOINT' ? 'Tudo junto' : 'Dinheiro separado';
-    var cards = SETTING_SECTIONS.map(function (s) {
-      var extra = s[0] === 'couple' ? '<br><span class="muted">Gestão atual: <b>' + modeLbl + '</b></span>' : '';
-      return '<a class="card dash-link" href="#/settings/' + s[0] + '"><div class="row between"><b>' + s[1] + ' ' + s[2] + '</b><span>›</span></div><p class="muted">' + s[3] + extra + '</p></a>';
-    }).join('');
-    v.innerHTML = '<div class="card"><h1>Configurações</h1><p class="muted">Gerencie sua conta, seu casal e as preferências do aplicativo.</p></div>' + cards;
+    v.innerHTML = '<div class="card"><h1>Configurações</h1><p class="muted">Gerencie sua conta, seu casal e as preferências do aplicativo.</p></div>' +
+      SETTING_GROUPS.map(function (g) {
+        return '<h2 class="set-group">' + g[0] + '</h2>' + g[1].map(function (s) {
+          var extra = s[0] === 'money' ? '<br><span class="muted">Gestão atual: <b>' + modeLbl + '</b></span>' : '';
+          return '<a class="card dash-link" href="#/settings/' + s[0] + '"><div class="row between"><b>' + s[1] + ' ' + s[2] + '</b><span>›</span></div><p class="muted">' + s[3] + extra + '</p></a>';
+        }).join('');
+      }).join('');
   }
   function pSettingsSub(v, me, sub) {
-    var map = { profile: pSettingsProfile, couple: pSettingsCouple, financial: pSettingsFinancial, automation: pSettingsAutomation, notifications: pSettingsNotifPrefs, whatsapp: pSettingsWhatsapp, assistant: pSettingsAssistant, data: pSettingsData, categories: pSettingsCategories, privacy: pSettingsPrivacy };
+    var map = { profile: pSettingsProfile, preferences: pSettingsPreferences, couple: pSettingsCouple, money: pSettingsMoney, financial: pSettingsFinancial, automation: pSettingsAutomation, notifications: pSettingsNotifPrefs, whatsapp: pSettingsWhatsapp, assistant: pSettingsAssistant, data: pSettingsData, categories: pSettingsCategories, privacy: pSettingsPrivacy };
     var fn = map[sub];
     if (!fn) { location.hash = '#/settings'; return pSettings(v, me); }
     return fn(v, me);
   }
+  function pSettingsMoney(v, me) {
+    var ctx = J.DB.myCouple(me.id);
+    if (!ctx.couple) { location.hash = '#/onboarding'; return; }
+    var isOwner = ctx.members.some(function (m) { return m.user_id === me.id && m.role === 'owner'; });
+    v.innerHTML = crumb('Gestão do dinheiro') + '<div class="card"><h1>Gestão do dinheiro</h1><p class="muted">Como vocês querem administrar o dinheiro? Os registros financeiros existentes nunca são alterados.</p></div>' + moneyModeCard(me, ctx, isOwner);
+    bindMoneyMode(me, isOwner);
+  }
+  function pSettingsPreferences(v, me) {
+    v.innerHTML = crumb('Preferências') + '<div class="card"><h1>Preferências</h1><div id="e"></div>' +
+      '<label>Visão financeira padrão</label><select id="pf-vis"><option value="couple">Casal</option><option value="me">Só eu</option></select>' +
+      '<label>Período inicial da Visão Geral</label><select id="pf-ov"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select>' +
+      '<button class="btn" id="pf-sv">Salvar</button><p class="muted">Preferências deste aparelho; apagadas ao sair da conta.</p></div>';
+    try {
+      var d = JSON.parse(localStorage.getItem('juntos_dash_v3') || '{}');
+      if (d.vision) document.getElementById('pf-vis').value = d.vision;
+      var o = JSON.parse(localStorage.getItem('juntos_ov_v1') || '{}');
+      if (o.mode) document.getElementById('pf-ov').value = o.mode;
+    } catch (e) {}
+    document.getElementById('pf-sv').onclick = function () {
+      try {
+        dash.vision = document.getElementById('pf-vis').value; dashPersist();
+        ov.mode = document.getElementById('pf-ov').value; ovPersist();
+        toast('Preferências salvas!');
+      } catch (e2) { document.getElementById('e').innerHTML = err(e2); }
+    };
+  }
   function pSettingsProfile(v, me) {
+    var av = me.avatar
+      ? '<img class="avatar-img" src="' + me.avatar + '" alt="Foto de ' + esc(me.nome) + '" style="width:72px;height:72px;margin:0 auto">'
+      : '<div class="avatar" style="width:72px;height:72px;font-size:32px;margin:0 auto">' + esc(me.nome.charAt(0).toUpperCase()) + '</div>';
     v.innerHTML = crumb('Meu perfil') + '<div class="card"><h1>Meu perfil</h1><div id="e"></div>' +
-      '<div class="center"><div class="avatar" style="width:72px;height:72px;font-size:32px;margin:0 auto">' + esc(me.nome.charAt(0).toUpperCase()) + '</div><p class="muted">Foto de perfil chega em breve</p></div>' +
-      '<label>Nome</label><input id="f-nm" value="' + esc(me.nome) + '"><label>E-mail</label><input value="' + esc(me.email) + '" disabled>' +
+      '<div class="center">' + av + '<p><label class="link" for="f-av" style="cursor:pointer">Trocar foto</label>' +
+      (me.avatar ? ' • <button class="link danger" id="av-rm">Remover</button>' : '') + '</p>' +
+      '<input id="f-av" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" aria-label="Enviar foto de perfil"></div>' +
+      '<label>Nome</label><input id="f-nm" value="' + esc(me.nome) + '"><label>E-mail</label><input value="' + esc(me.email) + '" disabled aria-describedby="em-ro"><p class="muted" id="em-ro">O e-mail é somente leitura nesta etapa.</p>' +
       '<p class="muted">Conta criada em ' + esc(dmy(me.created_at)) + '</p>' +
       '<button class="btn" id="sv">Salvar</button></div>' +
       '<div class="card"><b>Conta</b><p class="muted">Para trocar a senha, vá em <a href="#/settings/privacy">Privacidade e segurança</a>.</p>' +
       '<button class="btn ghost" id="out">Sair da conta</button></div>';
     document.getElementById('sv').onclick = function () { try { J.Auth.updateProfile(document.getElementById('f-nm').value); toast('Perfil atualizado!'); render('settings/profile'); } catch (e2) { document.getElementById('e').innerHTML = err(e2); } };
     document.getElementById('out').onclick = function () { J.Auth.logout(); };
+    document.getElementById('f-av').onchange = function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].indexOf(f.type) < 0) { document.getElementById('e').innerHTML = err(new Error('Envie uma imagem PNG, JPG, WEBP ou GIF.')); return; }
+      if (f.size > 300 * 1024) { document.getElementById('e').innerHTML = err(new Error('Imagem muito grande (máx 300 KB).')); return; }
+      var rd = new FileReader();
+      rd.onload = function () {
+        try { J.Auth.setAvatar(rd.result); toast('Foto atualizada!'); render('settings/profile'); }
+        catch (e3) { document.getElementById('e').innerHTML = err(e3); }
+      };
+      rd.readAsDataURL(f);
+    };
+    var rm = document.getElementById('av-rm');
+    if (rm) rm.onclick = function () { try { J.Auth.setAvatar(null); toast('Foto removida.'); render('settings/profile'); } catch (e4) { document.getElementById('e').innerHTML = err(e4); } };
   }
   function pSettingsCouple(v, me) {
     var ctx = J.DB.myCouple(me.id);
@@ -5692,7 +5871,26 @@
   /* ---------- BOOT ---------- */
   function boot() {
     var lo = document.getElementById('btn-logout-desk'); if (lo) lo.onclick = function () { J.Auth.logout(); };
-    var av = document.getElementById('avatar-btn'); if (av) av.onclick = function () { location.hash = '#/settings/profile'; };
+    bindUserMenu();
+    var tg = document.getElementById('sb-toggle');
+    if (tg && !tg.dataset.b) {
+      tg.dataset.b = '1';
+      tg.onclick = function () {
+        var sb = document.getElementById('sidebar');
+        var col = !sb.classList.contains('collapsed');
+        try { localStorage.setItem('juntos_sb_v1', col ? '1' : '0'); } catch (e) {}
+        paintShell(J.Auth.current());
+      };
+    }
+    function setOff() {
+      var bar = document.getElementById('offline-bar');
+      var off = !navigator.onLine;
+      if (bar) bar.classList.toggle('hidden', !off);
+      if (off) toast('Você está sem conexão. Algumas informações podem não estar atualizadas.');
+    }
+    window.addEventListener('offline', setOff);
+    window.addEventListener('online', function () { var bar = document.getElementById('offline-bar'); if (bar) bar.classList.add('hidden'); toast('Conexão de volta!'); });
+    setOff();
     var fab = document.getElementById('fab'); if (fab) fab.onclick = function () {
       var me = J.Auth.current();
       if (!me || !J.DB.myCoupleId(me.id)) { toast('Crie ou entre em um casal primeiro ❤️'); return; }
@@ -5700,6 +5898,7 @@
         '<button class="btn" id="fb-r">+ Receita</button>' +
         '<button class="btn" id="fb-e">− Despesa</button>' +
         '<button class="btn ghost" id="fb-a">📅 Novo compromisso</button>' +
+        '<button class="btn ghost" id="fb-h">🌱 Novo hábito</button>' +
         '<button class="btn ghost" id="fb-g">🎯 Nova meta</button>' +
         '<button class="btn ghost" id="fb-c">🔁 Nova conta recorrente</button>' +
         '<button class="btn ghost" id="cl">Cancelar</button>');
@@ -5707,6 +5906,7 @@
       document.getElementById('fb-r').onclick = function () { closeModal(); openTxModal(me, null, 'income'); };
       document.getElementById('fb-e').onclick = function () { closeModal(); openTxModal(me, null, 'expense'); };
       document.getElementById('fb-a').onclick = function () { closeModal(); openAgendaModal(me, null, null); };
+      document.getElementById('fb-h').onclick = function () { closeModal(); location.hash = '#/habits'; };
       document.getElementById('fb-g').onclick = function () { closeModal(); goAndOpen(me, '#/goals', 'goals', function () { openGoalModal(me, null); }); };
       document.getElementById('fb-c').onclick = function () { closeModal(); goAndOpen(me, '#/recurring', 'recurring', function () { openRecModal(me, null); }); };
     };

@@ -44,7 +44,11 @@
     },
     logout: function () {
       try { var me = Auth.current(); if (me) J.DB.logSecurityEvent(me.id, 'logout', { action: 'logout', metadata: {} }); } catch (e) {}
-      setS(null); location.hash = '#/login';
+      setS(null);
+      /* Limpa preferências de interface (filtros/visões) p/ não vazar contexto entre usuários. */
+      try { ['juntos_dash_v3', 'juntos_ov_v1'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e2) {}
+      try { if (J.Ctx) J.Ctx.clear(); } catch (e3) {}
+      location.hash = '#/login';
     },
     forgot: function (email) {
       email = String(email || '').trim().toLowerCase();
@@ -72,6 +76,19 @@
       var me = Auth.current(); if (!me) return;
       var db = J.DB.all(); var u = db.users.find(function (x) { return x.id === me.id; });
       u.nome = String(nome || '').trim() || u.nome; J.DB.save(db);
+    },
+    /* Avatar: valida tipo real (MIME), tamanho e prefixo dataURL; nunca URL arbitrária. */
+    setAvatar: function (dataUrl) {
+      var me = Auth.current(); if (!me) throw new Error('Entre novamente.');
+      if (dataUrl == null || dataUrl === '') {
+        var db0 = J.DB.all(); db0.users.find(function (x) { return x.id === me.id; }).avatar = null; J.DB.save(db0); return null;
+      }
+      var m = /^data:(image\/(png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
+      if (!m) throw new Error('Envie uma imagem PNG, JPG, WEBP ou GIF.');
+      var bytes = Math.floor(m[3].length * 3 / 4);
+      if (bytes > 300 * 1024) throw new Error('Imagem muito grande (máx 300 KB).');
+      var db = J.DB.all(); db.users.find(function (x) { return x.id === me.id; }).avatar = 'data:' + m[1] + ';base64,' + m[3]; J.DB.save(db);
+      return true;
     }
   };
   J.Auth = Auth;

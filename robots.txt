@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /#/landing
+Allow: /#/privacy
+Allow: /#/terms
+Disallow: /#/dashboard
+Disallow: /#/settings
+Disallow: /#/transactions
+Disallow: /#/login
+Disallow: /#/register
