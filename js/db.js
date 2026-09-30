@@ -5908,20 +5908,36 @@ window.Juntos = window.Juntos || {};
         { key: 'cash_flow', kind: 'read' }, { key: 'financial_insights', kind: 'read' },
         { key: 'transaction_search', kind: 'read' }, { key: 'report_explanation', kind: 'read' },
         { key: 'planning_question', kind: 'read' }, { key: 'help', kind: 'read' },
-        { key: 'agenda_query', kind: 'read' },
+        { key: 'agenda_query', kind: 'read' }, { key: 'agenda_today', kind: 'read' },
+        { key: 'agenda_tomorrow', kind: 'read' }, { key: 'agenda_week', kind: 'read' },
+        { key: 'agenda_month', kind: 'read' }, { key: 'agenda_search', kind: 'read' },
+        { key: 'agenda_detail', kind: 'read' },
+        { key: 'overview_day', kind: 'read' }, { key: 'overview_tomorrow', kind: 'read' },
+        { key: 'overview_week', kind: 'read' }, { key: 'overview_month', kind: 'read' },
+        { key: 'overview_upcoming', kind: 'read' },
+        { key: 'habit_list', kind: 'read' }, { key: 'habit_today', kind: 'read' },
+        { key: 'habit_status', kind: 'read' }, { key: 'habit_history', kind: 'read' },
+        { key: 'habit_stats', kind: 'read' },
+        { key: 'planning_status', kind: 'read' }, { key: 'notification_status', kind: 'read' },
+        { key: 'product_navigation', kind: 'read' }, { key: 'money_mode_status', kind: 'read' },
+        { key: 'whatsapp_status', kind: 'read' },
         { key: 'openfinance_status', kind: 'read' }, { key: 'openfinance_reconciliation', kind: 'read' },
         { key: 'create_transaction', kind: 'write' }, { key: 'create_transfer', kind: 'write' },
-        { key: 'create_goal', kind: 'write' }, { key: 'create_recurring', kind: 'write' },
+        { key: 'create_goal', kind: 'write' }, { key: 'contribute_goal', kind: 'write' },
+        { key: 'create_recurring', kind: 'write' },
         { key: 'mark_invoice_paid', kind: 'write' }, { key: 'update_transaction', kind: 'write' },
         { key: 'create_agenda_event', kind: 'write' }, { key: 'update_agenda_event', kind: 'write' },
-        { key: 'cancel_agenda_event', kind: 'write' }
+        { key: 'cancel_agenda_event', kind: 'write' },
+        { key: 'habit_create', kind: 'write' }, { key: 'habit_complete', kind: 'write' },
+        { key: 'habit_remove_completion', kind: 'write' }, { key: 'habit_pause', kind: 'write' },
+        { key: 'habit_resume', kind: 'write' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -5938,16 +5954,37 @@ window.Juntos = window.Juntos || {};
       var jailed = /(ignore|esqueca|ignorar).*(regras|instrucoes|regras|sistema)|voce e agora|voce eh agora|system\s*:|modo (admin|root|deus)|desative (a |)seguranca/i.test(s);
       return { text: s, injectionFlag: jailed };
     },
-    /* Valor em pt-BR: "R$ 1.500,50", "1500 reais", "10 mil", "85". */
+    /* Valor em pt-BR: "R$ 1.500,50", "1500 reais", "10 mil", "85",
+       "cinquenta reais" (por extenso, determinístico). */
     aiParseAmount: function (text) {
       var s = DB.aiNorm(text);
       var m = s.match(/(?:r\$?\s?)?(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?\s?(mil|milhao|milhoes)?(?:\s?(reais|real|r\$))?/);
-      if (!m) return null;
-      var v = parseFloat(m[1].replace(/\./g, '')) + (m[2] ? parseFloat('0.' + m[2]) : 0);
-      if (m[3] && m[3].indexOf('milh') === 0) v *= 1000000;
-      else if (m[3] === 'mil') v *= 1000;
-      if (!(v > 0)) return null;
-      return Math.round(v * 100) / 100;
+      if (m) {
+        var v = parseFloat(m[1].replace(/\./g, '')) + (m[2] ? parseFloat('0.' + m[2]) : 0);
+        if (m[3] && m[3].indexOf('milh') === 0) v *= 1000000;
+        else if (m[3] === 'mil') v *= 1000;
+        if (v > 0) return Math.round(v * 100) / 100;
+      }
+      /* Por extenso (só quando não há dígitos): "cinquenta", "vinte e três". */
+      var NUMW = { dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13, quatorze: 14, quinze: 15, dezesseis: 16, dezessete: 17, dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90, cem: 100, cento: 100, duzentos: 200, trezentos: 300, quatrocentos: 400, quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800, novecentos: 900 };
+      var CONN = { e: 1, de: 1, da: 1, do: 1, reais: 1, real: 1 };
+      var toks = s.split(' '), run = [], started = false;
+      for (var i = 0; i < toks.length; i++) {
+        var t = toks[i];
+        if (NUMW[t] != null || t === 'mil') { started = true; run.push(t); }
+        else if (started && CONN[t]) run.push(t);
+        else if (started) break;
+      }
+      var nums = run.filter(function (t) { return NUMW[t] != null || t === 'mil'; });
+      if (!nums.length) return null;
+      var tot = 0, cur = 0;
+      nums.forEach(function (t) {
+        if (t === 'mil') { cur = cur || 1; tot += cur * 1000; cur = 0; }
+        else cur += NUMW[t];
+      });
+      tot += cur;
+      if (!(tot > 0)) return null;
+      return Math.round(tot * 100) / 100;
     },
     /* Período explícito: hoje/ontem/semana/mês/passado/3 meses/nomes de mês. */
     aiParsePeriod: function (text) {
@@ -6144,8 +6181,41 @@ window.Juntos = window.Juntos || {};
       /* valor */
       var amt = DB.aiParseAmount(text);
       if (amt != null) out.entities.amount = amt;
-      /* ---- intents de ESCRITA primeiro (verbos de ação) ---- */
+      /* ---- novos domínios (padrões específicos primeiro; nada existente muda) ---- */
+      var AGW = ['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'medico', 'evento', 'agenda', 'marcado', 'marcada'];
+      var HBW = ['habito', 'habitos', 'leitura', 'ler', 'academia', 'caminhada', 'caminhar', 'meditacao', 'meditar', 'exercicio', 'exercitar', 'corrida', 'correr', 'estudo', 'estudar', 'agua', 'dieta', 'rotina'];
+      function hasAny(list) { return list.some(function (w) { return s.indexOf(w) >= 0; }); }
+      var noAG = !hasAny(AGW);
+      if (has(['me mostra meu dia', 'mostra meu dia', 'como esta meu dia', 'como esta o meu dia', 'resumo do dia', 'resumo de hoje', 'como esta o dia'])) out.intent = 'overview_day';
+      else if (has(['como esta minha semana', 'como esta a semana', 'resumo da semana', 'resumo semanal', 'resumo da minha semana'])) out.intent = 'overview_week';
+      else if (has(['resumo do mes', 'resumo mensal', 'como esta meu mes', 'resumo do meu mes', 'o que tenho esse mes'])) out.intent = 'overview_month';
+      else if (has(['alguma coisa importante', 'algo importante hoje', 'proximos eventos', 'o que vem por ai', 'o que vem pela frente', 'tem importante'])) out.intent = 'overview_upcoming';
+      else if (has(['o que tenho amanha', 'que tenho amanha']) && noAG) out.intent = 'overview_tomorrow';
+      else if ((has(['completei', 'conclui', 'fiz ', 'marquei ']) && hasAny(HBW)) || /(como concluida|como concluido|como feito|como feita)\b/.test(s)) out.intent = 'habit_complete';
+      else if ((has(['desfaz', 'desfazer', 'desmarca', 'desmarcar', 'remove']) && hasAny(HBW)) || /(desfaz|desmarca).*(hoje|de hoje)/.test(s)) out.intent = 'habit_remove_completion';
+      else if (has(['pausa', 'pausar', 'pauso']) && hasAny(HBW)) out.intent = 'habit_pause';
+      else if ((has(['retoma', 'retomar', 'volta com', 'voltar com', 'reativa']) && hasAny(HBW))) out.intent = 'habit_resume';
+      else if (has(['criar habito', 'cria um habito', 'crie um habito', 'novo habito', 'nova rotina'])) out.intent = 'habit_create';
+      else if (/(adicion|aport|coloca|colocar|deposita).{0,20}meta\b/.test(s) || /(na|para) (a )?meta\b/.test(s)) out.intent = 'contribute_goal';
+      else if (has(['quais compromissos tenho hoje', 'compromissos de hoje', 'tenho compromisso hoje', 'o que tenho hoje']) && !has(['para hoje'])) out.intent = 'agenda_today';
+      else if (has(['compromisso amanha', 'compromissos amanha', 'tenho amanha']) && hasAny(AGW)) out.intent = 'agenda_tomorrow';
+      else if (hasAny(AGW) && has(['essa semana', 'esta semana', 'nessa semana'])) out.intent = 'agenda_week';
+      else if (hasAny(AGW) && has(['esse mes', 'este mes', 'no mes'])) out.intent = 'agenda_month';
+      else if (has(['quando e', 'quando eh', 'qual dia', 'que dia e']) && !has(['fatura', 'vence', 'vencimento', 'cartao', 'parcela'])) out.intent = 'agenda_search';
+      else if (has(['detalhe do compromisso', 'detalhes do compromisso', 'detalhar compromisso'])) out.intent = 'agenda_detail';
+      else if (has(['quais habitos', 'habitos tenho hoje', 'habitos faltam', 'falta fazer', 'meus habitos', 'lista de habitos', 'habitos de hoje'])) out.intent = 'habit_today';
+      else if (has(['sequencia', 'como estou no habito', 'como estou na ', 'como vou no habito']) && (hasAny(HBW) || has(['sequencia']))) out.intent = 'habit_status';
+      else if (has(['historico']) && hasAny(HBW)) out.intent = 'habit_history';
+      else if (has(['consistencia', 'estatistica']) && hasAny(HBW)) out.intent = 'habit_stats';
+      else if (has(['planejado e realizado', 'quanto temos previsto', 'previsto para', 'compromissos financeiros', 'planejado para'])) out.intent = 'planning_status';
+      else if (has(['notifica', 'tenho notificacao', 'minhas notificacoes', 'o que esta pendente', 'fatura perto de vencer', 'fatura vencendo', 'alguma fatura'])) out.intent = 'notification_status';
+      else if (/^onde\b/.test(s) && has(['cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente'])) out.intent = 'product_navigation';
+      else if (has(['qual modo financeiro', 'modo financeiro estamos', 'modo do dinheiro', 'dinheiro separado ou tudo junto', 'como administramos'])) out.intent = 'money_mode_status';
+      else if (has(['whatsapp esta conectado', 'whatsapp conectado', 'meu whatsapp'])) out.intent = 'whatsapp_status';
+      else if (has(['conectar meu banco', 'conectar banco', 'ligar meu banco', 'integracao com banco', 'sincronizar banco'])) out.intent = 'openfinance_status';
+      /* ---- intents anteriores (só se nada específico casou acima) ---- */
       function has(words) { return words.some(function (w) { return s.indexOf(w) >= 0; }); }
+      if (out.intent === 'help') {
       if (has(['transfira', 'transferir', 'transfere', 'transferencia', 'mova ', 'mover '])) out.intent = 'create_transfer';
       else if (has(['pague a fatura', 'pagar a fatura', 'pague minha fatura', 'quitar fatura', 'pague o cartao'])) out.intent = 'mark_invoice_paid';
       else if (has(['crie uma meta', 'criar meta', 'nova meta', 'meta de']) || (has(['meta']) && has(['criar', 'nova', 'novo']))) out.intent = 'create_goal';
@@ -6153,7 +6223,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['corrija', 'corrigir', 'altere', 'alterar', 'mude ', 'mudar', 'edite', 'editar'])) out.intent = 'update_transaction';
       else if (has(['cancela o compromisso', 'cancelar o compromisso', 'cancela a reuniao', 'cancelar a reuniao', 'cancela a consulta', 'cancelar a consulta', 'cancela o jantar', 'cancelar o jantar', 'cancela o cinema', 'cancelar o cinema', 'desmarca', 'desmarcar', 'cancela o aniversario', 'cancelar o aniversario', 'cancela o evento', 'cancelar o evento']) || ((has(['cancela', 'cancelar']) || has(['exclui', 'excluir', 'apaga', 'apagar'])) && has(['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'evento', 'agenda']))) out.intent = 'cancel_agenda_event';
       else if (has(['remarca', 'remarcar', 'reagendar', 'reagenda', 'adiar', 'adia', 'antecipar', 'antecipa', 'muda o compromisso', 'muda a reuniao', 'muda o jantar', 'muda a consulta', 'mudar o compromisso']) || (has(['muda', 'mudar', 'altera', 'alterar']) && has(['compromisso', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'agenda']))) out.intent = 'update_agenda_event';
-      else if (has(['marca o compromisso', 'marcar o compromisso', 'marque o compromisso', 'marca a reuniao', 'marcar a reuniao', 'marca a consulta', 'marcar a consulta', 'marca o jantar', 'marcar o jantar', 'marca o cinema', 'novo compromisso', 'nova reuniao', 'agende', 'agendar', 'marca academia']) || ((has(['marca', 'marcar', 'marque', 'cria', 'criar', 'crie', 'anota', 'anote']) || has(['compromisso', 'reuniao', 'dentista', 'aniversario', 'academia'])) && has(['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'medico', 'evento', 'agenda']))) out.intent = 'create_agenda_event';
+      else if (has(['marca o compromisso', 'marcar o compromisso', 'marque o compromisso', 'marca a reuniao', 'marcar a reuniao', 'marca a consulta', 'marcar a consulta', 'marca o jantar', 'marcar o jantar', 'marca o cinema', 'novo compromisso', 'nova reuniao', 'agende', 'agendar', 'marca academia']) || ((has(['marca', 'marcar', 'marque', 'cria', 'criar', 'crie', 'anota', 'anote', 'coloca', 'colocar', 'coloque', 'poe', 'bota']) || has(['compromisso', 'reuniao', 'dentista', 'aniversario', 'academia'])) && has(['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'medico', 'evento', 'agenda']))) out.intent = 'create_agenda_event';
       else if (has(['gastei', 'recebi', 'registre', 'registra', 'anota', 'anote', 'lance', 'lanca', 'adicione', 'paguei', 'recebido']) || (has(['despesa', 'receita']) && has(['nova', 'novo', 'criar', 'cria']))) out.intent = 'create_transaction';
       /* ---- leitura ---- */
       else if (has(['quanto gastamos', 'quanto foi gasto', 'total gasto', 'total de gastos', 'como estamos', 'resumo', 'quanto sobrou', 'balanco', 'situacao'])) out.intent = 'financial_summary';
@@ -6167,7 +6237,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['acerto', 'devo ', 'devendo', 'me deve', 'pendente de acerto', 'dividas entre'])) out.intent = 'settlement_status';
       else if ((has(['amanha', 'hoje']) && has(['temos', 'tenho', 'tem', 'marcado', 'agenda', 'compromisso', 'reuniao'])) || has(['compromisso', 'compromissos', 'reuniao', 'dentista', 'consulta', 'cinema', 'aniversario', 'academia', 'jantar em familia', 'minha agenda', 'nossa agenda', 'o que temos', 'temos marcado', 'temos amanha', 'marcado para']) || (has(['agenda', 'evento', 'eventos', 'jantar', 'medico']) && has(['que', 'qual', 'quais', 'tem', 'tenho', 'temos', 'marcado', 'amanha', 'hoje', 'semana', 'quando', 'onde', 'proximos', 'fim de semana']))) out.intent = 'agenda_query';
       else if (has(['fluxo de caixa', 'fluxo', 'resultado'])) out.intent = 'cash_flow';
-      else if (has(['atencao', 'atencoes', 'novidade', 'insights', 'alerta', 'preocupar', 'olhar'])) out.intent = 'financial_insights';
+      else if (has(['atencao', 'atencoes', 'novidade', 'insights', 'insight', 'alerta', 'importante', 'preocupar', 'olhar'])) out.intent = 'financial_insights';
       else if (has(['maior despesa', 'maiores gastos', 'maiores despesas', 'mostre', 'liste', 'listar', 'procure', 'buscar', 'gastos com', 'quanto foi'])) out.intent = 'transaction_search';
       else if (has(['receita', 'receitas', 'ganhamos', 'recebemos', 'salario', 'freela', 'renda'])) out.intent = 'income_analysis';
       else if (has(['gasto', 'gastos', 'despesa', 'despesas', 'gastamos', 'comparad', 'evolucao', 'aumentou', 'diminuiu', 'variacao'])) out.intent = out.entities.category_id ? 'category_analysis' : 'expense_analysis';
@@ -6175,6 +6245,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['planejar', 'planejamento', 'conseguimos', 'da para', 'vale a pena'])) out.intent = 'planning_question';
       else if (has(['conciliar', 'conciliacao', 'conciliacao bancaria', 'transacoes do banco', 'transacao do banco', 'coisas para conciliar', 'pendencias do banco', 'sincronizou', 'sincronizacao', 'quando sincronizou', 'banco conectado', 'bancos conectados', 'open finance'])) out.intent = 'openfinance_reconciliation';
       else if (has(['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'ajuda', 'help', 'o que voce'])) out.intent = 'help';
+      }
       /* Categoria explícita com verbo de gasto → análise da categoria. */
       if ((out.intent === 'financial_summary' || out.intent === 'expense_analysis') && out.entities.category_id && /(gasto|despesa|gastamos|gastei|com |em )/.test(s)) out.intent = 'category_analysis';
       /* Cartão explícito com limite → status do cartão (não saldo em conta). */
@@ -6251,6 +6322,103 @@ window.Juntos = window.Juntos || {};
       }
       return { date: date, start: t1, end: t2, qualifier: qualifier };
     },
+    /* Conceitualmente: AIAssistantService (núcleo único p/ web e WhatsApp).
+       Nome histórico FinancialAIAssistantService preservado (compatibilidade). */
+    aiAssistantContext: function (userId, channel) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var m = db.members.filter(function (x) { return x.couple_id === cid && x.user_id === userId; })[0] || null;
+      var today = now().slice(0, 10);
+      return {
+        userId: userId, coupleId: cid, conversationId: null,
+        channel: channel === 'whatsapp' ? 'WHATSAPP' : 'WEB',
+        locale: 'pt-BR', currency: 'BRL', timezone: null,
+        moneyManagementMode: DB.moneyMode(userId),
+        memberRole: m ? m.role : null, permissions: { isOwner: m ? m.role === 'owner' : false },
+        currentDate: today, currentPeriod: { start: today.slice(0, 7) + '-01', end: today },
+        defaultView: 'couple',
+        availableCapabilities: DB.AI_INTENTS().map(function (x) { return x.key; })
+      };
+    },
+    aiDomainOf: function (intent) {
+      var m = (/^(overview_|agenda_|habit_|financial_|income_|expense_|category_|budget_|cash_flow|transaction_|report_|openfinance_)/.exec(intent || '') || [])[1] || '';
+      if (/^overview_/.test(intent)) return 'OVERVIEW';
+      if (/^agenda_/.test(intent)) return 'AGENDA';
+      if (/^habit_/.test(intent)) return 'HABITS';
+      if (/^(account_|card_|invoice_|installment_|recurring_|settlement_|cash_flow|transaction_|category_|budget_|financial_|income_|expense_|report_|openfinance_|planning_question|create_|mark_|update_)/.test(intent)) return 'FINANCE';
+      if (/^(goal_|contribute_)/.test(intent)) return 'GOALS';
+      if (/^planning_/.test(intent)) return 'PLANNING';
+      if (/^financial_insights$/.test(intent)) return 'INSIGHTS';
+      if (/^notification_/.test(intent)) return 'NOTIFICATIONS';
+      if (/^money_mode_/.test(intent)) return 'COUPLE';
+      if (/^(product_navigation|whatsapp_)/.test(intent)) return 'SYSTEM';
+      if (/^help$|^clarify$|^action_/.test(intent)) return 'SYSTEM';
+      return 'FINANCE';
+    },
+    /* Hábitos do PRÓPRIO usuário (privacidade: parceiro nunca resolve aqui).
+       Sinônimos verbo↔substantivo ("leitura"↔"ler") para linguagem natural. */
+    aiHabitSyn: function (s) {
+      var map = { leitura: 'ler', livro: 'ler', livros: 'ler', meditacao: 'meditar', exercicio: 'exercitar', corrida: 'correr', caminhada: 'caminhar', estudo: 'estudar', hidratacao: 'beber', alimentacao: 'comer' };
+      return String(s || '').split(' ').map(function (w) { return map[w] || w; }).join(' ');
+    },
+    aiFindHabit: function (userId, text) {
+      var s0 = DB.aiNorm(text), s2 = DB.aiHabitSyn(s0);
+      var act = DB.getHabits(userId, {}).filter(function (h) { return DB.habitEffectiveStatus(h) !== 'ARCHIVED'; });
+      act.sort(function (a, b) { return (DB.habitEffectiveStatus(a) === 'ACTIVE' ? 0 : 1) - (DB.habitEffectiveStatus(b) === 'ACTIVE' ? 0 : 1); });
+      var scored = [];
+      act.forEach(function (h) {
+        var hn = DB.aiNorm(h.name);
+        if (!hn) return;
+        var score = 0;
+        [s0, s2].forEach(function (s) {
+          if (s.indexOf(hn) >= 0 && hn.length >= 3) score = Math.max(score, hn.length + 10);
+          else {
+            var words = hn.split(' ').filter(function (w) { return w.length >= 4; });
+            words.forEach(function (w) { if (new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(s)) score += w.length; });
+          }
+        });
+        if (score > 0) scored.push({ h: h, score: score });
+      });
+      scored.sort(function (a, b) { return b.score - a.score; });
+      return scored.map(function (x) { return x.h; });
+    },
+    aiFindGoal: function (userId, text) {
+      var s = DB.aiNorm(text);
+      var goals = [];
+      try { goals = DB.analyticsGoals(userId); } catch (e) { return []; }
+      return goals.filter(function (g) {
+        var gn = DB.aiNorm(g.name || '');
+        return gn.length >= 3 && s.indexOf(gn) >= 0;
+      });
+    },
+    aiNavMap: function () {
+      return [
+        { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
+        { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
+        { match: ['notifica'], label: 'Notificações', route: '#/notifications' },
+        { match: ['convido', 'convidar', 'parceiro'], label: 'Casal (convite)', route: '#/settings/couple' },
+        { match: ['modo do dinheiro', 'gestao do dinheiro'], label: 'Gestão do dinheiro', route: '#/settings/money' },
+        { match: ['agenda', 'compromisso'], label: 'Agenda', route: '#/agenda' },
+        { match: ['meta'], label: 'Metas', route: '#/goals' },
+        { match: ['orcamento'], label: 'Orçamento', route: '#/budget' },
+        { match: ['planejamento'], label: 'Planejamento', route: '#/planning' },
+        { match: ['relatorio'], label: 'Relatórios', route: '#/reports' },
+        { match: ['conta'], label: 'Contas', route: '#/accounts' },
+        { match: ['fatura'], label: 'Faturas', route: '#/invoices' },
+        { match: ['recorrente'], label: 'Recorrentes', route: '#/recurring' },
+        { match: ['acerto'], label: 'Acertos', route: '#/settlements' },
+        { match: ['categoria'], label: 'Categorias', route: '#/settings/categories' },
+        { match: ['automacao'], label: 'Automação', route: '#/settings/automation' },
+        { match: ['visao geral'], label: 'Visão Geral', route: '#/dashboard' },
+        { match: ['perfil'], label: 'Meu perfil', route: '#/settings/profile' },
+        { match: ['privacidade', 'seguranca'], label: 'Privacidade e segurança', route: '#/settings/privacy' },
+        { match: ['whatsapp'], label: 'WhatsApp', route: '#/settings/whatsapp' },
+        { match: ['assistente'], label: 'Assistente', route: '#/assistant' }
+      ];
+    },
+    waMetrics: function () {
+      DB._waMetrics = DB._waMetrics || { processed: 0, duplicates: 0, confirmations: 0, cancellations: 0, errors: 0, unknown: 0, toolCalls: 0, latencyMs: 0 };
+      return DB._waMetrics;
+    },
     aiRunTool: function (userId, name, args) {
       args = args || {};
       var db = read(), cid = DB.myCoupleId(userId);
@@ -6265,6 +6433,7 @@ window.Juntos = window.Juntos || {};
       }
       logAudit(db, cid, userId, 'ai_tool', name, 'called', {});
       write(db);
+      try { DB.waMetrics().toolCalls++; } catch (e) {}
       var r = range(args.periodLabel), out;
       if (name === 'financial_summary' || name === 'expenses' || name === 'income' || name === 'cash_flow') {
         var a = DB.analyzeFinancialPeriod(userId, { periodStart: r.start, periodEnd: r.end, view: view, filters: args.filters });
@@ -6349,6 +6518,44 @@ window.Juntos = window.Juntos || {};
         var dbp = read(), cidp = DB.myCoupleId(userId);
         var pend = dbp.openfinance_bank_transactions.filter(function (t) { return t.couple_id === cidp && !t.canonical_transaction_id && (t.ext_status || 'posted') !== 'cancelled'; }).slice(0, 10);
         out = { count: pend.length, items: pend.map(function (t) { return { date: t.date, description: t.description, amount: t.amount }; }) };
+      } else if (name === 'overview_day' || name === 'overview_tomorrow') {
+        var od = name === 'overview_tomorrow' ? DB.agendaAddDays(DB.agendaToday(), 1) : (args.date || DB.agendaToday());
+        out = DB.getOverviewDay(userId, od, 'couple');
+      } else if (name === 'overview_week') {
+        out = DB.getOverviewWeek(userId, args.date || DB.agendaToday(), 'couple');
+      } else if (name === 'overview_month') {
+        out = DB.getOverviewMonth(userId, args.month || DB.agendaToday().slice(0, 7), 'couple');
+      } else if (name === 'overview_upcoming') {
+        out = { items: DB.getUpcomingOverview(userId, { limit: args.limit || 8, days: 30 }) };
+      } else if (name === 'agenda_today' || name === 'agenda_detail') {
+        var ad = args.date || DB.agendaToday();
+        out = { date: ad, events: DB.agendaOccurrences(userId, ad, ad, { vision: view, search: args.search || '' }).slice(0, 20).map(function (o) { return DB.agendaOccurrencePublic(userId, o); }) };
+      } else if (name === 'habit_today') {
+        out = DB.habitTodayStatus(userId, args.date || DB.agendaToday());
+      } else if (name === 'habit_status') {
+        var hs = DB.aiFindHabit(userId, args.habit_name || '')[0];
+        if (!hs) throw new Error('Hábito não encontrado.');
+        out = DB.calculateHabitConsistency(userId, hs.id);
+        out.habit = hs.name;
+      } else if (name === 'habit_history') {
+        var hh = DB.aiFindHabit(userId, args.habit_name || '')[0];
+        if (!hh) throw new Error('Hábito não encontrado.');
+        out = { habit: hh.name, items: DB.getHabitHistory(userId, hh.id, { limit: 10 }) };
+      } else if (name === 'habit_stats') {
+        out = DB.getHabitStats(userId, args.from, args.to);
+      } else if (name === 'planning_status') {
+        out = DB.getPlanningSummary(userId, {});
+      } else if (name === 'notification_status') {
+        out = DB.getNotificationSummary(userId);
+      } else if (name === 'product_navigation') {
+        out = { routes: DB.aiNavMap() };
+      } else if (name === 'money_mode_status') {
+        var mm = DB.moneyMode(userId);
+        out = { mode: mm, separate: mm !== 'JOINT' };
+      } else if (name === 'whatsapp_status') {
+        var wc = DB.waMyConnection(userId);
+        var wp = DB.waGetPreferences(userId);
+        out = { connected: !!wc, masked: wc ? wc.phone_masked : null, quiet: (wp.quiet_hours_start || '') + '-' + (wp.quiet_hours_end || '') };
       } else throw new Error('Ferramenta não permitida.');
       out._period = r;
       out._sources = [name];
@@ -6368,7 +6575,7 @@ window.Juntos = window.Juntos || {};
       if (dup) return dup;
       var row = { id: id('aa'), couple_id: cid, user_id: userId, conversation_id: convId, message_id: messageId, channel: opt.channel || 'web', external_message_id: opt.externalMessageId || null, action_type: actionType, status: 'pending_confirmation', confirmation_required: true, confirmation_expires_at: opt.expiresAt || null, confirmed_at: null, executed_at: null, idempotency_key: key, request_data: params, result_data: null, error_message: null, created_at: now(), updated_at: now() };
       db.ai_actions.push(row);
-      logAudit(db, cid, userId, 'ai_action', row.id, 'requested', { type: actionType });
+      logAudit(db, cid, userId, 'ai_action', row.id, 'requested', { type: actionType, channel: opt.channel || 'web' });
       write(db);
       return row;
     },
@@ -6445,6 +6652,23 @@ window.Juntos = window.Juntos || {};
           if (p.patch.date && !DB.agendaParseDay(p.patch.date)) throw new Error('Data inválida.');
           if (p.patch.title && String(p.patch.title).trim().length < 2) throw new Error('Título inválido.');
         }
+      } else if (actionType === 'habit_create') {
+        DB.validateHabit(userId, { name: p.name, frequency_type: p.frequency_type || 'daily', target_unit: p.target_unit || 'BOOLEAN', target_count: p.target_count || 1, start_date: p.start_date || DB.agendaToday() });
+      } else if (actionType === 'habit_complete' || actionType === 'habit_remove_completion' || actionType === 'habit_pause' || actionType === 'habit_resume') {
+        var hh = db.habits.find(function (x) { return x.id === p.habit_id && x.user_id === userId; });
+        if (!hh) throw new Error('Hábito não encontrado.');
+        var hd = String(p.date || DB.agendaToday()).slice(0, 10);
+        if (!DB.agendaParseDay(hd)) throw new Error('Data inválida.');
+        if (actionType === 'habit_complete') {
+          if (!DB.habitIsOccurrenceExpected(hh, hd)) throw new Error('Sem ocorrência prevista nesta data.');
+          if (db.habit_completions.some(function (x) { return x.habit_id === hh.id && x.user_id === userId && x.completion_date === hd; })) throw new Error('Já registrado neste dia.');
+          if (hh.target_unit !== 'BOOLEAN' && !(Number(p.value) > 0)) throw new Error('Informe um valor maior que zero.');
+        }
+        if (actionType === 'habit_remove_completion' && !p.completion_id) throw new Error('Registro não encontrado.');
+      } else if (actionType === 'contribute_goal') {
+        var gg = db.goals.find(function (x) { return x.id === p.goal_id && x.couple_id === cid; });
+        if (!gg) throw new Error('Meta inválida.');
+        if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
       } else throw new Error('Ação não permitida.');
       return true;
     },
@@ -6514,6 +6738,24 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'cancel_agenda_event') {
           DB.deleteAgendaEvent(userId, p.event_id, {});
           res = { event_id: p.event_id };
+        } else if (r.action_type === 'habit_create') {
+          var nh = DB.createHabit(userId, { name: p.name, frequency_type: p.frequency_type || 'daily', target_unit: p.target_unit || 'BOOLEAN', target_count: p.target_count || 1, start_date: p.start_date || DB.agendaToday() });
+          res = { habit_id: nh.id };
+        } else if (r.action_type === 'habit_complete') {
+          var nc = DB.recordCompletion(userId, p.habit_id, { completion_date: p.date, value: p.value });
+          res = { completion_id: nc.id };
+        } else if (r.action_type === 'habit_remove_completion') {
+          DB.removeCompletion(userId, p.completion_id);
+          res = { removed: true };
+        } else if (r.action_type === 'habit_pause') {
+          DB.pauseHabit(userId, p.habit_id, p.until || null);
+          res = { paused: true };
+        } else if (r.action_type === 'habit_resume') {
+          DB.resumeHabit(userId, p.habit_id);
+          res = { resumed: true };
+        } else if (r.action_type === 'contribute_goal') {
+          DB.addToGoal(userId, p.goal_id, { amount: String(p.amount).replace('.', ','), date: p.date || now().slice(0, 10) });
+          res = { goal_id: p.goal_id };
         } else throw new Error('Ação não permitida.');
         var db2 = read();
         var r2 = db2.ai_actions.find(function (x) { return x.id === actionId; });
@@ -6593,7 +6835,7 @@ window.Juntos = window.Juntos || {};
         var val = DB.aiValidateResponse(prov.answer, o.facts);
         var final = val.ok ? prov.answer : draft;
         var am = saveMsg('assistant', final, { intent: o.intent, tool: (o.tools || []).join(','), input: o.toolInput || null, output: o.toolOutput || null });
-        return { answer: final, facts: o.facts || [], sources: o.tools || [], actions: o.actions || [], follow_up: o.follow_up || null, intent: o.intent, messageId: am.id, userMessageId: um.id, conversationId: conv.id, pendingAction: o.pendingAction || null, factsValid: val.ok };
+        return { answer: final, facts: o.facts || [], sources: o.tools || [], actions: o.actions || [], follow_up: o.follow_up || null, intent: o.intent, domain: o.domain || DB.aiDomainOf(o.intent), confirmationRequired: !!o.confirmationRequired, suggestedReplies: o.suggestedReplies || null, navigationTarget: o.navigationTarget || null, messageId: am.id, userMessageId: um.id, conversationId: conv.id, pendingAction: o.pendingAction || null, factsValid: val.ok };
       }
       /* 1. confirmação pendente tem prioridade (só vale p/ a mesma ação). */
       var pend = DB.aiPendingAction(userId, conv.id);
@@ -6601,6 +6843,7 @@ window.Juntos = window.Juntos || {};
         if (/^(sim|confirmo|confirmar|pode|pode sim|ok|isso|isso mesmo|confirmado|vai|manda|fechado)\b/.test(s)) {
           try {
             var done = DB.aiConfirmAction(userId, pend.id);
+            try { if (opts.channel === 'whatsapp') DB.waMetrics().confirmations++; } catch (e0) {}
             return reply(DB.aiExecutedAnswer(userId, done));
           } catch (e) {
             return reply({ answer: 'Não consegui concluir: ' + (e.message || 'tente novamente.'), facts: [], tools: [], intent: 'action_error' });
@@ -6608,6 +6851,7 @@ window.Juntos = window.Juntos || {};
         }
         if (/^(n[aã]o|nao|cancela|cancelar|desiste|esquece|deixa|melhor nao)\b/.test(s)) {
           DB.aiCancelAction(userId, pend.id);
+          try { if (opts.channel === 'whatsapp') DB.waMetrics().cancellations++; } catch (e1) {}
           return reply({ answer: 'Ação cancelada. Nada foi alterado.', facts: [], tools: [], intent: 'action_cancelled' });
         }
         try { DB.aiCancelAction(userId, pend.id); } catch (e2) { /* segue p/ novo pedido */ }
@@ -6679,9 +6923,9 @@ window.Juntos = window.Juntos || {};
           if (!desc) {
             desc = rawText.replace(/(r\$?\s?[\d.,]+\s?(mil|milhao|milhoes)?\s?(reais|real|r\$)?)/gi, '').replace(/(gastei|recebi|registre|registra|anota|anote|lance|adicione|paguei|nova|novo|criar|cria|despesa|receita|no|na|em|de|para|por|com)\b/gi, '').trim().slice(0, 120) || e.categoryName || 'Lançamento';
           }
-          params = { type: t, description: desc, amount: e.amount, date: today, category_id: e.category_id, payer_user_id: userId, is_shared: false, account_id: e.account_id || null, credit_card_id: e.credit_card_id || null, notes: '' };
+          params = { type: t, description: desc, amount: e.amount, date: today, category_id: e.category_id, payer_user_id: userId, is_shared: /(divid|meio a meio|rachad|compartilha)/.test(s), account_id: e.account_id || null, credit_card_id: e.credit_card_id || null, notes: '' };
           if (params.amount == null) throw { clarification: 'Qual o valor?' };
-          label = (t === 'income' ? 'Receita' : 'Despesa') + ' de ' + DB.aiMoney(params.amount) + ' em ' + desc;
+          label = (t === 'income' ? 'Receita' : 'Despesa') + ' de ' + DB.aiMoney(params.amount) + ' em ' + desc + (params.is_shared ? ' (dividido no casal)' : '');
         } else if (det.intent === 'create_transfer') {
           var accs = DB.aiFindAccounts(userId, rawText);
           if (accs.length < 2) throw { clarification: accs.length ? 'Para qual conta destino? (origem: ' + accs[0].name + ')' : 'De qual conta para qual conta?' };
@@ -6735,7 +6979,7 @@ window.Juntos = window.Juntos || {};
           var coupleW = /(nos dois|nós dois|nosdois|casal|juntos|pra nos|para nos)\b/.test(s);
           var privW = /(so eu|somente eu|só eu|pra mim|para mim|meu compromisso|minha consulta)\b/.test(s);
           if (det.intent === 'create_agenda_event') {
-            var stopA = { para: 1, com: 1, por: 1, uma: 1, um: 1, de: 1, da: 1, do: 1, das: 1, dos: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, esse: 1, essa: 1, este: 1, esta: 1, marca: 1, marcar: 1, marque: 1, cria: 1, criar: 1, crie: 1, anota: 1, anote: 1, novo: 1, nova: 1, compromisso: 1, para2: 1 };
+            var stopA = { para: 1, com: 1, por: 1, uma: 1, um: 1, de: 1, da: 1, do: 1, das: 1, dos: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, esse: 1, essa: 1, este: 1, esta: 1, marca: 1, marcar: 1, marque: 1, cria: 1, criar: 1, crie: 1, anota: 1, anote: 1, coloca: 1, colocar: 1, coloque: 1, poe: 1, bota: 1, novo: 1, nova: 1, compromisso: 1, para2: 1 };
             var tw = DB.aiNorm(rawText).split(' ').filter(function (w) { return w.length >= 3 && !stopA[w] && !/^\d/.test(w); });
             var ttl = tw.slice(0, 6).join(' ').replace(/\b(amanha|hoje|sabado|domingo|segunda|terca|quarta|quinta|sexta|as|às|hs?|horas?|dia|mes|ano|que|vem|proximo|proxima|esse|essa|neste|nesta|dois|casal|juntos|mim|minha|meu)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
             if (!ttl) throw { clarification: 'Qual o título do compromisso?' };
@@ -6768,6 +7012,49 @@ window.Juntos = window.Juntos || {};
               label = 'Alterar "' + one.title + '"' + (patch.date ? ' para ' + patch.date.split('-').reverse().join('/') : '') + (patch.start_time ? ' às ' + patch.start_time : '');
             }
           }
+        } else if (det.intent === 'habit_create') {
+          var hn = rawText.replace(/(criar|cria|crie|novo|nova|habito|rotina|um|uma|de|para|por favor)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+          if (hn.length < 2) throw { clarification: 'Qual hábito você quer criar?' };
+          var hf = /(toda semana|seman)/.test(s) ? 'weekly' : /(todo mes|mens)/.test(s) ? 'monthly' : 'daily';
+          params = { name: hn.charAt(0).toUpperCase() + hn.slice(1), frequency_type: hf, target_unit: 'BOOLEAN', target_count: 1, start_date: today };
+          label = 'Hábito "' + params.name + '" (' + (hf === 'daily' ? 'todo dia' : hf === 'weekly' ? 'toda semana' : 'todo mês') + ')';
+        } else if (det.intent === 'habit_complete' || det.intent === 'habit_remove_completion' || det.intent === 'habit_pause' || det.intent === 'habit_resume') {
+          var cand = DB.aiFindHabit(userId, rawText);
+          if (!cand.length) throw { clarification: 'Não encontrei esse hábito nos seus hábitos ativos. Quer ver a lista de hoje?' };
+          if (cand.length > 1) throw { clarification: 'Qual deles? ' + cand.slice(0, 4).map(function (h) { return '"' + h.name + '"'; }).join(', ') + '?' };
+          var hone = cand[0];
+          if (det.intent === 'habit_complete') {
+            var hst = DB.habitOccurrenceStatus(userId, hone.id, today);
+            if (!hst.expected) throw { clarification: '"' + hone.name + '" não tem ocorrência prevista hoje.' };
+            if (hst.done) throw { clarification: '"' + hone.name + '" já foi registrado hoje.' };
+            var hv = hone.target_unit === 'BOOLEAN' ? 1 : e.amount;
+            if (hone.target_unit !== 'BOOLEAN' && hv == null) throw { clarification: 'Quanto você fez hoje' + (hone.unit_label ? ' (' + hone.unit_label + ')' : '') + '?' };
+            params = { habit_id: hone.id, habit_name: hone.name, date: today, value: hv };
+            label = 'Marcar "' + hone.name + '" como concluído hoje' + (hone.target_unit !== 'BOOLEAN' ? ' (' + hv + ')' : '');
+            if (hone.target_unit === 'BOOLEAN') {
+              var done0 = DB.recordCompletion(userId, hone.id, { completion_date: today });
+              try { DB.logSecurityEvent(userId, 'ai_action', { action: 'habit_completed', entity_type: 'habit_completion', entity_id: done0.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (e2) {}
+              return { answer: '"' + hone.name + '" marcado como concluído hoje.', facts: [{ label: 'hábito', value: 1 }], tools: ['habit_complete'], intent: det.intent };
+            }
+          } else if (det.intent === 'habit_remove_completion') {
+            var hhist = DB.getHabitHistory(userId, hone.id, { limit: 10 }).filter(function (x) { return x.date === today; })[0];
+            if (!hhist) throw { clarification: 'Não há registro de "' + hone.name + '" hoje para desfazer.' };
+            params = { habit_id: hone.id, habit_name: hone.name, date: today, completion_id: hhist.id };
+            label = 'Desfazer o registro de hoje de "' + hone.name + '"';
+          } else if (det.intent === 'habit_pause') {
+            params = { habit_id: hone.id, habit_name: hone.name, until: null };
+            label = 'Pausar "' + hone.name + '" (a sequência é preservada)';
+          } else {
+            params = { habit_id: hone.id, habit_name: hone.name };
+            label = 'Retomar "' + hone.name + '"';
+          }
+        } else if (det.intent === 'contribute_goal') {
+          var gsel = DB.aiFindGoal(userId, rawText);
+          if (!gsel.length) throw { clarification: 'Qual meta? Ex: "adicione 200 à meta viagem".' };
+          if (gsel.length > 1) throw { clarification: 'Qual delas? ' + gsel.slice(0, 3).map(function (g) { return '"' + g.name + '"'; }).join(', ') + '?' };
+          if (e.amount == null) throw { clarification: 'Qual o valor do aporte?' };
+          params = { goal_id: gsel[0].id, goal_name: gsel[0].name, amount: e.amount, date: today };
+          label = 'Aporte de ' + DB.aiMoney(e.amount) + ' na meta "' + gsel[0].name + '" (não cria movimentação)';
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -6776,7 +7063,7 @@ window.Juntos = window.Juntos || {};
           aopt.expiresAt = new Date(Date.now() + DB.WHATSAPP_CONFIG().confirmTimeoutMin * 60000).toISOString();
         }
         var row = DB.aiRequestAction(userId, convId, messageId, det.intent, params, aopt);
-        return { answer: 'Vou registrar: ' + label + '. Confirmar?', facts: [{ label: label, value: params.amount != null ? params.amount : null }], tools: [], intent: det.intent, pendingAction: { id: row.id, type: row.action_type, summary: label, params: params }, follow_up: 'Diga "sim" para confirmar ou "não" para cancelar.' };
+        return { answer: 'Vou registrar: ' + label + '. Confirmar?', facts: [{ label: label, value: params.amount != null ? params.amount : null }], tools: [], intent: det.intent, domain: DB.aiDomainOf(det.intent), confirmationRequired: true, suggestedReplies: ['Confirmar', 'Editar', 'Cancelar'], pendingAction: { id: row.id, type: row.action_type, summary: label, params: params }, follow_up: 'Diga "sim" para confirmar ou "não" para cancelar.' };
       } catch (err) {
         if (err && err.clarification) return { answer: err.clarification, facts: [], tools: [], intent: det.intent };
         return { answer: 'Não consegui preparar a ação: ' + ((err && err.message) || 'tente novamente.'), facts: [], tools: [], intent: 'action_error' };
@@ -6794,9 +7081,15 @@ window.Juntos = window.Juntos || {};
         update_transaction: 'Lançamento atualizado.',
         create_agenda_event: 'Compromisso "' + (p.title || '') + '" marcado para ' + String(p.date || '').split('-').reverse().join('/') + (p.start_time ? ' às ' + p.start_time : '') + '.',
         update_agenda_event: 'Compromisso atualizado.',
-        cancel_agenda_event: 'Compromisso cancelado.'
+        cancel_agenda_event: 'Compromisso cancelado.',
+        habit_create: 'Hábito "' + (p.name || '') + '" criado para acompanhar todos os dias.',
+        habit_complete: 'Registrado: "' + (p.habit_name || 'hábito') + '" concluído hoje.',
+        habit_remove_completion: 'Registro de hoje desfeito. Nada foi apagado do histórico antigo.',
+        habit_pause: 'Hábito pausado. A sequência foi preservada.',
+        habit_resume: 'Hábito retomado!',
+        contribute_goal: 'Aporte de ' + DB.aiMoney(p.amount) + ' registrado na meta. Isso não cria movimentação financeira.'
       };
-      return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed' };
+      return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed', domain: DB.aiDomainOf(action.action_type) };
     },
     /* Respostas de leitura: tool oficial → texto curto com os números reais. */
     aiAnswerRead: function (userId, det, rawText) {
@@ -6807,7 +7100,7 @@ window.Juntos = window.Juntos || {};
         var p = DB.analyticsResolvePeriod('current_month');
         return { periodStart: p.startDate, periodEnd: p.endDate, periodLabel: 'este mês' };
       }
-      var R = rng(), facts = [], tools = [], follow = null, answer = '', toolOut = null;
+      var R = rng(), facts = [], tools = [], follow = null, answer = '', toolOut = null, navTarget = null;
       function F(label, value) { facts.push({ label: label, value: value }); return value; }
       var M = DB.aiMoney;
       if (det.intent === 'financial_summary' || det.intent === 'planning_question' || det.intent === 'expense_analysis' || det.intent === 'income_analysis') {
@@ -6969,11 +7262,118 @@ window.Juntos = window.Juntos || {};
           follow = 'Quer ver a central de conciliação?';
         }
         }
+      } else if (det.intent === 'money_mode_status') {
+        var amm = DB.aiRunTool(userId, 'money_mode_status', {});
+        tools.push('money_mode_status'); toolOut = amm;
+        answer = amm.separate
+          ? 'Vocês usam Dinheiro separado: cada um mantém o seu e acertos acontecem quando necessário.'
+          : 'Vocês usam Tudo junto: receitas e despesas dos dois fazem parte do dinheiro do casal, sem acertos internos por quem pagou.';
+      } else if (det.intent === 'whatsapp_status') {
+        var aws = DB.aiRunTool(userId, 'whatsapp_status', {});
+        tools.push('whatsapp_status'); toolOut = aws;
+        answer = aws.connected
+          ? 'WhatsApp conectado (' + aws.masked + '). Silêncio das ' + aws.quiet + '. Para mudar, vá em Configurações → WhatsApp.'
+          : 'WhatsApp não conectado. Gere um código em Configurações → WhatsApp e me envie aqui.';
+      } else if (det.intent === 'overview_day' || det.intent === 'overview_tomorrow') {
+        var od = det.intent === 'overview_tomorrow' ? DB.agendaAddDays(DB.agendaToday(), 1) : DB.agendaToday();
+        var aov = DB.aiRunTool(userId, det.intent === 'overview_tomorrow' ? 'overview_tomorrow' : 'overview_day', { date: od });
+        tools.push('overview_day'); toolOut = aov;
+        F('compromissos', aov.agenda.length); F('hábitos feitos', aov.habits.done); F('despesas hoje', aov.finance.expense);
+        var dlbl = det.intent === 'overview_tomorrow' ? 'Amanhã' : 'Hoje';
+        answer = dlbl + ' você tem: ' + aov.agenda.length + ' compromissos, ' + aov.habits.done + ' de ' + aov.habits.total + ' hábitos concluídos, ' + M(aov.finance.expense) + ' em despesas registradas.';
+        if (aov.next) answer += ' Próximo: ' + aov.next.title + (aov.next.start ? ' às ' + aov.next.start : '') + '.';
+        else answer += ' Nada mais agendado.';
+        follow = det.intent === 'overview_day' ? 'Quer o resumo da semana?' : null;
+      } else if (det.intent === 'overview_week') {
+        var aw = DB.aiRunTool(userId, 'overview_week', {});
+        tools.push('overview_week'); toolOut = aw;
+        F('receitas semana', aw.finance.income); F('despesas semana', aw.finance.expense);
+        answer = 'Sua semana: receitas ' + M(aw.finance.income) + ', despesas ' + M(aw.finance.expense) + ', resultado ' + M(aw.finance.result) + '. ' +
+          aw.days.map(function (d) { return d.date.slice(8, 10) + '/' + d.date.slice(5, 7) + ': ' + d.agenda + ' eventos, ' + d.habits_done + '/' + d.habits_total + ' hábitos'; }).join('; ') + '.';
+      } else if (det.intent === 'overview_month') {
+        var amo = DB.aiRunTool(userId, 'overview_month', {});
+        tools.push('overview_month'); toolOut = amo;
+        F('receitas mês', amo.finance.income); F('despesas mês', amo.finance.expense);
+        answer = 'No mês: receitas ' + M(amo.finance.income) + ', despesas ' + M(amo.finance.expense) + ', resultado ' + M(amo.finance.result) + ', disponível ' + M(amo.finance.available) + '. Hábitos: ' + amo.habits.active + ' ativos' + (amo.habits.consistency != null ? ', consistência ' + String(amo.habits.consistency).replace('.', ',') + '%' : '') + '. ' + amo.agenda.total + ' compromissos no mês.';
+      } else if (det.intent === 'overview_upcoming') {
+        var au = DB.aiRunTool(userId, 'overview_upcoming', {});
+        tools.push('overview_upcoming'); toolOut = au;
+        if (!au.items.length) answer = 'Nada importante por vir nos próximos dias.';
+        else answer = 'Por vir: ' + au.items.slice(0, 5).map(function (x) { return x.title + ' em ' + x.date.split('-').reverse().join('/') + (x.time ? ' às ' + x.time : ''); }).join('; ') + '.';
+      } else if (det.intent === 'agenda_today' || det.intent === 'agenda_tomorrow' || det.intent === 'agenda_week' || det.intent === 'agenda_month' || det.intent === 'agenda_search' || det.intent === 'agenda_detail') {
+        var aqD = DB.agendaToday(), aqF, aqT;
+        if (det.intent === 'agenda_tomorrow') aqD = DB.agendaAddDays(aqD, 1);
+        if (det.intent === 'agenda_week') { var dwk = DB.ovWeekRange(aqD); aqF = dwk[0]; aqT = dwk[6]; }
+        else if (det.intent === 'agenda_month') { aqF = aqD.slice(0, 7) + '-01'; aqT = aqD.slice(0, 7) + '-' + DB.agendaDim(+aqD.slice(0, 4), +aqD.slice(5, 7)); }
+        else { aqF = aqD; aqT = aqD; }
+        if (det.intent === 'agenda_search' || det.intent === 'agenda_detail') { aqT = DB.agendaAddDays(aqF, 60); }
+        var evs = DB.agendaOccurrences(userId, aqF, aqT, { vision: 'couple', search: det.intent === 'agenda_search' ? DB.aiNorm(rawText).split(' ').filter(function (w) { return w.length >= 4; }).slice(0, 4).join(' ') : '' }).slice(0, 10).map(function (o) { return DB.agendaOccurrencePublic(userId, o); });
+        tools.push('agenda_events'); toolOut = { from: aqF, to: aqT, events: evs };
+        if (!evs.length) answer = 'Nada marcado na agenda para o período.';
+        else {
+          F('compromissos', evs.length);
+          answer = evs.slice(0, 6).map(function (o) { return o.title + ' em ' + o.date.split('-').reverse().join('/') + (o.start ? ' às ' + o.start : '') + ' (' + (o.visibility === 'COUPLE' ? 'casal' : 'só você') + ')'; }).join('; ') + '.';
+        }
+      } else if (det.intent === 'habit_list' || det.intent === 'habit_today') {
+        var ah = DB.aiRunTool(userId, 'habit_today', {});
+        tools.push('habit_today'); toolOut = ah;
+        if (!ah.total) answer = 'Nenhum hábito previsto para hoje.';
+        else {
+          F('hábitos feitos', ah.done);
+          var hpend = ah.items.filter(function (i) { return !i.done; });
+          answer = ah.done + ' de ' + ah.total + ' hábitos concluídos hoje.' + (hpend.length ? ' Faltam: ' + hpend.slice(0, 5).map(function (i) { return i.name + (i.target ? ' (' + i.target + ')' : ''); }).join(', ') + '.' : ' Tudo feito!');
+        }
+      } else if (det.intent === 'habit_status') {
+        var hnm = DB.aiFindHabit(userId, rawText)[0];
+        if (!hnm) { answer = 'Qual hábito? Ex: "como estou na leitura?".'; }
+        else {
+          var acs = DB.aiRunTool(userId, 'habit_status', { habit_name: hnm.name });
+          tools.push('habit_status'); toolOut = acs;
+          F('consistência', acs.pct);
+          answer = '"' + hnm.name + '": sequência atual de ' + acs.current_streak + ' dias, melhor de ' + acs.best_streak + ' dias, consistência ' + (acs.pct == null ? '—' : String(acs.pct).replace('.', ',') + '%') + ' (' + acs.completed + ' de ' + acs.expected + ').';
+        }
+      } else if (det.intent === 'habit_history') {
+        var hn2 = DB.aiFindHabit(userId, rawText)[0];
+        if (!hn2) { answer = 'Qual hábito?'; }
+        else {
+          var ahh = DB.aiRunTool(userId, 'habit_history', { habit_name: hn2.name });
+          tools.push('habit_history'); toolOut = ahh;
+          answer = ahh.items.length ? 'Últimos registros de "' + hn2.name + '": ' + ahh.items.slice(0, 5).map(function (x) { return x.date.split('-').reverse().join('/') + (x.value != null && x.value !== 1 ? ' (' + x.value + ')' : ' ✓'); }).join('; ') + '.' : 'Sem registros ainda.';
+        }
+      } else if (det.intent === 'habit_stats') {
+        var ast = DB.aiRunTool(userId, 'habit_stats', { from: DB.agendaAddDays(DB.agendaToday(), -30) });
+        tools.push('habit_stats'); toolOut = ast;
+        answer = ast.active + ' hábitos ativos, ' + ast.today_done + ' de ' + ast.today_total + ' concluídos hoje' + (ast.consistency != null ? ', consistência de ' + String(ast.consistency).replace('.', ',') + '%' : '') + '.';
+      } else if (det.intent === 'planning_status') {
+        var apl = DB.aiRunTool(userId, 'planning_status', {});
+        tools.push('planning_status'); toolOut = apl;
+        if (!apl.hasPlan) answer = 'Nenhum planejamento ativo. Quer criar um na área de membros?';
+        else {
+          F('previsto entradas', apl.income); F('previsto saídas', apl.outflows);
+          answer = 'Planejamento "' + apl.name + '": entradas previstas ' + M(apl.income) + ', saídas previstas ' + M(apl.outflows) + ', saldo projetado ' + M(apl.ending) + ', realizado até aqui ' + M(apl.realized) + '. Projetado não é garantido.';
+        }
+      } else if (det.intent === 'notification_status') {
+        var ant = DB.aiRunTool(userId, 'notification_status', {});
+        tools.push('notification_status'); toolOut = ant;
+        if (!ant.unread) answer = 'Tudo tranquilo: nenhuma notificação não lida.';
+        else answer = ant.unread + ' não lidas' + (ant.top.length ? ': ' + ant.top.map(function (x) { return x.title; }).join('; ') + '.' : '.') + ' Abra Notificações no app para ver tudo.';
+      } else if (det.intent === 'product_navigation') {
+        var navl = DB.aiNavMap();
+        var sn = DB.aiNorm(rawText);
+        var hit = navl.filter(function (n) { return n.match.some(function (w) { return sn.indexOf(w) >= 0; }); })[0];
+        tools.push('product_navigation'); toolOut = { routes: navl.length };
+        answer = hit ? 'Na área de membros: abra ' + hit.label + ' (' + hit.route.replace('#/', '') + ').' : 'Na área de membros, use o menu: Visão Geral, Agenda, Hábitos, Finanças ou Configurações.';
+        navTarget = hit ? hit.route : null;
       } else {
-        answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos, insights e agenda (compromissos, lembretes). O que quer saber?';
-        follow = 'Ex: "Quanto gastamos esse mês?", "O que temos amanhã?" ou "Marca dentista sábado às 10h".';
+        if (DB.aiNorm(rawText) === 'ajuda' || DB.aiNorm(rawText) === 'help') {
+          answer = 'Você pode me perguntar coisas como: "Como está meu dia?", "Quais hábitos faltam?", "Quanto gastamos esse mês?", "Qual a próxima fatura?", "Marca um compromisso amanhã às 14h." ou "Gastei 80 no mercado".';
+          follow = 'Diga /hoje, /semana, /habitos ou /resumo para atalhos.';
+        } else {
+          answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos, insights e agenda (compromissos, lembretes). O que quer saber?';
+        }
+        follow = DB.aiNorm(rawText) === 'ajuda' || DB.aiNorm(rawText) === 'help' ? follow : 'Ex: "Como está meu dia?", "Quais hábitos faltam?", "Quanto gastamos esse mês?", "Marca dentista sábado às 10h" ou "Gastei 80 no mercado".';
       }
-      return { answer: answer, facts: facts, tools: tools, toolInput: { intent: det.intent, entities: e }, toolOutput: toolOut, follow_up: follow, intent: det.intent };
+      return { answer: answer, facts: facts, tools: tools, toolInput: { intent: det.intent, entities: e, domain: DB.aiDomainOf(det.intent) }, toolOutput: toolOut, follow_up: follow, intent: det.intent, domain: DB.aiDomainOf(det.intent), confirmationRequired: false, suggestedReplies: /^(overview_day|overview_week|overview_month)$/.test(det.intent) ? ['Hoje', 'Semana', 'Mês'] : null, navigationTarget: navTarget };
     },
     /* ============ PROMPT 23: WHATSAPP (canal, sem finanças próprias) ============
        WhatsApp → Adapter → Intent/Tools do Prompt 22 → Financial Services.
@@ -7126,6 +7526,7 @@ window.Juntos = window.Juntos || {};
       if (dup && dup.status === 'processed') {
         logAudit(db, dup.couple_id, dup.user_id, 'whatsapp_message', dup.id, 'duplicate_ignored', {});
         write(db);
+        try { DB.waMetrics().duplicates++; } catch (e) {}
         return { status: 'ignored', reason: 'duplicate' };
       }
       var row = dup || { id: id('wm'), couple_id: null, user_id: null, direction: 'inbound', provider: provider, phone_hash: DB.waHash(from), phone_masked: DB.waMask(from), external_message_id: extId, text: text.slice(0, 1000), media_type: p.mediaType || p.media_type || p.type || null, mime_type: p.mime || p.mimeType || null, status: 'received', error: null, created_at: now() };
@@ -7148,6 +7549,7 @@ window.Juntos = window.Juntos || {};
         db2.whatsapp_message_failures.push({ id: id('wf'), couple_id: r2 ? r2.couple_id : null, user_id: r2 ? r2.user_id : null, external_message_id: extId, provider: provider, phone_hash: DB.waHash(from), attempts: 1, error: String((e && e.message) || e).slice(0, 300), created_at: now() });
         logAudit(db2, r2 ? r2.couple_id : null, r2 ? r2.user_id : null, 'whatsapp_message', row.id, 'failed', {});
         write(db2);
+        try { DB.waMetrics().errors++; } catch (e3) {}
         try { DB.waSend(from, 'Não consegui processar agora. Tente novamente.', { provider: provider }); } catch (e2) { /* sem canal */ }
         throw e;
       }
@@ -7291,6 +7693,7 @@ window.Juntos = window.Juntos || {};
     },
     /* Núcleo do adapter: identidade → conversa → assistant → resposta. */
     whatsappProcessInbound: function (rowId, text, masked) {
+      var tStart = Date.now();
       var db = read();
       var row = db.whatsapp_messages.find(function (x) { return x.id === rowId; });
       if (!row) throw new Error('Mensagem não encontrada.');
@@ -7333,7 +7736,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'resumo do mês', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -7364,6 +7767,11 @@ window.Juntos = window.Juntos || {};
       var res = DB.aiProcessMessage(userId, conv.id, text, { channel: 'whatsapp', externalMessageId: row.external_message_id });
       DB.waTagChannel(userId, conv.id, res, row.external_message_id);
       DB.waFinishInbound(rowId, 'processed');
+      try {
+        var mm = DB.waMetrics();
+        mm.processed++; mm.latencyMs += Date.now() - tStart;
+        if (res.intent === 'help' || res.intent === 'clarify') mm.unknown++;
+      } catch (e) {}
       if (res.pendingAction) {
         DB.waSendConfirmation(row, conn, res.pendingAction);
       } else {
@@ -7401,7 +7809,29 @@ window.Juntos = window.Juntos || {};
       if (!r || r.status !== 'pending_confirmation') throw new Error('Sem rascunho para editar.');
       var accs = DB.aiFindAccounts(userId, text);
       var cards = DB.aiFindCards(userId, text);
-      if (accs.length === 1 && (r.action_type === 'create_transaction' || r.action_type === 'mark_invoice_paid')) {
+      if (r.action_type === 'create_agenda_event') {
+        var tm = DB.aiNorm(text).match(/(\d{1,2})(?::(\d{2}))?\s?h/);
+        if (tm) {
+          var hh = +tm[1], mmn = tm[2] ? +tm[2] : 0;
+          if (/noite/.test(DB.aiNorm(text)) && hh < 12) hh += 12;
+          if (hh <= 23) {
+            r.request_data.start_time = ('0' + hh).slice(-2) + ':' + ('0' + mmn).slice(-2);
+            r.request_data.all_day = false;
+          } else throw new Error('Não entendi o horário. Ex: "às 21h".');
+        } else if (accs.length || cards.length) throw new Error('Para compromisso, diga a nova data ou horário.');
+        else throw new Error('O que mudar? (nova data, horário ou título)');
+        DB.aiValidateActionParams(userId, r.action_type, r.request_data);
+      } else if (r.action_type === 'habit_complete') {
+        var hv = DB.aiParseAmount(text);
+        if (hv == null) throw new Error('Não entendi o valor. Ex: "20".');
+        r.request_data.value = hv;
+        DB.aiValidateActionParams(userId, r.action_type, r.request_data);
+      } else if (r.action_type === 'contribute_goal') {
+        var gv = DB.aiParseAmount(text);
+        if (gv == null) throw new Error('Não entendi o valor. Ex: "250".');
+        r.request_data.amount = gv;
+        DB.aiValidateActionParams(userId, r.action_type, r.request_data);
+      } else if (accs.length === 1 && (r.action_type === 'create_transaction' || r.action_type === 'mark_invoice_paid')) {
         r.request_data.account_id = accs[0].id;
         if (r.action_type === 'create_transaction') { r.request_data.credit_card_id = null; }
         if (r.action_type === 'mark_invoice_paid') r.request_data.payment_account_id = accs[0].id;

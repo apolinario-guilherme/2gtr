@@ -28,3 +28,6 @@
 ## Area de Membros (estrutura, sem regras novas)
 - Publica x privada separadas; retorno pos-login; 404/403; robots dinamico; sidebar em grupos + colapso; bottomnav 5 itens SVG; hub Financas; menu do avatar; settings em grupos + preferencias + gestao do dinheiro; avatar validado; logout sem vazamento; offline; OF oculto.
 - Testes (74/74 PASS): publicas, guard+pending, login valido/invalido, logout, IDOR (habito/agenda/fatura/tx/outro casal), owner x member, grupos/aria-current/bottomnav/hubs, menu, colapso, 404/403, settings+avatar+prefs, troca de usuario, regressao (acerto, fatura, orcamento, meta, agenda, habitos, notif, automacao, assistente), OF off, diagnose, sem overflow. Desktop/mobile. Console limpo.
+## Assistente WhatsApp como interface do ecossistema (mesmo nucleo)
+- Overview, agenda datada, habitos (safe-write + confirmacao), aporte em meta, planejamento, notificacoes, navegacao, modo do dinheiro e status WhatsApp via servicos oficiais; SEPARATE/JOINT respeitados; edicao de rascunho; expiracao; idempotencia; metricas; multimodal no mesmo pipeline.
+- Testes (104/104 PASS): intents novos, fluxos web e WhatsApp (criar/editar/confirmar/cancelar), privacidade entre membros, financas e regressao, seguranca (unlinked/revogado/duplicata/expirado/injecao/IDOR/arquivo/tool negada), multimodal, coerencia web x canal, OF off, diagnose. Console limpo.
