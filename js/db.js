@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -219,6 +219,8 @@ window.Juntos = window.Juntos || {};
     if (!db.open_finance_reconciliation_exceptions) { db.open_finance_reconciliation_exceptions = []; changed = true; }
     if (!db.open_finance_balance_snapshots) { db.open_finance_balance_snapshots = []; changed = true; }
     if (!db.agenda_events) { db.agenda_events = []; changed = true; }
+    if (!db.habits) { db.habits = []; changed = true; }
+    if (!db.habit_completions) { db.habit_completions = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -8074,6 +8076,579 @@ window.Juntos = window.Juntos || {};
       });
       return made;
     },
+    /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
+       Fonte própria (habits + habit_completions). Tudo por user_id do
+       autenticado (nunca do frontend); couple_id só p/ isolamento.
+       Datas locais YYYY-MM-DD (sem UTC). Métricas descritivas, sem score. */
+    HABIT_FREQUENCIES: function () {
+      return [
+        { key: 'daily', label: 'Todos os dias' },
+        { key: 'weekly', label: 'Toda semana' },
+        { key: 'monthly', label: 'Todo mês' },
+        { key: 'yearly', label: 'Todo ano' },
+        { key: 'specific_days', label: 'Dias específicos' }
+      ];
+    },
+    HABIT_UNITS: function () {
+      return [
+        { key: 'BOOLEAN', label: 'Sim/Não', hint: 'Concluído' },
+        { key: 'COUNT', label: 'Contagem', hint: 'vez' },
+        { key: 'AMOUNT', label: 'Quantidade', hint: 'unidade' },
+        { key: 'DURATION', label: 'Duração', hint: 'minutos' }
+      ];
+    },
+    HABIT_CATEGORIES: function () {
+      return [
+        { name: 'Saúde', icon: '🏥' }, { name: 'Exercício', icon: '🏃' },
+        { name: 'Estudo', icon: '📖' }, { name: 'Leitura', icon: '📚' },
+        { name: 'Trabalho', icon: '💼' }, { name: 'Organização', icon: '🧹' },
+        { name: 'Finanças', icon: '💰' }, { name: 'Lazer', icon: '🎬' },
+        { name: 'Relacionamentos', icon: '❤️' }, { name: 'Autocuidado', icon: '🧘' },
+        { name: 'Outros', icon: '📝' }
+      ];
+    },
+    HABIT_SUGGESTIONS: function () {
+      return [
+        { name: 'Ler', icon: '📚', category: 'Leitura', frequency_type: 'daily', target_count: 20, target_unit: 'COUNT', unit_label: 'páginas' },
+        { name: 'Exercitar', icon: '🏃', category: 'Exercício', frequency_type: 'weekly', target_count: 3, target_unit: 'COUNT', unit_label: 'vezes' },
+        { name: 'Beber água', icon: '💧', category: 'Saúde', frequency_type: 'daily', target_count: 2, target_unit: 'AMOUNT', unit_label: 'litros' },
+        { name: 'Meditar', icon: '🧘', category: 'Autocuidado', frequency_type: 'daily', target_count: 1, target_unit: 'BOOLEAN', unit_label: '' },
+        { name: 'Estudar', icon: '📖', category: 'Estudo', frequency_type: 'daily', target_count: 45, target_unit: 'DURATION', unit_label: 'minutos' },
+        { name: 'Organizar a casa', icon: '🧹', category: 'Organização', frequency_type: 'weekly', target_count: 1, target_unit: 'COUNT', unit_label: 'vez' },
+        { name: 'Revisar finanças', icon: '💰', category: 'Finanças', frequency_type: 'weekly', target_count: 1, target_unit: 'COUNT', unit_label: 'vez' },
+        { name: 'Rotina noturna', icon: '🌙', category: 'Autocuidado', frequency_type: 'daily', target_count: 1, target_unit: 'BOOLEAN', unit_label: '' }
+      ];
+    },
+    HABIT_STATUSES: function () { return ['ACTIVE', 'PAUSED', 'ARCHIVED', 'COMPLETED']; },
+    habitCatIcon: function (name) {
+      var c = DB.HABIT_CATEGORIES().filter(function (x) { return x.name === name; })[0];
+      return c ? c.icon : '📝';
+    },
+    /* RLS: dono = autenticado. couple_id só isola. */
+    habitVisible: function (db, userId, h) {
+      if (!h) return false;
+      return h.user_id === userId;
+    },
+    validateHabit: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var name = String(data.name || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name.length < 2) throw new Error('Dê um nome ao hábito.');
+      if (name.length > 80) throw new Error('Nome muito longo (máx 80 caracteres).');
+      var desc = String(data.description || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+      var category = String(data.category || 'Outros').trim().slice(0, 40) || 'Outros';
+      var icon = data.icon ? String(data.icon).slice(0, 4) : DB.habitCatIcon(category);
+      var color = data.color ? String(data.color) : null;
+      if (color && DB.AGENDA_COLORS().indexOf(color) < 0 && !/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Cor inválida.');
+      var freq = String(data.frequency_type || 'daily').toLowerCase();
+      if (['daily', 'weekly', 'monthly', 'yearly', 'specific_days'].indexOf(freq) < 0) throw new Error('Frequência inválida.');
+      var days = null;
+      if (freq === 'specific_days') {
+        days = (Array.isArray(data.weekdays) ? data.weekdays : String(data.weekdays || '').split(',')).map(function (x) { return parseInt(x, 10); }).filter(function (x) { return x >= 0 && x <= 6; });
+        days = days.filter(function (x, ix) { return days.indexOf(x) === ix; }).sort();
+        if (!days.length) throw new Error('Escolha ao menos um dia da semana.');
+      }
+      var unit = String(data.target_unit || 'BOOLEAN').toUpperCase();
+      if (['BOOLEAN', 'COUNT', 'AMOUNT', 'DURATION'].indexOf(unit) < 0) throw new Error('Unidade inválida.');
+      var target = data.target_count == null || data.target_count === '' ? (unit === 'BOOLEAN' ? 1 : 1) : Number(data.target_count);
+      if (!(target > 0) || target > 1000000) throw new Error('Meta inválida.');
+      var ulabel = data.unit_label != null ? String(data.unit_label).slice(0, 20) : '';
+      var start = String(data.start_date || DB.agendaToday()).slice(0, 10);
+      if (!DB.agendaParseDay(start)) throw new Error('Data de início inválida.');
+      var end = data.end_date ? String(data.end_date).slice(0, 10) : null;
+      if (end) {
+        if (!DB.agendaParseDay(end)) throw new Error('Data final inválida.');
+        if (end < start) throw new Error('A data final é anterior ao início.');
+      }
+      var ptime = data.preferred_time ? String(data.preferred_time) : null;
+      if (ptime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(ptime)) throw new Error('Horário preferido inválido.');
+      var rtime = data.reminder_time ? String(data.reminder_time) : null;
+      if (rtime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rtime)) throw new Error('Horário do lembrete inválido.');
+      var rem = data.reminder_enabled == null ? !!rtime : !!data.reminder_enabled;
+      return { couple_id: cid, name: name, description: desc, category: category, icon: icon, color: color || '#0E8F5B', frequency_type: freq, weekdays: days, target_count: target, target_unit: unit, unit_label: ulabel, start_date: start, end_date: end, preferred_time: ptime, reminder_enabled: rem, reminder_time: rtime || ptime || '09:00' };
+    },
+    createHabit: function (userId, data) {
+      DB.requireAuthz(userId, 'habit_create', null);
+      var v = DB.validateHabit(userId, data);
+      var db = read();
+      var h = { id: id('hb'), user_id: userId, couple_id: v.couple_id, name: v.name, description: v.description, category: v.category, icon: v.icon, color: v.color, frequency_type: v.frequency_type, weekdays: v.weekdays, target_count: v.target_count, target_unit: v.target_unit, unit_label: v.unit_label, start_date: v.start_date, end_date: v.end_date, preferred_time: v.preferred_time, reminder_enabled: v.reminder_enabled, reminder_time: v.reminder_time, active: true, status: 'ACTIVE', paused_from: null, paused_until: null, archived_at: null, created_at: now(), updated_at: now() };
+      db.habits.push(h);
+      logAudit(db, v.couple_id, userId, 'habit', h.id, 'created', { name: h.name });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_created', entity_type: 'habit', entity_id: h.id, metadata: { name: h.name } }); } catch (e) {}
+      return h;
+    },
+    getHabit: function (userId, habitId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var h = db.habits.find(function (x) { return x.id === habitId && x.couple_id === cid; });
+      if (!h || !DB.habitVisible(db, userId, h)) {
+        try { DB.logAuthorizationFailure(userId, 'habit_read', { entity_type: 'habit', entity_id: habitId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return h;
+    },
+    getHabits: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var q = DB.aiNorm(f.search || '');
+      return db.habits.filter(function (h) {
+        if (h.couple_id !== cid || h.user_id !== userId) return false;
+        if (f.status && DB.habitEffectiveStatus(h) !== String(f.status).toUpperCase()) return false;
+        if (f.active === true && !(h.active && DB.habitEffectiveStatus(h) === 'ACTIVE')) return false;
+        if (f.category && h.category !== f.category) return false;
+        if (f.frequency && h.frequency_type !== f.frequency) return false;
+        if (q) {
+          var hay = DB.aiNorm((h.name || '') + ' ' + (h.description || '') + ' ' + (h.category || ''));
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      }).sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+    },
+    getActiveHabits: function (userId) { return DB.getHabits(userId, { active: true }); },
+    /* COMPLETED é derivado (fim passou); nunca apaga histórico. */
+    habitEffectiveStatus: function (h) {
+      if (!h.active || h.status === 'ARCHIVED') return 'ARCHIVED';
+      if (h.status === 'PAUSED') return 'PAUSED';
+      if (h.end_date && h.end_date < DB.agendaToday()) return 'COMPLETED';
+      return 'ACTIVE';
+    },
+    updateHabit: function (userId, habitId, data) {
+      DB.requireAuthz(userId, 'habit_update', null);
+      var db = read();
+      var h = db.habits.find(function (x) { return x.id === habitId && x.user_id === userId; });
+      if (!h) {
+        try { DB.logAuthorizationFailure(userId, 'habit_update', { entity_type: 'habit', entity_id: habitId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      var merged = { name: h.name, description: h.description, category: h.category, icon: h.icon, color: h.color, frequency_type: h.frequency_type, weekdays: h.weekdays, target_count: h.target_count, target_unit: h.target_unit, unit_label: h.unit_label, start_date: h.start_date, end_date: h.end_date, preferred_time: h.preferred_time, reminder_enabled: h.reminder_enabled, reminder_time: h.reminder_time };
+      Object.keys(data || {}).forEach(function (k) { if (data[k] !== undefined && merged.hasOwnProperty(k)) merged[k] = data[k]; });
+      var v = DB.validateHabit(userId, merged);
+      Object.keys(v).forEach(function (k) { if (k !== 'couple_id') h[k] = v[k]; });
+      h.updated_at = now();
+      logAudit(db, h.couple_id, userId, 'habit', h.id, 'updated', { name: h.name });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_updated', entity_type: 'habit', entity_id: h.id }); } catch (e2) {}
+      return h;
+    },
+    pauseHabit: function (userId, habitId, untilDate) {
+      DB.requireAuthz(userId, 'habit_pause', null);
+      var db = read();
+      var h = db.habits.find(function (x) { return x.id === habitId && x.user_id === userId; });
+      if (!h) throw new Error('Acesso negado.');
+      var until = untilDate ? String(untilDate).slice(0, 10) : null;
+      if (until && !DB.agendaParseDay(until)) throw new Error('Data inválida.');
+      h.status = 'PAUSED'; h.paused_from = DB.agendaToday(); h.paused_until = until; h.updated_at = now();
+      logAudit(db, h.couple_id, userId, 'habit', h.id, 'paused', { until: until || '' });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_paused', entity_type: 'habit', entity_id: h.id, metadata: { until: until || '' } }); } catch (e) {}
+      try { DB.habitCancelPending(userId, h.id); } catch (e2) {}
+      return h;
+    },
+    resumeHabit: function (userId, habitId) {
+      DB.requireAuthz(userId, 'habit_resume', null);
+      var db = read();
+      var h = db.habits.find(function (x) { return x.id === habitId && x.user_id === userId; });
+      if (!h) throw new Error('Acesso negado.');
+      h.status = 'ACTIVE'; h.paused_from = null; h.paused_until = null; h.updated_at = now();
+      logAudit(db, h.couple_id, userId, 'habit', h.id, 'resumed', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_resumed', entity_type: 'habit', entity_id: h.id }); } catch (e) {}
+      return h;
+    },
+    archiveHabit: function (userId, habitId) {
+      DB.requireAuthz(userId, 'habit_archive', null);
+      var db = read();
+      var h = db.habits.find(function (x) { return x.id === habitId && x.user_id === userId; });
+      if (!h) throw new Error('Acesso negado.');
+      h.status = 'ARCHIVED'; h.active = false; h.archived_at = now(); h.updated_at = now();
+      logAudit(db, h.couple_id, userId, 'habit', h.id, 'archived', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_archived', entity_type: 'habit', entity_id: h.id }); } catch (e) {}
+      try { DB.habitCancelPending(userId, h.id); } catch (e2) {}
+      return h;
+    },
+    /* ---- HabitRecurrenceService: ocorrências previstas (datas locais) ---- */
+    habitIsPausedOn: function (h, date) {
+      if (DB.habitEffectiveStatus(h) === 'ARCHIVED') return true;
+      if (h.status === 'PAUSED' && h.paused_from && date >= h.paused_from && (!h.paused_until || date <= h.paused_until)) return true;
+      return false;
+    },
+    habitIsOccurrenceExpected: function (h, date) {
+      if (!DB.agendaParseDay(date)) return false;
+      if (date < h.start_date) return false;
+      if (h.end_date && date > h.end_date) return false;
+      if (DB.habitIsPausedOn(h, date)) return false;
+      var f = h.frequency_type;
+      if (f === 'daily') return true;
+      if (f === 'weekly') {
+        var base = DB.agendaDow(h.start_date), dw = DB.agendaDow(date);
+        if (dw !== base) return false;
+        var diff = Math.round((new Date(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) - new Date(+h.start_date.slice(0, 4), +h.start_date.slice(5, 7) - 1, +h.start_date.slice(8, 10))) / 864e5);
+        return diff >= 0;
+      }
+      if (f === 'monthly') {
+        var b = DB.agendaParseDay(h.start_date);
+        var dim = DB.agendaDim(+date.slice(0, 4), +date.slice(5, 7));
+        var want = b.d > dim ? dim : b.d;
+        return +date.slice(8, 10) === want;
+      }
+      if (f === 'yearly') {
+        var b2 = DB.agendaParseDay(h.start_date);
+        var dim2 = DB.agendaDim(+date.slice(0, 4), b2.m);
+        var wantD = b2.d > dim2 ? dim2 : b2.d;
+        return date.slice(5, 7) === h.start_date.slice(5, 7) && +date.slice(8, 10) === wantD && date >= h.start_date;
+      }
+      if (f === 'specific_days') {
+        return (h.weekdays || []).indexOf(DB.agendaDow(date)) >= 0;
+      }
+      return false;
+    },
+    habitExpectedOccurrences: function (h, from, to) {
+      var out = [], guard = 0;
+      var cur = from < h.start_date ? h.start_date : from;
+      var end = h.end_date && h.end_date < to ? h.end_date : to;
+      while (cur <= end && guard++ < 800) {
+        if (DB.habitIsOccurrenceExpected(h, cur)) out.push(cur);
+        cur = DB.agendaAddDays(cur, 1);
+      }
+      return out;
+    },
+    habitGetNextOccurrence: function (h, fromDate) {
+      var cur = fromDate ? DB.agendaAddDays(fromDate > h.start_date ? fromDate : h.start_date, 1) : h.start_date, guard = 0;
+      while (guard++ < 800) {
+        if ((!h.end_date || cur <= h.end_date) && DB.habitIsOccurrenceExpected(h, cur)) return cur;
+        if (h.end_date && cur > h.end_date) return null;
+        cur = DB.agendaAddDays(cur, 1);
+      }
+      return null;
+    },
+    habitGetPreviousOccurrence: function (h, fromDate) {
+      var cur = fromDate && fromDate < h.start_date ? h.start_date : (fromDate || h.start_date), guard = 0;
+      cur = DB.agendaAddDays(cur, -1);
+      while (guard++ < 800) {
+        if (cur < h.start_date) return null;
+        if (DB.habitIsOccurrenceExpected(h, cur)) return cur;
+        cur = DB.agendaAddDays(cur, -1);
+      }
+      return null;
+    },
+    habitOccurrenceStatus: function (userId, habitId, date) {
+      var h = DB.getHabit(userId, habitId);
+      if (!DB.habitIsOccurrenceExpected(h, date)) return { expected: false };
+      var db = read();
+      var c = db.habit_completions.filter(function (x) { return x.habit_id === h.id && x.user_id === userId && x.completion_date === date; })[0] || null;
+      if (!c) return { expected: true, done: false, partial: false, value: null };
+      return { expected: true, done: DB.habitCompletionDone(h, c), partial: !DB.habitCompletionDone(h, c) && (c.value || 0) > 0, value: c.value, completion_id: c.id };
+    },
+    habitCompletionDone: function (h, c) {
+      if (!c) return false;
+      if (h.target_unit === 'BOOLEAN') return true;
+      return Number(c.value || 0) >= Number(h.target_count || 1);
+    },
+    /* ---- conclusões ---- */
+    recordCompletion: function (userId, habitId, data) {
+      DB.requireAuthz(userId, 'habit_complete', null);
+      var db = read();
+      var h = db.habits.find(function (x) { return x.id === habitId && x.user_id === userId; });
+      if (!h) {
+        try { DB.logAuthorizationFailure(userId, 'habit_complete', { entity_type: 'habit', entity_id: habitId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      data = data || {};
+      var date = String(data.completion_date || data.date || DB.agendaToday()).slice(0, 10);
+      if (!DB.agendaParseDay(date)) throw new Error('Data inválida.');
+      if (!DB.habitIsOccurrenceExpected(h, date)) throw new Error('Sem ocorrência prevista nesta data.');
+      if (db.habit_completions.some(function (x) { return x.habit_id === h.id && x.user_id === userId && x.completion_date === date; })) throw new Error('Já registrado neste dia.');
+      var value = null;
+      if (h.target_unit !== 'BOOLEAN') {
+        value = Number(data.value);
+        if (!(value > 0)) throw new Error('Informe um valor maior que zero.');
+        value = Math.round(value * 100) / 100;
+      } else value = 1;
+      var note = String(data.note || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      var c = { id: id('hc'), habit_id: h.id, user_id: userId, completion_date: date, completed_at: now(), value: value, note: note, created_at: now(), updated_at: now() };
+      db.habit_completions.push(c);
+      logAudit(db, h.couple_id, userId, 'habit_completion', c.id, 'created', { habit: h.id, date: date });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_completion_created', entity_type: 'habit_completion', entity_id: c.id, metadata: { habit: h.id } }); } catch (e2) {}
+      try { DB.habitCheckStreakMilestone(userId, h.id); } catch (e3) {}
+      return c;
+    },
+    updateCompletion: function (userId, completionId, data) {
+      DB.requireAuthz(userId, 'habit_complete_update', null);
+      var db = read();
+      var c = db.habit_completions.find(function (x) { return x.id === completionId && x.user_id === userId; });
+      if (!c) {
+        try { DB.logAuthorizationFailure(userId, 'habit_complete_update', { entity_type: 'habit_completion', entity_id: completionId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      var h = db.habits.find(function (x) { return x.id === c.habit_id; });
+      data = data || {};
+      if (data.value !== undefined && h && h.target_unit !== 'BOOLEAN') {
+        var v = Number(data.value);
+        if (!(v > 0)) throw new Error('Informe um valor maior que zero.');
+        c.value = Math.round(v * 100) / 100;
+      }
+      if (data.note !== undefined) c.note = String(data.note).replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      c.updated_at = now();
+      logAudit(db, c && h ? h.couple_id : DB.myCoupleId(userId), userId, 'habit_completion', c.id, 'updated', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_completion_updated', entity_type: 'habit_completion', entity_id: c.id }); } catch (e2) {}
+      return c;
+    },
+    removeCompletion: function (userId, completionId) {
+      DB.requireAuthz(userId, 'habit_complete_remove', null);
+      var db = read();
+      var ix = db.habit_completions.findIndex(function (x) { return x.id === completionId && x.user_id === userId; });
+      if (ix < 0) {
+        try { DB.logAuthorizationFailure(userId, 'habit_complete_remove', { entity_type: 'habit_completion', entity_id: completionId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      var c = db.habit_completions[ix];
+      var h = db.habits.find(function (x) { return x.id === c.habit_id; });
+      db.habit_completions.splice(ix, 1);
+      logAudit(db, h ? h.couple_id : DB.myCoupleId(userId), userId, 'habit_completion', completionId, 'removed', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'habit', { action: 'habit_completion_removed', entity_type: 'habit_completion', entity_id: completionId }); } catch (e2) {}
+      return true;
+    },
+    getHabitHistory: function (userId, habitId, opt) {
+      opt = opt || {};
+      var h = DB.getHabit(userId, habitId);
+      var db = read();
+      var rows = db.habit_completions.filter(function (x) { return x.habit_id === h.id && x.user_id === userId; })
+        .sort(function (a, b) { return (b.completion_date + b.id).localeCompare(a.completion_date + a.id); });
+      if (opt.before) rows = rows.filter(function (x) { return (x.completion_date + x.id) < opt.before; });
+      rows = rows.slice(0, opt.limit || 60);
+      return rows.map(function (c) { return { id: c.id, date: c.completion_date, value: c.value, note: c.note, done: DB.habitCompletionDone(h, c), updated_at: c.updated_at }; });
+    },
+    /* ---- consistência + sequências (descritivas) ---- */
+    calculateHabitConsistency: function (userId, habitId, from, to) {
+      var h = DB.getHabit(userId, habitId);
+      var today = DB.agendaToday();
+      var f = from || h.start_date, t = to || (today < (h.end_date || '9999-12-31') ? today : (h.end_date || today));
+      if (t > today) t = today;
+      var expected = DB.habitExpectedOccurrences(h, f, t);
+      var db = read();
+      var doneSet = {};
+      db.habit_completions.forEach(function (c) {
+        if (c.habit_id === h.id && c.user_id === userId && DB.habitCompletionDone(h, c)) doneSet[c.completion_date] = true;
+      });
+      var done = expected.filter(function (d) { return doneSet[d]; }).length;
+      return {
+        habit_id: h.id, from: f, to: t,
+        expected: expected.length, completed: done,
+        pct: expected.length ? Math.round(done / expected.length * 1000) / 10 : null,
+        current_streak: DB.calculateCurrentStreak(userId, habitId),
+        best_streak: DB.calculateBestStreak(userId, habitId)
+      };
+    },
+    calculateCurrentStreak: function (userId, habitId) {
+      var h = DB.getHabit(userId, habitId);
+      var db = read();
+      var doneSet = {};
+      db.habit_completions.forEach(function (c) {
+        if (c.habit_id === h.id && c.user_id === userId && DB.habitCompletionDone(h, c)) doneSet[c.completion_date] = true;
+      });
+      var today = DB.agendaToday();
+      var cur = DB.habitGetPreviousOccurrence(h, DB.agendaAddDays(today, 1));
+      var n = 0, guard = 0;
+      while (cur && doneSet[cur] && guard++ < 2000) { n++; cur = DB.habitGetPreviousOccurrence(h, cur); }
+      return n;
+    },
+    calculateBestStreak: function (userId, habitId) {
+      var h = DB.getHabit(userId, habitId);
+      var db = read();
+      var doneSet = {};
+      db.habit_completions.forEach(function (c) {
+        if (c.habit_id === h.id && c.user_id === userId && DB.habitCompletionDone(h, c)) doneSet[c.completion_date] = true;
+      });
+      var occs = DB.habitExpectedOccurrences(h, h.start_date, h.end_date && h.end_date < DB.agendaToday() ? h.end_date : DB.agendaToday());
+      var best = 0, run = 0;
+      occs.forEach(function (d) {
+        if (doneSet[d]) { run++; if (run > best) best = run; }
+        else run = 0;
+      });
+      return best;
+    },
+    calculateHabitProgress: function (userId, habitId, date) {
+      var h = DB.getHabit(userId, habitId);
+      var d = date || DB.agendaToday();
+      var st = DB.habitOccurrenceStatus(userId, habitId, d);
+      if (!st.expected) return { expected: false };
+      var out = { expected: true, done: st.done, partial: st.partial, value: st.value, target: h.target_unit === 'BOOLEAN' ? 1 : h.target_count, unit: h.target_unit, unit_label: h.unit_label };
+      if (h.target_unit !== 'BOOLEAN' && st.value != null) out.pct = Math.min(100, Math.round(st.value / h.target_count * 1000) / 10);
+      return out;
+    },
+    /* ---- calendário, evolução e estatísticas (só leitura, por janela) ---- */
+    getHabitCalendar: function (userId, habitId, year, month) {
+      var h = DB.getHabit(userId, habitId);
+      var from = DB.agendaFmt(year, month, 1), to = DB.agendaFmt(year, month, DB.agendaDim(year, month));
+      var db = read();
+      var comp = {};
+      db.habit_completions.forEach(function (c) {
+        if (c.habit_id === h.id && c.user_id === userId && c.completion_date >= from && c.completion_date <= to) comp[c.completion_date] = c;
+      });
+      var days = [];
+      for (var d = 1; d <= DB.agendaDim(year, month); d++) {
+        var ds = DB.agendaFmt(year, month, d);
+        var st = { date: ds, expected: DB.habitIsOccurrenceExpected(h, ds), done: false, partial: false, value: null };
+        var c = comp[ds];
+        if (c && st.expected) {
+          st.done = DB.habitCompletionDone(h, c);
+          st.partial = !st.done && Number(c.value || 0) > 0;
+          st.value = c.value;
+        }
+        days.push(st);
+      }
+      return { habit_id: h.id, month: from.slice(0, 7), days: days };
+    },
+    getHabitTimeline: function (userId, habitId, opt) {
+      opt = opt || {};
+      var h = DB.getHabit(userId, habitId);
+      var from = opt.from || DB.agendaAddDays(DB.agendaToday(), -30), to = opt.to || DB.agendaToday();
+      if (from > to) throw new Error('Período inválido.');
+      var span = Math.round((new Date(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 864e5) + 1;
+      var bucket = span <= 31 ? 'day' : span <= 120 ? 'week' : 'month';
+      var db = read();
+      var comp = {};
+      db.habit_completions.forEach(function (c) {
+        if (c.habit_id === h.id && c.user_id === userId && c.completion_date >= from && c.completion_date <= to) comp[c.completion_date] = c;
+      });
+      function key(d) {
+        if (bucket === 'day') return d;
+        if (bucket === 'week') { var dts = DB.agendaParseDay(d); var dt = new Date(dts.y, dts.m - 1, dts.d); var dow = (dt.getDay() + 6) % 7; var mon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() - dow); return DB.agendaFmt(mon.getFullYear(), mon.getMonth() + 1, mon.getDate()); }
+        return d.slice(0, 7) + '-01';
+      }
+      var map = {};
+      var cur = from, guard = 0;
+      while (cur <= to && guard++ < 500) {
+        var k = key(cur);
+        map[k] = map[k] || { bucket: k, expected: 0, completed: 0, value: 0 };
+        if (DB.habitIsOccurrenceExpected(h, cur)) {
+          map[k].expected++;
+          if (comp[cur] && DB.habitCompletionDone(h, comp[cur])) { map[k].completed++; map[k].value = Math.round((map[k].value + Number(comp[cur].value || 0)) * 100) / 100; }
+        }
+        cur = DB.agendaAddDays(cur, 1);
+      }
+      var buckets = Object.keys(map).sort().map(function (k) {
+        var b = map[k];
+        b.pct = b.expected ? Math.round(b.completed / b.expected * 1000) / 10 : null;
+        return b;
+      });
+      return { habit_id: h.id, from: from, to: to, bucket: bucket, buckets: buckets, unit: h.target_unit, unit_label: h.unit_label };
+    },
+    getHabitStats: function (userId, from, to) {
+      var today = DB.agendaToday();
+      from = from || DB.agendaAddDays(today, -30); to = to || today;
+      var act = DB.getHabits(userId, { active: true });
+      var per = act.map(function (h) {
+        var c = DB.calculateHabitConsistency(userId, h.id, from > h.start_date ? from : h.start_date, h.end_date && h.end_date < to ? h.end_date : to);
+        return { id: h.id, name: h.name, icon: h.icon, expected: c.expected, completed: c.completed, pct: c.pct, current_streak: c.current_streak, best_streak: c.best_streak };
+      });
+      var exp = 0, done = 0, best = 0;
+      per.forEach(function (p) { exp += p.expected; done += p.completed; if (p.best_streak > best) best = p.best_streak; });
+      var tstat = DB.habitTodayStatus(userId);
+      return { from: from, to: to, active: act.length, today_done: tstat.done, today_total: tstat.total, consistency: exp ? Math.round(done / exp * 1000) / 10 : null, best_streak: best, habits: per };
+    },
+    habitTodayStatus: function (userId, date) {
+      var d = date || DB.agendaToday();
+      var act = DB.getHabits(userId, { active: true });
+      var total = 0, done = 0;
+      var items = act.map(function (h) {
+        if (!DB.habitIsOccurrenceExpected(h, d)) return null;
+        total++;
+        var st = DB.habitOccurrenceStatus(userId, h.id, d);
+        if (st.done) done++;
+        return { id: h.id, name: h.name, icon: h.icon, color: h.color, target: h.target_unit === 'BOOLEAN' ? null : (h.target_count + (h.unit_label ? ' ' + h.unit_label : '')), done: st.done, partial: st.partial, value: st.value, unit: h.target_unit };
+      }).filter(Boolean);
+      return { date: d, total: total, done: done, items: items };
+    },
+    /* ---- lembretes de hábitos via NotificationEngine ---- */
+    habitCancelPending: function (userId, habitId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = 0;
+      db.notifications.forEach(function (x) {
+        if (x.couple_id === cid && x.related_entity_type === 'habit' && x.related_entity_id === habitId &&
+          ['pending', 'scheduled'].indexOf(x.status) >= 0) {
+          x.status = 'expired'; x.updated_at = now(); n++;
+          logAudit(db, cid, userId, 'notification', x.id, 'expired', { why: 'habit_changed' });
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    habitCheckStreakMilestone: function (userId, habitId) {
+      var h = DB.getHabit(userId, habitId);
+      var s = DB.calculateCurrentStreak(userId, habitId);
+      if ([7, 30, 100, 365].indexOf(s) < 0) return null;
+      var c = DB.calculateHabitConsistency(userId, habitId);
+      try {
+        return DB.notifCreate(userId, { type: 'habit_streak', title: s + ' dias seguidos de "' + h.name + '"', body: 'Sequência de ' + s + ' dias em "' + h.name + '". Consistência de ' + (c.pct == null ? '—' : String(c.pct).replace('.', ',') + '%') + ' no período.', priority: 'info', user_id: userId, related_entity_type: 'habit', related_entity_id: h.id, idempotency_key: ['habit', 'streak', h.couple_id, h.id, s].join('|'), payload: { habit_id: h.id, streak: s } });
+      } catch (e) { return null; }
+    },
+    habitProcessDue: function (userId, nowISO) {
+      var nowT = (nowISO || now()).slice(0, 16);
+      var today = (nowISO || now()).slice(0, 10);
+      var hour = +(nowISO || now()).slice(11, 13);
+      var act = DB.getHabits(userId, { active: true });
+      var made = [];
+      act.forEach(function (h) {
+        if (!h.reminder_enabled) return;
+        if (!DB.habitIsOccurrenceExpected(h, today)) return;
+        var st = DB.habitOccurrenceStatus(userId, h.id, today);
+        if (st.done) return;
+        var rt = (h.reminder_time || '09:00').slice(0, 5);
+        if (today + 'T' + rt <= nowT) {
+          try {
+            var r = DB.notifCreate(userId, { type: 'habit_reminder', title: 'Lembrete: ' + h.name, body: 'Seu hábito "' + h.name + '" está programado para hoje' + (h.preferred_time ? ' (' + h.preferred_time + ')' : '') + '.', priority: 'attention', user_id: userId, related_entity_type: 'habit', related_entity_id: h.id, idempotency_key: ['habit', 'reminder', h.couple_id, h.id, today].join('|'), payload: { habit_id: h.id, date: today } });
+            if (r && r.id) made.push(r.id);
+          } catch (e) {}
+        }
+        if (hour >= 18) {
+          try {
+            var d2 = DB.notifCreate(userId, { type: 'habit_due', title: '"' + h.name + '" hoje', body: 'Faltou registrar "' + h.name + '" hoje. Sem pressa: vale para o seu acompanhamento.', priority: 'info', user_id: userId, related_entity_type: 'habit', related_entity_id: h.id, idempotency_key: ['habit', 'due', h.couple_id, h.id, today].join('|'), payload: { habit_id: h.id, date: today } });
+            if (d2 && d2.id) made.push(d2.id);
+          } catch (e2) {}
+        }
+      });
+      return made;
+    },
+    /* ---- calendário unificado (apresentação): finanças + agenda + hábitos ---- */
+    getUnifiedCalendar: function (userId, opt) {
+      opt = opt || {};
+      var evs = DB.getCalendarEvents(userId, opt);
+      try {
+        var from = (opt.from || DB.agendaToday()).slice(0, 10), to = (opt.to || DB.agendaAddDays(from, 31)).slice(0, 10);
+        var hh = DB.getHabits(userId, { active: true });
+        hh.forEach(function (h) {
+          var occs = DB.habitExpectedOccurrences(h, from > h.start_date ? from : h.start_date, h.end_date && h.end_date < to ? h.end_date : to);
+          occs.forEach(function (d) {
+            evs.push({ id: 'hab:' + h.id + '@' + d, couple_id: h.couple_id, event_type: 'habit', source_type: 'habit', source_id: h.id, title: h.icon + ' ' + h.name, description: 'Hábito pessoal • rotina, sem valor financeiro.', event_date: d, due_date: d, amount: 0, currency: 'BRL', status: d < DB.agendaToday() ? 'realizado' : 'previsto', visibility: 'me', user_id: h.user_id, account_id: null, credit_card_id: null, category_id: null, plan_id: null, related_entity_type: 'habit', related_entity_id: h.id, is_recurring: h.frequency_type !== 'daily' || true, is_projected: d >= DB.agendaToday(), is_planned: false, is_realized: false, priority: 'normal', metadata: { habit: true, frequency: h.frequency_type, cash_impact: 0 }, route: '#/habits/' + h.id });
+          });
+        });
+      } catch (e) {}
+      evs.sort(function (a, b) { return (a.event_date + a.id).localeCompare(b.event_date + b.id); });
+      return evs;
+    },
+    /* ---- PersonalAssistantService (camada neutra, só leitura; sem intents) ----
+       Consultas pessoais p/ uso futuro da IA/WhatsApp. Nenhuma escrita aqui. */
+    paTodayHabits: function (userId, date) {
+      var st = DB.habitTodayStatus(userId, date);
+      return { date: st.date, total: st.total, done: st.done, items: st.items.map(function (i) { return { name: i.name, done: i.done, target: i.target }; }) };
+    },
+    paConsistency: function (userId, habitId, from, to) {
+      if (habitId) {
+        var c = DB.calculateHabitConsistency(userId, habitId, from, to);
+        var h = DB.getHabit(userId, habitId);
+        return { habit: h.name, expected: c.expected, completed: c.completed, pct: c.pct, current_streak: c.current_streak, best_streak: c.best_streak };
+      }
+      var s = DB.getHabitStats(userId, from, to);
+      return { active: s.active, today: { done: s.today_done, total: s.today_total }, consistency: s.consistency, habits: s.habits.map(function (x) { return { name: x.name, pct: x.pct }; }) };
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -8113,7 +8688,10 @@ window.Juntos = window.Juntos || {};
         { key: 'agenda_event_created', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
         { key: 'agenda_event_updated', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
         { key: 'agenda_event_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 48, retry: false, maxAttempts: 1, route: 'agenda' },
-        { key: 'agenda_event_cancelled', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' }
+        { key: 'agenda_event_cancelled', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
+        { key: 'habit_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'habits' },
+        { key: 'habit_due', priority: 'info', channels: ['in_app'], cooldownH: 20, expiresInH: 30, retry: false, maxAttempts: 1, route: 'habits' },
+        { key: 'habit_streak', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 168, expiresInH: 336, retry: false, maxAttempts: 1, route: 'habits' }
       ];
     },
     notifTypeDef: function (type) {
@@ -8461,12 +9039,12 @@ window.Juntos = window.Juntos || {};
     /* Deep link validado: entidade precisa pertencer ao casal. */
     notifDeepLink: function (userId, notifId) {
       var n = DB.notifGet(userId, notifId);
-      var routes = { invoices: '#/invoices', budget: '#/budget', installments: '#/installments', goals: '#/goals', settlements: '#/settlements', imports: '#/imports', settings: '#/settings', accounts: '#/accounts', cards: '#/cards', recurring: '#/calendar', planning: '#/planning', openfinance: '#/openfinance', agenda: '#/agenda' };
+      var routes = { invoices: '#/invoices', budget: '#/budget', installments: '#/installments', goals: '#/goals', settlements: '#/settlements', imports: '#/imports', settings: '#/settings', accounts: '#/accounts', cards: '#/cards', recurring: '#/calendar', planning: '#/planning', openfinance: '#/openfinance', agenda: '#/agenda', habits: '#/habits' };
       var def = DB.notifTypeDef(n.type);
       var base = routes[(def && def.route) || ''] || '#/dashboard';
       if (!n.related_entity_id) return base;
       var db = read(), cid = DB.myCoupleId(userId);
-      var tables = { invoice: 'invoices', import: 'import_batches', goal: 'goals', plan: 'financial_plans', agenda: 'agenda_events' };
+      var tables = { invoice: 'invoices', import: 'import_batches', goal: 'goals', plan: 'financial_plans', agenda: 'agenda_events', habit: 'habits' };
       var tname = tables[n.related_entity_type];
       if (tname) {
         var ok = (db[tname] || []).some(function (x) { return x.id === n.related_entity_id && x.couple_id === cid; });
@@ -8475,6 +9053,11 @@ window.Juntos = window.Juntos || {};
           var agev = (db.agenda_events || []).find(function (x) { return x.id === n.related_entity_id; });
           if (!agev || agev.deleted_at) throw new Error('Acesso negado.');
           return '#/agenda';
+        }
+        if (n.related_entity_type === 'habit') {
+          var hh2 = (db.habits || []).find(function (x) { return x.id === n.related_entity_id; });
+          if (!hh2 || hh2.user_id !== userId) throw new Error('Acesso negado.');
+          return '#/habits/' + n.related_entity_id;
         }
         if (n.related_entity_type === 'invoice') return '#/invoices';
         if (n.related_entity_type === 'import') return '#/imports/' + n.related_entity_id;
@@ -8583,6 +9166,12 @@ window.Juntos = window.Juntos || {};
           made2.forEach(function (id) { made.push(id); });
         } catch (e) { /* agenda indisponível: segue */ }
       }
+      if (types.indexOf('habit_reminder') >= 0 || types.indexOf('habit_due') >= 0) {
+        try {
+          var made3 = DB.habitProcessDue(userId, opt.nowISO || now());
+          made3.forEach(function (id) { made.push(id); });
+        } catch (e2) { /* hábitos indisponíveis: segue */ }
+      }
       DB.notifExpireStale(userId, types, opt);
       return made;
     },
@@ -8620,6 +9209,9 @@ window.Juntos = window.Juntos || {};
         } else if (n.type === 'agenda_event_reminder') {
           var agev = n.related_entity_id ? (db.agenda_events || []).find(function (x) { return x.id === n.related_entity_id; }) : null;
           if (!agev || agev.deleted_at) expire(n, 'compromisso removido');
+        } else if (n.type === 'habit_reminder' || n.type === 'habit_due' || n.type === 'habit_streak') {
+          var hh = n.related_entity_id ? (db.habits || []).find(function (x) { return x.id === n.related_entity_id; }) : null;
+          if (!hh || !hh.active || DB.habitEffectiveStatus(hh) === 'ARCHIVED') expire(n, 'hábito arquivado');
         }
       });
       write(db);
@@ -9960,7 +10552,7 @@ window.Juntos = window.Juntos || {};
        duplica: compra+parcela+fatura+pagamento são eventos distintos;
        pagamento/transferência/acerto nunca viram receita/despesa.
        Datas são strings YYYY-MM-DD (sem conversão de timezone). */
-    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda'],
+    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda', 'habit'],
     CALENDAR_STATES: ['realizado', 'previsto', 'planejado', 'pendente', 'vencido', 'pago', 'concluído', 'cancelado', 'pulado', 'info'],
     calValidateFilters: function (userId, opt) {
       opt = opt || {};
@@ -10266,6 +10858,12 @@ window.Juntos = window.Juntos || {};
       var parts = String(eventId || '').split(':');
       if (parts.length < 2) throw new Error('Evento não encontrado.');
       var kind = parts[0], ref = parts.slice(1).join(':');
+      if (kind === 'hab') {
+        var habRef = ref.split('@');
+        var hh0 = null;
+        try { hh0 = DB.getHabit(userId, habRef[0]); } catch (eh0) { throw new Error('Evento não encontrado.'); }
+        return { event: { id: eventId, event_type: 'habit', source_type: 'habit', title: hh0.icon + ' ' + hh0.name, description: 'Hábito pessoal • rotina, sem valor financeiro.', event_date: habRef[1] || '', amount: 0, status: 'info', route: '#/habits/' + hh0.id }, actions: [{ label: 'Ver hábito', route: '#/habits/' + hh0.id }], habit: { id: hh0.id, date: habRef[1] } };
+      }
       var evs = DB.getCalendarEvents(userId, { from: '0000-01-01', to: '9999-12-31' });
       var ev = evs.find(function (e) { return e.id === eventId; });
       if (!ev) throw new Error('Evento não encontrado.');
@@ -11040,7 +11638,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;

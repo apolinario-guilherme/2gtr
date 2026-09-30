@@ -225,6 +225,8 @@ label{font-size:13px;color:var(--text-2);font-weight:600}
 .ht{height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden}
 .ht>div{height:100%;background:var(--primary);border-radius:6px}
 .hv{color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.seg-scroll{overflow-x:auto;margin:0 -4px;padding:0 4px}
+.seg-scroll .seg{min-width:480px}
 /* ---- agenda (só apresentação; valores vindos do AgendaService) ---- */
 .ag-week{display:grid;grid-template-columns:44px repeat(7,minmax(72px,1fr));gap:4px;align-items:start;min-width:600px}
 .ag-week + .ag-week{margin-top:4px}

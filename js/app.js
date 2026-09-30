@@ -48,7 +48,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
+    var fn = { login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
     try { fn(v, me); } catch (e) {
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
       document.getElementById('retry').onclick = function () { render(route); };
@@ -482,6 +482,13 @@
         return '<p><b>' + esc(dueLabel(o.date)) + '</b> ' + esc(agWhen(o)) + ' — <b>' + esc(o.title) + '</b> <span class="muted">• ' + (o.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Só eu') + '</span></p>';
       }).join('');
       return s + '<p><a href="#/agenda">Ver agenda ›</a></p></div>';
+    });
+    // 8b3. hábitos de hoje (mini-card pessoal; sem números financeiros)
+    html += blk('Seus hábitos', function () {
+      var st;
+      try { st = J.DB.habitTodayStatus(me.id); } catch (e) { return ''; }
+      if (!st.total && !J.DB.getHabits(me.id, {}).length) return '';
+      return '<div class="card"><b>🌱 Seus hábitos</b><p class="muted">Hoje</p><h2>' + st.done + ' de ' + st.total + ' concluídos</h2><p><a href="#/habits">Ver hábitos ›</a></p></div>';
     });
     // 8c. insights + notificações (resumos, sem segunda camada de prioridade)
     html += blk('Insights', function () {
@@ -1808,8 +1815,269 @@
       };
     };
   }
+  /* ============ HÁBITOS (rotina pessoal; só apresentação sobre HabitService) ============
+     Pessoal e privado: tudo filtrado por user_id no backend. Sem finanças. */
+  var hb = { tab: 'today', status: 'active', cat: '', freq: '', q: '', evo: '30', evoFrom: '', evoTo: '' };
+  function hbUnitName(h) {
+    var m = { BOOLEAN: '', COUNT: h.unit_label || 'vezes', AMOUNT: h.unit_label || 'unidades', DURATION: h.unit_label || 'minutos' };
+    return m[h.target_unit] || '';
+  }
+  function hbTargetLabel(h) {
+    if (h.target_unit === 'BOOLEAN') return '1 vez';
+    return h.target_count + ' ' + hbUnitName(h);
+  }
+  function hbFreqLabel(h) {
+    var m = { daily: 'Todo dia', weekly: 'Toda semana', monthly: 'Todo mês', yearly: 'Todo ano', specific_days: 'Dias escolhidos' };
+    return m[h.frequency_type] || h.frequency_type;
+  }
+  function hbStatusPill(h) {
+    var st = J.DB.habitEffectiveStatus(h);
+    var m = { ACTIVE: ['', 'Ativo'], PAUSED: ['warn', '⏸ Pausado'], ARCHIVED: ['', '📦 Arquivado'], COMPLETED: ['ok', '✓ Concluído'] };
+    var x = m[st] || ['', st];
+    return '<span class="pill ' + x[0] + '">' + esc(x[1]) + '</span>';
+  }
+  function pHabits(v, me) {
+    var st = J.DB.habitTodayStatus(me.id);
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Meus hábitos</h1><button class="btn" id="hb-new" style="max-width:190px">+ Novo hábito</button></div>' +
+      '<p class="muted">Construa sua rotina, acompanhe sua consistência e veja sua evolução.</p>' +
+      '<div class="seg-scroll"><div class="seg" role="tablist" aria-label="Visão de hábitos">' +
+      [['today', 'Hoje'], ['week', 'Semana'], ['evo', 'Evolução'], ['all', 'Todos']].map(function (x) {
+        return '<button data-hbt="' + x[0] + '" class="' + (hb.tab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>';
+      }).join('') + '</div></div>';
+    html += '<div class="card"><b>Hoje</b><p><b>' + st.done + '</b> de <b>' + st.total + '</b> concluídos' + (st.total ? ' • consistência do período abaixo' : '') + '</p><p><a href="#/habits">Ver detalhes ›</a></p></div>';
+    if (hb.tab === 'today') {
+      html += st.items.length ? '<div class="card"><b>Para hoje</b>' + st.items.map(function (i) {
+        return '<div class="row between" style="align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span><b>' + esc(i.name) + '</b><br><span class="muted">' + (i.done ? '✓ Concluído' : (i.partial ? '◐ Parcial' : '○ Pendente')) + (i.target ? ' • meta: ' + esc(i.target) : '') + (i.value != null && !i.done ? ' • atual: ' + esc(String(i.value)) : '') + '</span></span>' +
+          (i.done
+            ? '<button class="btn ghost sm" data-hbundo="' + i.id + '" style="max-width:130px;flex:none">Desfazer</button>'
+            : '<button class="btn sm" data-hbgo="' + i.id + '" style="max-width:130px;flex:none">Concluir</button>') + '</div>';
+      }).join('') + '</div>' : '<div class="card empty"><div class="ico">🌱</div><h2>Nenhum hábito programado para hoje.</h2></div>';
+    } else if (hb.tab === 'week') {
+      html += hbWeekHtml(me);
+    } else if (hb.tab === 'evo') {
+      html += hbEvoHtml(me);
+    } else {
+      html += '<div class="card"><div class="row"><select id="hb-fstatus" aria-label="Estado"><option value="active"' + (hb.status === 'active' ? ' selected' : '') + '>Ativos</option><option value="">Todos</option><option value="PAUSED"' + (hb.status === 'PAUSED' ? ' selected' : '') + '>Pausados</option><option value="ARCHIVED"' + (hb.status === 'ARCHIVED' ? ' selected' : '') + '>Arquivados</option><option value="COMPLETED"' + (hb.status === 'COMPLETED' ? ' selected' : '') + '>Concluídos</option></select>' +
+        '<select id="hb-fcat" aria-label="Categoria"><option value="">Todas categorias</option>' + J.DB.HABIT_CATEGORIES().map(function (c) { return '<option value="' + esc(c.name) + '"' + (hb.cat === c.name ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.name) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="row"><select id="hb-ffreq" aria-label="Frequência"><option value="">Todas frequências</option>' + J.DB.HABIT_FREQUENCIES().map(function (f) { return '<option value="' + f.key + '"' + (hb.freq === f.key ? ' selected' : '') + '>' + f.label + '</option>'; }).join('') + '</select>' +
+        '<input id="hb-q" placeholder="🔍 Buscar hábitos" value="' + esc(hb.q) + '" aria-label="Buscar hábitos"></div></div>';
+      var list = J.DB.getHabits(me.id, { status: hb.status || undefined, category: hb.cat || undefined, frequency: hb.freq || undefined, search: hb.q || undefined });
+      if (!list.length) html += '<div class="card empty"><div class="ico">🌱</div><h2>Ainda não existem hábitos</h2><p class="muted">Crie um hábito para começar a acompanhar sua rotina.</p><button class="btn" id="hb-new2" style="max-width:220px;margin:0 auto">+ Novo hábito</button></div>';
+      else html += list.map(function (h) { return hbCard(me, h); }).join('');
+    }
+    v.innerHTML = html;
+    document.getElementById('hb-new').onclick = function () { openHabitModal(me, null); };
+    var nw2 = document.getElementById('hb-new2'); if (nw2) nw2.onclick = function () { openHabitModal(me, null); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hbt]'), function (b) { b.onclick = function () { hb.tab = b.dataset.hbt; render('habits'); }; });
+    var fs = document.getElementById('hb-fstatus'); if (fs) fs.onchange = function (e) { hb.status = e.target.value; render('habits'); };
+    var fc = document.getElementById('hb-fcat'); if (fc) fc.onchange = function (e) { hb.cat = e.target.value; render('habits'); };
+    var ff = document.getElementById('hb-ffreq'); if (ff) ff.onchange = function (e) { hb.freq = e.target.value; render('habits'); };
+    var fq = document.getElementById('hb-q'); if (fq) fq.onchange = function (e) { hb.q = e.target.value; render('habits'); };
+    var er = document.getElementById('hb-evorange'); if (er) er.onchange = function (e) { hb.evo = e.target.value; render('habits'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hbgo]'), function (b) { b.onclick = function () { openHabitRecord(me, b.dataset.hbgo, null); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hbundo]'), function (b) {
+      b.onclick = function () {
+        try {
+          var c = J.DB.getHabitHistory(me.id, b.dataset.hbundo, { limit: 60 }).filter(function (x) { return x.date === todayISO(); })[0];
+          if (!c) { toast('Nada para desfazer.'); return; }
+          J.DB.removeCompletion(me.id, c.id); toast('Registro desfeito.'); render('habits');
+        } catch (e) { toast('Não foi possível.'); }
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hbopen]'), function (b) { b.onclick = function () { location.hash = '#/habits/' + b.dataset.hbopen; }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hbrec]'), function (b) { b.onclick = function () { openHabitRecord(me, b.dataset.hbrec, b.dataset.hbdate || null); }; });
+  }
+  function hbCard(me, h) {
+    var c, prog = null;
+    try { c = J.DB.calculateHabitConsistency(me.id, h.id); prog = J.DB.calculateHabitProgress(me.id, h.id, todayISO()); } catch (e) { c = { pct: null, completed: 0, expected: 0, current_streak: 0, best_streak: 0 }; }
+    return '<div class="card"><div class="row between"><b>' + esc(h.icon + ' ' + h.name) + '</b>' + hbStatusPill(h) + '</div>' +
+      '<p class="muted">Meta: ' + esc(hbTargetLabel(h)) + ' • ' + esc(hbFreqLabel(h)) + '</p>' +
+      (prog && prog.expected ? '<p>' + (prog.done ? '✓ Concluído hoje' : (prog.partial ? '◐ Parcial hoje (' + esc(String(prog.value)) + ')' : '○ Hoje pendente')) + '</p>' : '') +
+      '<p class="muted">🔥 ' + c.current_streak + ' dias • 🏆 melhor: ' + c.best_streak + ' • consistência: ' + (c.pct == null ? '—' : String(c.pct).replace('.', ',') + '%') + '</p>' +
+      '<div class="bar"><div style="width:' + Math.min(100, c.pct || 0) + '%"></div></div>' +
+      '<div class="row"><button class="btn ghost sm" data-hbopen="' + h.id + '">Detalhes</button>' + (prog && prog.expected && !prog.done ? '<button class="btn sm" data-hbgo="' + h.id + '">Registrar</button>' : '') + '</div></div>';
+  }
+  function hbWeekHtml(me) {
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(J.DB.agendaAddDays(todayISO(), i - 3));
+    var habits = J.DB.getHabits(me.id, { active: true });
+    var s = '<div class="card"><b>Semana</b><div style="overflow-x:auto"><div class="ag-week"><div class="ag-wh"></div>' + days.map(function (d, ix) {
+      return '<div class="ag-wh' + (d === todayISO() ? ' today' : '') + '">' + AG_WD[(new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay() + 6) % 7] + '<br><b>' + d.slice(8, 10) + '</b></div>';
+    }).join('') + '</div>';
+    habits.forEach(function (h) {
+      s += '<div class="ag-week"><div class="ag-wh" style="text-align:left">' + esc(h.icon + ' ' + h.name.slice(0, 10)) + '</div>' + days.map(function (d) {
+        if (!J.DB.habitIsOccurrenceExpected(h, d)) return '<div class="ag-cell"><span class="muted">·</span></div>';
+        var st;
+        try { st = J.DB.habitOccurrenceStatus(me.id, h.id, d); } catch (e) { st = { expected: true, done: false }; }
+        return '<div class="ag-cell">' + (st.done ? '<span aria-label="Concluído">✓</span>' : '<button class="ag-block" data-hbrec="' + h.id + '" data-hbdate="' + d + '" aria-label="Registrar ' + esc(h.name + ' em ' + d) + '">○</button>') + '</div>';
+      }).join('') + '</div>';
+    });
+    return s + '</div></div>';
+  }
+  function hbEvoHtml(me) {
+    var habits = J.DB.getHabits(me.id, { active: true });
+    var to = todayISO(), from = hb.evo === 'custom' ? (hb.evoFrom || J.DB.agendaAddDays(to, -30)) : J.DB.agendaAddDays(to, -(parseInt(hb.evo, 10) || 30));
+    var s = '<div class="card"><div class="row"><select id="hb-evorange" aria-label="Período"><option value="7"' + (hb.evo === '7' ? ' selected' : '') + '>Últimos 7 dias</option><option value="30"' + (hb.evo === '30' ? ' selected' : '') + '>30 dias</option><option value="90"' + (hb.evo === '90' ? ' selected' : '') + '>90 dias</option><option value="180"' + (hb.evo === '180' ? ' selected' : '') + '>6 meses</option><option value="365"' + (hb.evo === '365' ? ' selected' : '') + '>1 ano</option></select></div>';
+    if (!habits.length) return s + '<p class="muted">Sem hábitos ativos.</p></div>';
+    s += habits.map(function (h) {
+      var t;
+      try { t = J.DB.getHabitTimeline(me.id, h.id, { from: from, to: to }); } catch (e) { return ''; }
+      var max = Math.max.apply(null, t.buckets.map(function (b) { return b.completed; }).concat([1]));
+      return '<p><b>' + esc(h.icon + ' ' + h.name) + '</b> <span class="muted">• ' + t.buckets.reduce(function (a, b) { return a + b.completed; }, 0) + ' conclusões</span></p>' +
+        '<div class="vbars" role="img" aria-label="Evolução de ' + esc(h.name) + '">' + t.buckets.map(function (b) {
+          return '<div class="vbar"><span>' + b.completed + '</span><div style="height:' + Math.max(4, Math.round(b.completed / max * 90)) + 'px;background:var(--primary)"></div><small>' + esc(String(b.bucket).slice(5)) + '</small></div>';
+        }).join('') + '</div>';
+    }).join('') + '</div>';
+    return s;
+  }
+  function pHabitDetail(v, me, habitId) {
+    var h;
+    try { h = J.DB.getHabit(me.id, habitId); } catch (e) { toast('Hábito não encontrado.'); location.hash = '#/habits'; return; }
+    var c = J.DB.calculateHabitConsistency(me.id, h.id);
+    var ym = todayISO().slice(0, 7);
+    var cal = J.DB.getHabitCalendar(me.id, h.id, +ym.slice(0, 4), +ym.slice(5, 7));
+    var hist = J.DB.getHabitHistory(me.id, h.id, { limit: 30 });
+    var html = '<p class="muted"><a href="#/habits">‹ Hábitos</a></p>';
+    html += '<div class="card"><div class="row between"><h1 style="margin:0">' + esc(h.icon + ' ' + h.name) + '</h1>' + hbStatusPill(h) + '</div>' +
+      (h.description ? '<p class="muted">' + esc(h.description) + '</p>' : '') +
+      '<p class="muted">Meta: <b>' + esc(hbTargetLabel(h)) + '</b> • ' + esc(hbFreqLabel(h)) + (h.preferred_time ? ' • ' + esc(h.preferred_time) : '') + '</p>' +
+      '<p>🔥 <b>' + c.current_streak + ' dias</b> • 🏆 Melhor: <b>' + c.best_streak + ' dias</b><br>Consistência: <b>' + (c.pct == null ? '—' : String(c.pct).replace('.', ',') + '%') + '</b> <span class="muted">(' + c.completed + ' de ' + c.expected + ')</span></p>' +
+      '<div class="bar"><div style="width:' + Math.min(100, c.pct || 0) + '%"></div></div>' +
+      '<div class="row"><button class="btn ghost sm" id="hd-edit">Editar</button>' +
+      (J.DB.habitEffectiveStatus(h) === 'PAUSED' ? '<button class="btn ghost sm" id="hd-resume">Retomar</button>' : '<button class="btn ghost sm" id="hd-pause">Pausar</button>') +
+      (J.DB.habitEffectiveStatus(h) === 'ARCHIVED' ? '' : '<button class="btn ghost sm" id="hd-arch" style="color:var(--primary-d)">Arquivar</button>') + '</div></div>';
+    html += '<div class="card"><b>📅 ' + esc(monthLabel(ym)) + '</b><div class="cal-grid" role="grid" aria-label="Consistência do mês">' +
+      ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(function (w) { return '<div class="cal-dow">' + w + '</div>'; }).join('') +
+      (function () {
+        var y = +ym.slice(0, 4), m = +ym.slice(5, 7), cells = '';
+        for (var i = 0; i < new Date(y, m - 1, 1).getDay(); i++) cells += '<div class="cal-empty"></div>';
+        cal.days.forEach(function (dd, ix) {
+          var mark = !dd.expected ? '<span class="muted">·</span>' : dd.done ? '✓' : (dd.partial ? '◐' : '○');
+          cells += '<div class="cal-day"><b>' + (ix + 1) + '</b><br><span aria-label="' + (dd.expected ? (dd.done ? 'Concluído' : (dd.partial ? 'Parcial' : 'Não concluído')) : 'Não previsto') + '">' + mark + '</span></div>';
+        });
+        return cells;
+      })() + '</div><p class="muted">✓ concluído • ◐ parcial • ○ pendente • · não previsto</p></div>';
+    html += '<div class="card"><b>Histórico</b>' + (hist.length ? hist.map(function (r) {
+      return '<div class="row between"><span><b>' + esc(dueLabel(r.date)) + '</b> <span class="muted">' + (r.done ? '✓' : '◐') + (r.value != null && h.target_unit !== 'BOOLEAN' ? ' ' + esc(String(r.value)) : '') + (r.note ? ' • ' + esc(r.note) : '') + '</span></span><button class="btn ghost sm" data-hed="' + r.id + '" style="max-width:90px">Editar</button></div>';
+    }).join('') : '<p class="muted">Sem registros ainda.</p>') + '</div>';
+    v.innerHTML = html;
+    document.getElementById('hd-edit').onclick = function () { openHabitModal(me, h.id); };
+    var ps = document.getElementById('hd-pause'); if (ps) ps.onclick = function () { openHabitPause(me, h.id); };
+    var rs = document.getElementById('hd-resume'); if (rs) rs.onclick = function () { try { J.DB.resumeHabit(me.id, h.id); toast('Hábito retomado!'); render('habits/' + h.id); } catch (e) { toast('Não foi possível.'); } };
+    var ar = document.getElementById('hd-arch'); if (ar) ar.onclick = function () {
+      if (!confirm('Arquivar este hábito? O histórico será mantido.')) return;
+      try { J.DB.archiveHabit(me.id, h.id); toast('Hábito arquivado.'); location.hash = '#/habits'; } catch (e) { toast('Não foi possível.'); }
+    };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-hed]'), function (b) { b.onclick = function () { openHabitEditCompletion(me, h.id, b.dataset.hed); }; });
+  }
+  function openHabitModal(me, habitId) {
+    var h = null;
+    if (habitId) { try { h = J.DB.getHabit(me.id, habitId); } catch (e) { toast('Hábito não encontrado.'); return; } }
+    modalShell('<h2>' + (h ? 'Editar hábito' : 'Novo hábito') + '</h2><div id="me"></div>' +
+      '<div id="hb-sug"><label>Exemplos <span class="muted">(toque para preencher)</span></label><div class="row" style="flex-wrap:wrap">' + J.DB.HABIT_SUGGESTIONS().map(function (s, ix) { return '<button class="btn ghost sm" data-hsug="' + ix + '" style="max-width:none;flex:1 1 30%">' + s.icon + ' ' + esc(s.name) + '</button>'; }).join('') + '</div></div>' +
+      '<label>Nome do hábito *</label><input id="f-hn" maxlength="80" value="' + esc(h ? h.name : '') + '">' +
+      '<label>Descrição</label><input id="f-hd" maxlength="300" value="' + esc(h ? (h.description || '') : '') + '" placeholder="Opcional">' +
+      '<div class="row"><div><label>Categoria</label><select id="f-hc">' + J.DB.HABIT_CATEGORIES().map(function (c) { return '<option value="' + esc(c.name) + '"' + ((h ? h.category : 'Outros') === c.name ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.name) + '</option>'; }).join('') + '</select></div>' +
+      '<div><label>Ícone</label><input id="f-hi" maxlength="4" value="' + esc(h ? h.icon : '') + '" placeholder="📝"></div></div>' +
+      '<label>Frequência</label><select id="f-hf">' + J.DB.HABIT_FREQUENCIES().map(function (f) { return '<option value="' + f.key + '"' + ((h ? h.frequency_type : 'daily') === f.key ? ' selected' : '') + '>' + f.label + '</option>'; }).join('') + '</select>' +
+      '<div id="hb-wd" style="display:none"><label>Dias da semana</label><div class="row" style="flex-wrap:wrap">' + [['1', 'SEG'], ['2', 'TER'], ['3', 'QUA'], ['4', 'QUI'], ['5', 'SEX'], ['6', 'SÁB'], ['0', 'DOM']].map(function (d) { return '<label class="check" style="flex:1 1 22%"><input type="checkbox" data-hwd="' + d[0] + '"> ' + d[1] + '</label>'; }).join('') + '</div></div>' +
+      '<div class="row"><div><label>Meta</label><input id="f-hm" type="number" min="1" value="' + esc(h ? h.target_count : 1) + '"></div>' +
+      '<div><label>Unidade</label><select id="f-hu">' + J.DB.HABIT_UNITS().map(function (u) { return '<option value="' + u.key + '"' + ((h ? h.target_unit : 'BOOLEAN') === u.key ? ' selected' : '') + '>' + u.label + '</option>'; }).join('') + '</select></div></div>' +
+      '<label>Medida (ex: páginas, litros, minutos)</label><input id="f-hul" maxlength="20" value="' + esc(h ? (h.unit_label || '') : '') + '" placeholder="Opcional">' +
+      '<div class="row"><div><label>Data de início</label><input id="f-hs" type="date" value="' + esc(h ? h.start_date : todayISO()) + '"></div>' +
+      '<div><label>Horário preferido</label><input id="f-hp" type="time" value="' + esc(h && h.preferred_time ? h.preferred_time : '') + '"></div></div>' +
+      '<label class="check"><input type="checkbox" id="f-hr"' + ((!h || h.reminder_enabled) ? ' checked' : '') + '> 🔔 Lembrete <small>(usa o sistema de notificações)</small></label>' +
+      '<div class="row"><div><label>Hora do lembrete</label><input id="f-hrt" type="time" value="' + esc(h && h.reminder_time ? h.reminder_time : '09:00') + '"></div></div>' +
+      '<button class="btn" id="sv">' + (h ? 'Salvar' : 'Criar hábito') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    function paintWd() { document.getElementById('hb-wd').style.display = document.getElementById('f-hf').value === 'specific_days' ? '' : 'none'; }
+    document.getElementById('f-hf').onchange = paintWd; paintWd();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-hsug]'), function (b) {
+      b.onclick = function () {
+        var s = J.DB.HABIT_SUGGESTIONS()[+b.dataset.hsug];
+        document.getElementById('f-hn').value = s.name;
+        document.getElementById('f-hc').value = s.category;
+        document.getElementById('f-hi').value = s.icon;
+        document.getElementById('f-hf').value = s.frequency_type; paintWd();
+        document.getElementById('f-hm').value = s.target_count;
+        document.getElementById('f-hu').value = s.target_unit;
+        document.getElementById('f-hul').value = s.unit_label || '';
+        toast('Exemplo aplicado. Ajuste e salve.');
+      };
+    });
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var wds = [];
+        if (document.getElementById('f-hf').value === 'specific_days') {
+          Array.prototype.forEach.call(document.querySelectorAll('[data-hwd]'), function (c) { if (c.checked) wds.push(+c.dataset.hwd); });
+        }
+        var data = { name: document.getElementById('f-hn').value, description: document.getElementById('f-hd').value, category: document.getElementById('f-hc').value, icon: document.getElementById('f-hi').value || undefined, frequency_type: document.getElementById('f-hf').value, weekdays: wds, target_count: document.getElementById('f-hm').value, target_unit: document.getElementById('f-hu').value, unit_label: document.getElementById('f-hul').value, start_date: document.getElementById('f-hs').value, preferred_time: document.getElementById('f-hp').value || null, reminder_enabled: document.getElementById('f-hr').checked, reminder_time: document.getElementById('f-hrt').value || null };
+        if (h) { J.DB.updateHabit(me.id, h.id, data); toast('Hábito atualizado!'); }
+        else { J.DB.createHabit(me.id, data); toast('Hábito criado! 🌱'); }
+        closeModal(); render(h ? 'habits/' + h.id : 'habits');
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openHabitRecord(me, habitId, date) {
+    var h;
+    try { h = J.DB.getHabit(me.id, habitId); } catch (e) { toast('Hábito não encontrado.'); return; }
+    var d = date || todayISO();
+    var unitHints = { BOOLEAN: '', COUNT: h.unit_label || 'vezes', AMOUNT: h.unit_label || 'unidades', DURATION: h.unit_label || 'minutos' };
+    var labels = { BOOLEAN: ['Concluído hoje?', ''], COUNT: ['Quanto?', unitHints.COUNT], AMOUNT: ['Quantidade', unitHints.AMOUNT], DURATION: ['Quanto tempo?', unitHints.DURATION] };
+    var L = labels[h.target_unit] || labels.BOOLEAN;
+    modalShell('<h2>' + esc(h.icon + ' ' + h.name) + '</h2><div id="me"></div><p class="muted">' + esc(dueLabel(d)) + ' • meta: ' + esc(hbTargetLabel(h)) + '</p>' +
+      (h.target_unit === 'BOOLEAN' ? '<p><b>' + L[0] + '</b></p>' : '<label>' + L[0] + (L[1] ? ' (' + esc(L[1]) + ')' : '') + ' *</label><input id="f-hv" inputmode="decimal" placeholder="Ex: 20">') +
+      '<button class="btn" id="sv">' + (h.target_unit === 'BOOLEAN' ? 'Concluir' : 'Registrar') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var v = h.target_unit === 'BOOLEAN' ? 1 : document.getElementById('f-hv').value;
+        J.DB.recordCompletion(me.id, h.id, { completion_date: d, value: v });
+        closeModal(); toast('Registrado! 🌱'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openHabitEditCompletion(me, habitId, completionId) {
+    var h;
+    try { h = J.DB.getHabit(me.id, habitId); } catch (e) { toast('Hábito não encontrado.'); return; }
+    var all = J.DB.getHabitHistory(me.id, habitId, { limit: 500 });
+    var c = all.filter(function (x) { return x.id === completionId; })[0];
+    if (!c) { toast('Registro não encontrado.'); return; }
+    modalShell('<h2>Corrigir registro</h2><div id="me"></div><p class="muted">' + esc(dueLabel(c.date)) + ' • ' + esc(h.name) + '</p>' +
+      (h.target_unit === 'BOOLEAN' ? '<p class="muted">Registro de conclusão (sim/não).</p>' : '<label>Valor *</label><input id="f-hv" inputmode="decimal" value="' + esc(String(c.value != null ? c.value : '')) + '">') +
+      '<label>Observação</label><input id="f-hn2" maxlength="200" value="' + esc(c.note || '') + '">' +
+      '<div class="row"><button class="btn" id="sv">Salvar</button><button class="btn ghost" id="rm" style="color:var(--primary-d)">Desfazer</button></div><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        J.DB.updateCompletion(me.id, completionId, { value: h.target_unit === 'BOOLEAN' ? undefined : document.getElementById('f-hv').value, note: document.getElementById('f-hn2').value });
+        closeModal(); toast('Registro corrigido.'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+    document.getElementById('rm').onclick = function () {
+      if (!confirm('Desfazer este registro?')) return;
+      try { J.DB.removeCompletion(me.id, completionId); closeModal(); toast('Registro desfeito.'); render(here()); }
+      catch (e2) { document.getElementById('me').innerHTML = err(e2); }
+    };
+  }
+  function openHabitPause(me, habitId) {
+    modalShell('<h2>Pausar hábito</h2><div id="me"></div><p class="muted">Durante a pausa não há ocorrências, falhas nem lembretes. A sequência é preservada.</p>' +
+      '<label>Pausar até (opcional)</label><input id="f-hu2" type="date" value="">' +
+      '<div class="row"><button class="btn" id="sv">Pausar</button><button class="btn ghost" id="cl">Cancelar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        J.DB.pauseHabit(me.id, habitId, document.getElementById('f-hu2').value || null);
+        closeModal(); toast('Hábito pausado.'); render('habits/' + habitId);
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
   /* ============ ETAPA 6: CALENDÁRIO ============ */
-  var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false;
+  var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
     if (calType) o.types = [calType];
@@ -1832,7 +2100,7 @@
     return '<span class="pill ' + m[0] + '">' + esc(m[1]) + '</span>';
   }
   function calTypeIcon(t) {
-    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅' }[t] || '•';
+    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅', habit: '🌱' }[t] || '•';
   }
   function occIcon(o) {
     var t = o.rec ? o.rec.type : 'expense';
@@ -1853,7 +2121,9 @@
     var r = calRange(), F = calFilters();
     var evs, sum;
     try {
-      evs = J.DB.getCalendarEvents(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
+      evs = calHabits
+        ? J.DB.getUnifiedCalendar(me.id, Object.assign({}, F, { from: r.from, to: r.to }))
+        : J.DB.getCalendarEvents(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
       sum = J.DB.calculatePeriodSummary(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
     } catch (e) { v.innerHTML = '<div class="card"><h1>Calendário financeiro</h1></div>' + err(e); return; }
     var partnerId = J.DB.memberIds(me.id).filter(function (x) { return x !== me.id; })[0] || null;
@@ -1875,7 +2145,7 @@
       '<select id="cf-catsub" aria-label="Subcategoria"><option value="">Todas subcategorias</option>' + subCatOptions(me, calCat, calSub) + '</select>' +
       '<select id="cf-person" aria-label="Pessoa"><option value="">Casal</option><option value="me"' + (calPerson === 'me' ? ' selected' : '') + '>Eu</option><option value="partner"' + (calPerson === 'partner' ? ' selected' : '') + '>Parceiro</option></select></div>' +
       '<div class="row"><input id="cf-q" placeholder="Buscar (ex: Netflix)" value="' + esc(calSearch) + '" aria-label="Buscar"><select id="cf-plan" aria-label="Plano"><option value="">Todos os planos</option>' + plans.map(function (a) { return '<option value="' + a.id + '"' + (calPlan === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="row"><button class="btn ghost" id="cf-cash">' + (calCash ? 'Ocultar fluxo de caixa' : 'Ver fluxo de caixa') + '</button><button class="btn ghost" id="cf-csv">Exportar CSV</button><button class="btn ghost" id="cf-clear">Limpar</button></div></div>';
+      '<div class="row"><button class="btn ghost" id="cf-cash">' + (calCash ? 'Ocultar fluxo de caixa' : 'Ver fluxo de caixa') + '</button><button class="btn ghost" id="cf-hab">' + (calHabits ? 'Ocultar hábitos' : 'Incluir hábitos') + '</button><button class="btn ghost" id="cf-csv">Exportar CSV</button><button class="btn ghost" id="cf-clear">Limpar</button></div></div>';
     html += '<div class="card"><b>Resumo do período</b><p class="muted">Realizado: <b class="pos">+' + BRL(sum.incomeRealized) + '</b> <b class="neg">−' + BRL(sum.expenseRealized) + '</b> (= ' + BRL(sum.resultRealized) + ') • Compromissos: <b>' + BRL(sum.commitments) + '</b> • Planejado: <b class="pos">+' + BRL(sum.plannedIn) + '</b> <b class="neg">−' + BRL(sum.plannedOut) + '</b><br>Saldo em contas: <b>' + BRL(sum.opening) + '</b>' + (sum.projected != null ? ' • Saldo projetado (mês): <b>' + BRL(sum.projected) + '</b> <span class="muted">(projeção, não saldo)</span>' : '') + '</p></div><div id="e"></div>';
     if (calCash) {
       try {
@@ -1923,7 +2193,8 @@
     document.getElementById('cf-plan').onchange = function (e) { calPlan = e.target.value; render('calendar'); };
     document.getElementById('cf-q').onchange = function (e) { calSearch = e.target.value; render('calendar'); };
     document.getElementById('cf-cash').onclick = function () { calCash = !calCash; render('calendar'); };
-    document.getElementById('cf-clear').onclick = function () { calType = calState = calAccount = calCard = calCat = calSub = calPerson = calSearch = calPlan = ''; render('calendar'); };
+    document.getElementById('cf-hab').onclick = function () { calHabits = !calHabits; render('calendar'); };
+    document.getElementById('cf-clear').onclick = function () { calType = calState = calAccount = calCard = calCat = calSub = calPerson = calSearch = calPlan = ''; calHabits = false; render('calendar'); };
     document.getElementById('cf-csv').onclick = function () {
       try {
         var f = J.DB.calendarExportCsv(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
@@ -3246,7 +3517,7 @@
     };
   }
   function pMore(v) {
-    v.innerHTML = '<div class="menu"><a href="#/accounts">🏦 Contas <span>›</span></a><a href="#/cards">💳 Cartões <span>›</span></a><a href="#/installments">🗓️ Compras parceladas <span>›</span></a><a href="#/invoices">🧾 Faturas <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settlements">⚖️ Acertos <span>›</span></a><a href="#/recurring">🔁 Contas recorrentes <span>›</span></a><a href="#/agenda">📅 Agenda <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/reports">📈 Relatórios <span>›</span></a><a href="#/planning">🗺️ Planejamento <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>';
+    v.innerHTML = '<div class="menu"><a href="#/accounts">🏦 Contas <span>›</span></a><a href="#/cards">💳 Cartões <span>›</span></a><a href="#/installments">🗓️ Compras parceladas <span>›</span></a><a href="#/invoices">🧾 Faturas <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settlements">⚖️ Acertos <span>›</span></a><a href="#/recurring">🔁 Contas recorrentes <span>›</span></a><a href="#/agenda">📅 Agenda <span>›</span></a><a href="#/habits">🌱 Hábitos <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/reports">📈 Relatórios <span>›</span></a><a href="#/planning">🗺️ Planejamento <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>';
   }
   /* ============ CONFIGURAÇÕES: hub + subseções ============
      Áreas principais = usar o dinheiro. Configurações = definir como o

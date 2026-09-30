@@ -16,3 +16,6 @@
 ## Agenda (compromissos; sem nova logica financeira)
 - Entidade propria + RLS, recorrencia com escopos, lembretes no NotificationEngine, calendario unificado, IA/WhatsApp, 6 visoes, dashboard por visao.
 - Testes (98/98 PASS): CRUD+RLS, validacao, recorrencia (expansao/scopes/cancelamento), filtros/busca/stats/ano, notificacoes (4 tipos+scan+idempotencia+deeplink), calendario, IA (intents+confirmacao+ambiguidade), WhatsApp, auditoria, regressao financeira, 6 visoes, form/detalhe, dashboard/calendario/FAB/Mais/assistente, OF off, diagnose. Telas desktop/mobile. Console limpo.
+## Habitos pessoais (rotina privada, sem logica financeira)
+- Fonte propria + RLS por dono, recorrencia/streaks/consistencia, pausa/arquivo, lembretes no NotificationEngine, calendario unificado com toggle, PersonalAssistantService neutro.
+- Testes (101/101 PASS): CRUD+privacidade, validacao, registros (parcial/duplicidade/correcao/desfazer), streaks, recorrencia, pausa/arquivo, calendario/evolucao/stats, notificacoes (3 tipos+scan+streak+deeplink), calendario unificado, PA service, regressao financeira, 6 telas + form + detalhe + dashboard + FAB + Mais + privacidade por URL, OF off, diagnose. Desktop/mobile. Console limpo.
