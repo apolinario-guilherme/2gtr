@@ -6,7 +6,16 @@
   var txShown = 30;
   var editingId = null;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function toast(m) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.getElementById('toasts').appendChild(t); setTimeout(function () { t.remove(); }, 3200); }
+  function toast(m, act) {
+    var t = document.createElement('div'); t.className = 'toast';
+    t.textContent = m; document.getElementById('toasts').appendChild(t);
+    if (act && act.label && act.fn) {
+      var b = document.createElement('button'); b.className = 'link'; b.style.color = '#fff'; b.textContent = act.label;
+      b.onclick = function () { try { act.fn(); } catch (e) {} t.remove(); };
+      t.appendChild(document.createTextNode(' ')); t.appendChild(b);
+    }
+    setTimeout(function () { t.remove(); }, act ? 6000 : 3200);
+  }
   function err(e) { return '<div class="alert">' + esc(e.message || 'Algo não saiu como esperado. Tente de novo.') + '</div>'; }
   function BRL(v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
   function dmy(iso) { var s = String(iso || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : s; }
@@ -48,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -916,7 +925,7 @@
     // Hoje (resumo rápido)
     s += blk('Hoje', function () {
       var nx = day.next ? '<br>Próximo: <b>' + esc((day.next.start || '') + (day.next.start ? ' • ' : '') + day.next.title) + '</b>' : '<br><span class="muted">Sem próximos compromissos.</span>';
-      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
+      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.tasks.total + '</b> tarefas • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
     });
     // Próximo compromisso (destaque)
     s += blk('Próximo', function () {
@@ -929,6 +938,8 @@
     pair += blk('Compromissos', function () { return ovAgendaCard(day); });
     pair += blk('Hábitos', function () { return ovHabitsCard(day); });
     s += '<div class="ov-grid">' + pair + '</div>';
+    s += blk('Tarefas', function () { return ovTasksCard(me, day); });
+    s += blk('Listas', function () { return ovListsCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
     pair2 += blk('Timeline', function () { return ovTimelineCard(day); });
@@ -960,6 +971,16 @@
       return '<div class="ov-row"><button class="chk' + (i.done ? ' done' : '') + '" data-ovhbq="' + i.id + '" aria-label="' + esc('Registrar ' + i.name) + '">' + (i.done ? '✓' : '○') + '</button><span>' + esc(lbl) + (i.value != null && !i.done ? ' • atual: ' + esc(String(i.value)) : '') + '</span></div>';
     }).join('');
     return s + '<p><a href="#/habits">Ver hábitos ›</a></p></div>';
+  }
+  function ovTasksCard(me, day) {
+    var t = day.tasks || { total: 0, done: 0, items: [] };
+    var s = '<div class="card"><div class="row between"><b>Tarefas</b><span class="muted">' + t.total + ' pendentes hoje</span></div>';
+    if (!t.total) return s + '<p class="muted">Nenhuma tarefa para hoje.</p><p><a href="#/tasks">Ver todas ›</a></p></div>';
+    s += t.items.slice(0, 4).map(function (i) {
+      var lbl = '○ ' + i.title + (i.due_time ? ' • ' + i.due_time : '') + (i.overdue ? ' • <b>Atrasada</b>' : '');
+      return '<div class="ov-row"><button class="chk" data-ovtk="' + esc(i.key) + '" aria-label="' + esc('Concluir ' + i.title) + '"></button><span>' + lbl + '</span></div>';
+    }).join('');
+    return s + '<p><a href="#/tasks">Ver todas ›</a></p></div>';
   }
   function ovFinDayCard(day) {
     var f = day.finance;
@@ -1099,6 +1120,9 @@
     });
     Array.prototype.forEach.call(v.querySelectorAll('[data-ovhbq]'), function (b) {
       b.onclick = function () { openHabitRecord(me, b.dataset.ovhbq, ovDate()); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ovtk]'), function (b) {
+      b.onclick = function () { tkToggle(me, b.dataset.ovtk); };
     });
     Array.prototype.forEach.call(v.querySelectorAll('[data-ovday]'), function (b) {
       b.onclick = function () { ov.date = b.dataset.ovday; ov.mode = 'day'; ovPersist(); render('dashboard'); };
@@ -2611,6 +2635,363 @@
       } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
     };
   }
+  /* ============ TAREFAS (só apresentação sobre TaskService) ============
+     Fazer pessoal/do casal; sem finanças, sem virar agenda/hábito. */
+  var tk = { tab: 'today', vis: 'all', q: '', status: 'pending' };
+  function tkWhoBadge(vis) {
+    return vis === 'COUPLE' ? '<span class="pill">❤️ Casal</span>' : '<span class="pill">👤 Pessoal</span>';
+  }
+  function tkDueLabel(o) {
+    var t = todayISO();
+    if (!o.date && !o.due_date) return 'Sem prazo';
+    var d = o.date || o.due_date;
+    if (d === t) return 'Hoje' + (o.due_time ? ' ' + o.due_time : '');
+    if (d === J.DB.agendaAddDays(t, 1)) return 'Amanhã' + (o.due_time ? ' ' + o.due_time : '');
+    return dueLabel(d) + (o.due_time ? ' ' + o.due_time : '');
+  }
+  function tkRow(me, o, opts) {
+    opts = opts || {};
+    var done = o.status === 'COMPLETED';
+    var who = J.DB.userName(me.id, o.assigned_to);
+    var meta = tkDueLabel(o) + ' • ' + (o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal') +
+      (o.visibility === 'COUPLE' && o.assigned_to ? ' • ' + esc(who) : '') +
+      (o.priority === 'HIGH' && !done ? ' • Prioridade alta' : '') +
+      (o.overdue && !done ? ' • <b>Atrasada</b>' : '') +
+      (o.is_recurring ? ' • 🔁' : '');
+    return '<div class="ov-row"><button class="chk' + (done ? ' done' : '') + '" data-tktoggle="' + esc(o.key || o.task_id || o.id) + '" aria-pressed="' + done + '" aria-label="' + esc((done ? 'Reabrir ' : 'Concluir ') + o.title) + '">' + (done ? '✓' : '') + '</button>' +
+      '<span style="flex:1;min-width:0"><b>' + esc(o.title) + '</b><br><span class="muted">' + meta + '</span></span>' +
+      (opts.detail === false ? '' : '<button class="btn ghost sm" data-tkopen="' + esc(o.task_id || o.id) + '" style="max-width:90px;flex:none">Abrir</button>') + '</div>';
+  }
+  function pTasks(v, me) {
+    var tabs = [['today', 'Hoje'], ['next', 'Próximas'], ['all', 'Todas'], ['done', 'Concluídas']];
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Tarefas</h1><button class="btn" id="tk-new" style="max-width:190px">+ Nova tarefa</button></div>' +
+      '<div class="seg-scroll"><div class="seg" role="tablist" aria-label="Período">' +
+      tabs.map(function (x) { return '<button data-tktab="' + x[0] + '" class="' + (tk.tab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="seg" role="group" aria-label="Visibilidade"><button data-tkvis="all" class="' + (tk.vis === 'all' ? 'on' : '') + '">Todas</button><button data-tkvis="PERSONAL" class="' + (tk.vis === 'PERSONAL' ? 'on' : '') + '">Pessoais</button><button data-tkvis="COUPLE" class="' + (tk.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<input id="tk-q" placeholder="🔍 Buscar tarefas" value="' + esc(tk.q) + '" aria-label="Buscar tarefas"></div>';
+    var list = [], emptyMsg = '';
+    try {
+      var vis = tk.vis === 'all' ? null : tk.vis;
+      if (tk.tab === 'today') { list = J.DB.taskOccurrences(me.id, todayISO(), todayISO(), { visibility: vis }).filter(function (o) { return o.status !== 'COMPLETED' && o.status !== 'CANCELLED'; }); emptyMsg = 'Nenhuma tarefa para hoje.'; }
+      else if (tk.tab === 'next') { list = J.DB.getUpcomingTasks(me.id, 30, 60).filter(function (o) { return !vis || o.visibility === vis; }); emptyMsg = 'Nada por vir.'; }
+      else if (tk.tab === 'done') { list = J.DB.taskOccurrences(me.id, J.DB.agendaAddDays(todayISO(), -60), todayISO(), { visibility: vis }).filter(function (o) { return o.status === 'COMPLETED'; }).slice(-30).reverse(); emptyMsg = 'Nada concluído por aqui ainda.'; }
+      else {
+        var rows = J.DB.getTasks(me.id, { visibility: vis || undefined, search: tk.q || undefined, limit: 100 });
+        list = rows.map(function (t) { return { key: t.id, task_id: t.id, date: t.due_date, title: t.title, due_time: t.due_time, status: t.status, priority: t.priority, visibility: t.visibility, assigned_to: t.assigned_to, owner_user_id: t.owner_user_id, is_recurring: t.recurrence_type !== 'NONE', overdue: J.DB.taskIsOverdue(t, todayISO()) }; });
+        emptyMsg = 'Nada pendente por aqui. Crie uma tarefa para organizar algo que você precisa fazer.';
+      }
+      if (tk.tab !== 'all' && tk.q) {
+        var q = tk.q.toLowerCase();
+        list = list.filter(function (o) { return (o.title || '').toLowerCase().indexOf(q) >= 0; });
+      }
+    } catch (e) { v.innerHTML = html + '<div class="card"><b>Tarefas</b><div class="alert">Não foi possível carregar suas tarefas.</div><button class="btn ghost" data-retry>Tentar novamente</button></div>'; bindTasks(v, me); return; }
+    if (!list.length) html += '<div class="card empty"><div class="ico">☑</div><h2>' + esc(emptyMsg) + '</h2><button class="btn" id="tk-new2" style="max-width:220px;margin:0 auto">+ Nova tarefa</button></div>';
+    else {
+      html += '<div class="card"><b>' + (tk.tab === 'today' ? 'Hoje' : tk.tab === 'next' ? 'Próximas' : tk.tab === 'done' ? 'Concluídas' : 'Todas as tarefas') + '</b>' +
+        list.slice(0, 60).map(function (o) { return tkRow(me, o); }).join('') + '</div>';
+    }
+    v.innerHTML = html;
+    bindTasks(v, me);
+  }
+  function bindTasks(v, me) {
+    var nw = document.getElementById('tk-new'); if (nw) nw.onclick = function () { openTaskModal(me, null); };
+    var nw2 = document.getElementById('tk-new2'); if (nw2) nw2.onclick = function () { openTaskModal(me, null); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-tktab]'), function (b) { b.onclick = function () { tk.tab = b.dataset.tktab; render('tasks'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-tkvis]'), function (b) { b.onclick = function () { tk.vis = b.dataset.tkvis; render('tasks'); }; });
+    var q = document.getElementById('tk-q'); if (q) q.onchange = function (e) { tk.q = e.target.value; render('tasks'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-tktoggle]'), function (b) {
+      b.onclick = function () { tkToggle(me, b.dataset.tktoggle); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-tkopen]'), function (b) { b.onclick = function () { openTaskDetail(me, b.dataset.tkopen); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-retry]'), function (b) { b.onclick = function () { render('tasks'); }; });
+  }
+  function tkParseKey(key) {
+    var s = String(key || '');
+    if (s.slice(0, 2) !== 't:') return { task_id: s, date: null };
+    var rest = s.slice(2).split('@');
+    return { task_id: rest[0], date: rest[1] || null };
+  }
+  function tkToggle(me, key) {
+    try {
+      var p = tkParseKey(key);
+      var occ = null;
+      try {
+        var all = J.DB.taskOccurrences(me.id, '0000-01-01', '9999-12-31', {});
+        occ = all.filter(function (o) { return o.key === key; })[0] || null;
+      } catch (e) {}
+      if (occ && occ.status === 'COMPLETED') {
+        J.DB.reopenTask(me.id, { task_id: p.task_id, date: p.date });
+        toast('Tarefa reaberta.');
+      } else {
+        J.DB.completeTask(me.id, { task_id: p.task_id, date: p.date });
+        toast('Tarefa concluída.', { label: 'Desfazer', fn: function () { try { J.DB.reopenTask(me.id, { task_id: p.task_id, date: p.date }); render(here()); } catch (e2) {} } });
+      }
+      render(here());
+    } catch (e) { toast('Não foi possível.'); }
+  }
+  function openTaskModal(me, taskId, preset) {
+    var t = null;
+    if (taskId) { try { t = J.DB.getTask(me.id, taskId); } catch (e) { toast('Tarefa não encontrada.'); return; } }
+    preset = preset || {};
+    var members = [];
+    try { members = J.DB.myCouple(me.id).users; } catch (e2) {}
+    var vis = t ? t.visibility : (preset.visibility || 'PERSONAL');
+    modalShell('<h2>' + (t ? 'Editar tarefa' : 'Nova tarefa') + '</h2><div id="me"></div>' +
+      '<label>Título *</label><input id="f-tt" maxlength="120" value="' + esc(t ? t.title : (preset.title || '')) + '">' +
+      '<div id="tk-more" style="display:' + (t ? '' : 'none') + '">' +
+      '<label>Descrição</label><input id="f-td" maxlength="500" value="' + esc(t ? (t.description || '') : '') + '">' +
+      '<label>É</label><div class="row"><label class="check"><input type="radio" name="tkvis" value="PERSONAL"' + (vis === 'PERSONAL' ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="tkvis" value="COUPLE"' + (vis === 'COUPLE' ? ' checked' : '') + '> Do casal</label></div>' +
+      '<label>Responsável</label><select id="f-ta"><option value="">Sem responsável</option>' + members.map(function (u) { return '<option value="' + u.id + '"' + ((t ? t.assigned_to : me.id) === u.id ? ' selected' : '') + '>' + esc(u.nome) + (u.id === me.id ? ' (você)' : '') + '</option>'; }).join('') + '</select>' +
+      '<div class="row"><div><label>Prazo</label><input id="f-tdd" type="date" value="' + esc(t ? (t.due_date || '') : (preset.due_date || '')) + '"></div>' +
+      '<div><label>Horário</label><input id="f-tdt" type="time" value="' + esc(t ? (t.due_time || '') : '') + '"></div></div>' +
+      '<div class="row"><div><label>Prioridade</label><select id="f-tp"><option value="LOW">Baixa</option><option value="NORMAL"' + ((t ? t.priority : 'NORMAL') === 'NORMAL' ? ' selected' : '') + '>Normal</option><option value="HIGH"' + ((t ? t.priority : '') === 'HIGH' ? ' selected' : '') + '>Alta</option></select></div>' +
+      '<div><label>Recorrência</label><select id="f-tr"><option value="NONE">Não repete</option><option value="DAILY">Todo dia</option><option value="WEEKLY">Toda semana</option><option value="MONTHLY">Todo mês</option><option value="SPECIFIC_DAYS">Dias específicos</option></select></div></div>' +
+      '<div id="tk-wd" style="display:none"><label>Dias</label><div class="row" style="flex-wrap:wrap">' + [['1', 'SEG'], ['2', 'TER'], ['3', 'QUA'], ['4', 'QUI'], ['5', 'SEX'], ['6', 'SÁB'], ['0', 'DOM']].map(function (d) { return '<label class="check" style="flex:1 1 22%"><input type="checkbox" data-twd="' + d[0] + '"> ' + d[1] + '</label>'; }).join('') + '</div></div>' +
+      '</div>' +
+      (t ? '' : '<button class="btn ghost sm" id="tk-det" style="max-width:200px">+ Detalhes</button>') +
+      '<button class="btn" id="sv">' + (t ? 'Salvar' : 'Criar tarefa') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    var det = document.getElementById('tk-det');
+    if (det) det.onclick = function () { document.getElementById('tk-more').style.display = ''; det.style.display = 'none'; };
+    function paintW() { var r = document.getElementById('f-tr'); document.getElementById('tk-wd').style.display = r && r.value === 'SPECIFIC_DAYS' ? '' : 'none'; }
+    var fr = document.getElementById('f-tr'); if (fr) { if (t && t.recurrence_type !== 'NONE') fr.value = t.recurrence_type; fr.onchange = paintW; paintW(); }
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var vvr = document.querySelector('input[name="tkvis"]:checked');
+        var wds = [];
+        if (fr && fr.value === 'SPECIFIC_DAYS') Array.prototype.forEach.call(document.querySelectorAll('[data-twd]'), function (c) { if (c.checked) wds.push(+c.dataset.twd); });
+        var data = { title: document.getElementById('f-tt').value, description: (document.getElementById('f-td') || { value: '' }).value, visibility: vvr ? vvr.value : 'PERSONAL', assigned_to: (document.getElementById('f-ta') || { value: '' }).value || null, due_date: (document.getElementById('f-tdd') || { value: '' }).value || null, due_time: (document.getElementById('f-tdt') || { value: '' }).value || null, priority: (document.getElementById('f-tp') || { value: 'NORMAL' }).value, recurrence: fr ? { type: fr.value, daysOfWeek: wds } : undefined };
+        if (t) { J.DB.updateTask(me.id, t.id, data); toast('Tarefa atualizada!'); }
+        else { J.DB.createTask(me.id, data); toast('Tarefa criada! ☑'); }
+        closeModal(); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openTaskDetail(me, taskId) {
+    var t;
+    try { t = J.DB.getTask(me.id, taskId); } catch (e) { toast('Tarefa não encontrada.'); return; }
+    var who = t.assigned_to ? J.DB.userName(me.id, t.assigned_to) : 'Sem responsável';
+    var creator = '';
+    try { creator = J.DB.userName(me.id, t.created_by); } catch (e2) { creator = ''; }
+    var freq = { NONE: 'Não repete', DAILY: 'Todo dia', WEEKLY: 'Toda semana', MONTHLY: 'Todo mês', SPECIFIC_DAYS: 'Dias específicos' }[t.recurrence_type] || t.recurrence_type;
+    modalShell('<h2>' + esc(t.title) + '</h2><div id="me"></div>' +
+      (t.description ? '<p class="muted">' + esc(t.description) + '</p>' : '') +
+      '<p><span class="pill">' + esc(t.status === 'TODO' ? 'A fazer' : t.status === 'IN_PROGRESS' ? 'Em andamento' : t.status === 'COMPLETED' ? '✓ Concluída' : t.status === 'CANCELLED' ? 'Cancelada' : 'Arquivada') + '</span> ' +
+      '<span class="pill">' + (t.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</span>' +
+      (t.priority === 'HIGH' ? ' <span class="pill warn">Prioridade alta</span>' : '') + '</p>' +
+      '<p class="muted">Prazo: <b>' + (t.due_date ? esc(dueLabel(t.due_date)) + (t.due_time ? ' às ' + esc(t.due_time) : '') : 'Sem prazo') + '</b><br>Responsável: <b>' + esc(who) + '</b><br>Recorrência: ' + esc(freq) + (creator ? '<br>Criada por ' + esc(creator) : '') + '</p>' +
+      '<div class="row"><button class="btn ghost sm" id="td-edit">Editar</button>' +
+      (t.status === 'COMPLETED' ? '<button class="btn ghost sm" id="td-re">Reabrir</button>' : '<button class="btn sm" id="td-done">Concluir</button>') + '</div>' +
+      '<div class="row"><button class="btn ghost sm" id="td-cancel">Cancelar</button><button class="btn ghost sm" id="td-arch">Arquivar</button></div>' +
+      '<button class="btn ghost" id="cl">Fechar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('td-edit').onclick = function () { openTaskModal(me, t.id); };
+    var dn = document.getElementById('td-done'); if (dn) dn.onclick = function () { try { J.DB.completeTask(me.id, t.id); closeModal(); toast('Tarefa concluída.', { label: 'Desfazer', fn: function () { try { J.DB.reopenTask(me.id, t.id); render(here()); } catch (e3) {} } }); render(here()); } catch (e4) { document.getElementById('me').innerHTML = err(e4); } };
+    var re = document.getElementById('td-re'); if (re) re.onclick = function () { try { J.DB.reopenTask(me.id, t.id); closeModal(); toast('Tarefa reaberta.'); render(here()); } catch (e5) { document.getElementById('me').innerHTML = err(e5); } };
+    document.getElementById('td-cancel').onclick = function () { try { J.DB.cancelTask(me.id, t.id); closeModal(); toast('Tarefa cancelada.'); render(here()); } catch (e6) { document.getElementById('me').innerHTML = err(e6); } };
+    document.getElementById('td-arch').onclick = function () { try { J.DB.archiveTask(me.id, t.id); closeModal(); toast('Tarefa arquivada.'); render(here()); } catch (e7) { document.getElementById('me').innerHTML = err(e7); } };
+  }
+  /* ============ LISTAS (só apresentação sobre ListService) ============
+     Lista organiza itens; tarefa organiza ações. Sem finanças aqui. */
+  var ls = { tab: 'all', q: '', hideDone: false };
+  function lsTypeLbl(t) { return t === 'SHOPPING' ? 'Compras' : t === 'CHECKLIST' ? 'Checklist' : 'Geral'; }
+  function lsItemLbl(it) {
+    var s = it.title;
+    if (it.quantity != null) s += ' — ' + String(it.quantity).replace('.', ',') + (it.unit ? ' ' + it.unit : '');
+    return s;
+  }
+  function pLists(v, me) {
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Listas</h1><button class="btn" id="ls-new" style="max-width:190px">+ Nova lista</button></div>' +
+      '<div class="seg" role="group" aria-label="Visibilidade"><button data-lstab="all" class="' + (ls.tab === 'all' ? 'on' : '') + '">Todas</button><button data-lstab="PERSONAL" class="' + (ls.tab === 'PERSONAL' ? 'on' : '') + '">Pessoais</button><button data-lstab="COUPLE" class="' + (ls.tab === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<input id="ls-q" placeholder="🔍 Buscar listas ou itens" value="' + esc(ls.q) + '" aria-label="Buscar listas"></div>';
+    var rows = [], errMsg = null;
+    try { rows = J.DB.getLists(me.id, { visibility: ls.tab === 'all' ? undefined : ls.tab, search: ls.q || undefined, limit: 100 }); }
+    catch (e) { errMsg = e; }
+    if (errMsg) { v.innerHTML = html + '<div class="card"><b>Listas</b><div class="alert">Não foi possível carregar esta lista.</div><button class="btn ghost" data-lsretry>Tentar novamente</button></div>'; bindLists(v, me); return; }
+    if (!rows.length) {
+      html += '<div class="card empty"><div class="ico">📝</div><h2>Suas listas vão aparecer aqui.</h2><p class="muted">Crie uma lista para organizar compras, viagens, checklists ou qualquer outra coisa.</p><button class="btn" id="ls-new2" style="max-width:220px;margin:0 auto">+ Nova lista</button></div>';
+    } else {
+      html += rows.slice(0, 60).map(function (l) {
+        var p;
+        try { p = J.DB.getListProgress(me.id, l.id); } catch (e2) { p = { total: 0, done: 0 }; }
+        var pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+        return '<a class="card dash-link" href="#/lists/' + l.id + '" aria-label="Abrir lista ' + esc(l.name) + '"><div class="row between"><b>' + esc(l.name) + '</b><span class="pill">' + (l.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</span></div>' +
+          '<p class="muted">' + esc(lsTypeLbl(l.list_type)) + (l.status !== 'ACTIVE' ? ' • ' + (l.status === 'COMPLETED' ? 'Concluída' : 'Arquivada') : '') + '</p>' +
+          '<p class="muted">' + (p.total ? p.done + ' de ' + p.total + ' • ' + pct + '%' : 'Lista vazia') + '</p>' +
+          '<div class="bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100"><span style="width:' + pct + '%"></span></div></a>';
+      }).join('');
+    }
+    v.innerHTML = html;
+    bindLists(v, me);
+  }
+  function bindLists(v, me) {
+    var nw = document.getElementById('ls-new'); if (nw) nw.onclick = function () { openListModal(me, null); };
+    var nw2 = document.getElementById('ls-new2'); if (nw2) nw2.onclick = function () { openListModal(me, null); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lstab]'), function (b) { b.onclick = function () { ls.tab = b.dataset.lstab; render('lists'); }; });
+    var q = document.getElementById('ls-q'); if (q) q.onchange = function (e) { ls.q = e.target.value; render('lists'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lsretry]'), function (b) { b.onclick = function () { render('lists'); }; });
+  }
+  function openListModal(me, listId) {
+    var l = null;
+    if (listId) { try { l = J.DB.getList(me.id, listId); } catch (e) { toast('Lista não encontrada.'); return; } }
+    modalShell('<h2>' + (l ? 'Editar lista' : 'Nova lista') + '</h2><div id="me"></div>' +
+      '<label>Nome *</label><input id="f-ln" maxlength="80" value="' + esc(l ? l.name : '') + '">' +
+      '<label>Descrição</label><input id="f-ld" maxlength="500" value="' + esc(l ? (l.description || '') : '') + '">' +
+      '<label>Tipo</label><div class="row"><label class="check"><input type="radio" name="lstype" value="GENERAL"' + ((!l || l.list_type === 'GENERAL') ? ' checked' : '') + '> Geral</label><label class="check"><input type="radio" name="lstype" value="SHOPPING"' + ((l && l.list_type === 'SHOPPING') ? ' checked' : '') + '> Compras</label><label class="check"><input type="radio" name="lstype" value="CHECKLIST"' + ((l && l.list_type === 'CHECKLIST') ? ' checked' : '') + '> Checklist</label></div>' +
+      '<label>Visibilidade</label><div class="row"><label class="check"><input type="radio" name="lsvis" value="PERSONAL"' + ((!l || l.visibility === 'PERSONAL') ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="lsvis" value="COUPLE"' + ((l && l.visibility === 'COUPLE') ? ' checked' : '') + '> Casal</label></div>' +
+      '<p class="muted">Pessoal só você vê. Casal fica visível para seu par.</p>' +
+      '<button class="btn" id="sv">' + (l ? 'Salvar' : 'Criar') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var tp = document.querySelector('input[name="lstype"]:checked');
+        var vs = document.querySelector('input[name="lsvis"]:checked');
+        var data = { name: document.getElementById('f-ln').value, description: document.getElementById('f-ld').value, list_type: tp ? tp.value : 'GENERAL', visibility: vs ? vs.value : 'PERSONAL' };
+        if (!l && data.visibility === 'COUPLE') {
+          if (!confirm('Essa lista passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        }
+        if (l && data.visibility !== l.visibility && data.visibility === 'COUPLE') {
+          if (!confirm('Essa lista passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        }
+        if (l) { J.DB.updateList(me.id, l.id, data); toast('Lista atualizada!'); }
+        else { var nl = J.DB.createList(me.id, data); toast('Lista criada! 📝'); location.hash = '#/lists/' + nl.id; closeModal(); return; }
+        closeModal(); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function pListDetail(v, me, listId) {
+    var l;
+    try { l = J.DB.getList(me.id, listId); }
+    catch (e) { v.innerHTML = '<div class="card"><b>Lista</b><div class="alert">Não foi possível carregar esta lista.</div><p><a href="#/lists">‹ Voltar para Listas</a></p><button class="btn ghost" onclick="location.hash=\'#/lists\'">Tentar novamente</button></div>'; return; }
+    var items = [];
+    try { items = J.DB.getListItems(me.id, l.id, {}); } catch (e2) { items = []; }
+    var pend = items.filter(function (it) { return !it.checked; });
+    var done = items.filter(function (it) { return it.checked; });
+    var showDone = !ls.hideDone;
+    var members = [];
+    try { members = J.DB.myCouple(me.id).users; } catch (e3) {}
+    function itemRow(it) {
+      var who = it.assigned_to ? J.DB.userName(me.id, it.assigned_to) : null;
+      var linked = it.linked_task_id ? ' • <a href="#/tasks">tarefa vinculada ›</a>' : '';
+      return '<div class="ov-row"><button class="chk' + (it.checked ? ' done' : '') + '" data-lstoggle="' + it.id + '" aria-pressed="' + (!!it.checked) + '" aria-label="' + esc((it.checked ? 'Desmarcar ' : 'Marcar ') + it.title) + '">' + (it.checked ? '✓' : '') + '</button>' +
+        '<span style="flex:1;min-width:0"><b>' + esc(lsItemLbl(it)) + '</b>' + (it.description ? '<br><span class="muted">' + esc(it.description) + '</span>' : '') +
+        ((who && l.visibility === 'COUPLE') ? '<br><span class="muted">👤 ' + esc(who) + '</span>' : '') + linked + '</span>' +
+        '<span style="display:flex;gap:2px;flex:none">' +
+        (l.visibility === 'COUPLE' || true ? '<button class="btn ghost sm" data-lsmove="' + it.id + '|up" aria-label="Mover para cima" style="max-width:38px">↑</button><button class="btn ghost sm" data-lsmove="' + it.id + '|down" aria-label="Mover para baixo" style="max-width:38px">↓</button>' : '') +
+        '<button class="btn ghost sm" data-lsedit="' + it.id + '" style="max-width:64px">Editar</button></span></div>';
+    }
+    v.innerHTML = '<p class="muted"><a href="#/lists">‹ Listas</a></p>' +
+      '<div class="card"><div class="row between" style="flex-wrap:wrap"><div><h1 style="margin:0">' + esc(l.name) + '</h1><p class="muted">' + esc(lsTypeLbl(l.list_type)) + ' • ' + (l.visibility === 'COUPLE' ? 'Compartilhada' : 'Pessoal') + (l.status !== 'ACTIVE' ? ' • ' + (l.status === 'COMPLETED' ? 'Concluída' : 'Arquivada') : '') + '</p></div>' +
+      '<span><button class="btn ghost sm" id="ls-edit">Editar</button> <button class="btn ghost sm" id="ls-menu">•••</button></span></div>' +
+      (l.description ? '<p class="muted">' + esc(l.description) + '</p>' : '') +
+      '<div class="bar" role="progressbar" aria-label="Progresso da lista"><span style="width:' + (items.length ? Math.round(done.length / items.length * 100) : 0) + '%"></span></div>' +
+      '<p class="muted" aria-live="polite">' + done.length + ' de ' + items.length + (items.length ? '' : ' — Esta lista ainda está vazia. Adicione o primeiro item.') + '</p>' +
+      '<form id="ls-addf"><input id="ls-add" placeholder="Adicionar item... (Enter adiciona)" autocomplete="off" aria-label="Adicionar item"></form></div>' +
+      (pend.length ? '<div class="card"><b>Pendentes (' + pend.length + ')</b>' + pend.map(itemRow).join('') + '</div>' : (items.length ? '' : '')) +
+      (done.length ? '<div class="card"><div class="row between"><b>Concluídos (' + done.length + ')</b><span><button class="btn ghost sm" id="ls-hide">' + (showDone ? 'Ocultar' : 'Mostrar') + '</button> <button class="btn ghost sm" id="ls-clear">Limpar concluídos</button></span></div>' + (showDone ? done.map(itemRow).join('') : '') + '</div>' : '') +
+      '<div class="card"><div class="row" style="flex-wrap:wrap">' +
+      (l.status === 'COMPLETED' ? '<button class="btn ghost sm" id="ls-re">Reabrir lista</button>' : '<button class="btn ghost sm" id="ls-done">Concluir lista</button>') +
+      (l.status === 'ARCHIVED' ? '<button class="btn ghost sm" id="ls-re2">Desarquivar</button>' : '<button class="btn ghost sm" id="ls-arch">Arquivar</button>') +
+      '</div></div>';
+    var addF = document.getElementById('ls-addf');
+    var addI = document.getElementById('ls-add');
+    if (addI) addI.focus();
+    if (addF) addF.onsubmit = function (ev) {
+      ev.preventDefault();
+      var title = addI.value;
+      if (!title.trim()) return;
+      try {
+        var qm = title.match(/(\d+(?:[.,]\d+)?)\s?(kg|g|l|ml|un|pacote|pacotes|caixa|caixas|litros?|litro)?\s?(de\s+)?(.+)/i);
+        var data = { title: title.trim() };
+        if (qm && qm[4] && qm[4].trim().length >= 2 && /^\d/.test(title.trim())) data = { title: qm[4].trim(), quantity: parseFloat(qm[1].replace(',', '.')), unit: (qm[2] || '').slice(0, 20) || null };
+        J.DB.addItem(me.id, l.id, data);
+        toast('Item adicionado.', { assertive: true });
+        render('lists/' + l.id);
+        setTimeout(function () { var i2 = document.getElementById('ls-add'); if (i2) i2.focus(); }, 50);
+      } catch (e4) { toast('Não foi possível adicionar.'); }
+    };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lstoggle]'), function (b) {
+      b.onclick = function () {
+        try {
+          var iid = b.dataset.lstoggle;
+          var cur = J.DB.getListItems(me.id, l.id, {}).filter(function (x) { return x.id === iid; })[0];
+          if (cur && cur.checked) J.DB.uncheckItem(me.id, iid); else J.DB.checkItem(me.id, iid);
+          render('lists/' + l.id);
+        } catch (e5) { toast('Não foi possível.'); }
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lsedit]'), function (b) { b.onclick = function () { openListItemModal(me, l.id, b.dataset.lsedit); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lsmove]'), function (b) {
+      b.onclick = function () {
+        try { var sp = b.dataset.lsmove.split('|'); J.DB.moveItem(me.id, sp[0], sp[1]); render('lists/' + l.id); }
+        catch (e6) { toast('Não foi possível mover.'); }
+      };
+    });
+    document.getElementById('ls-edit').onclick = function () { openListModal(me, l.id); };
+    document.getElementById('ls-menu').onclick = function () { openListModal(me, l.id); };
+    var hd = document.getElementById('ls-hide'); if (hd) hd.onclick = function () { ls.hideDone = !ls.hideDone; render('lists/' + l.id); };
+    var cl = document.getElementById('ls-clear'); if (cl) cl.onclick = function () {
+      var n = done.length;
+      if (n >= 3 && !confirm('Remover ' + n + ' itens concluídos?')) return;
+      try { J.DB.clearCheckedItems(me.id, l.id); toast('Concluídos removidos.'); render('lists/' + l.id); } catch (e7) { toast('Não foi possível.'); }
+    };
+    var dn = document.getElementById('ls-done'); if (dn) dn.onclick = function () { try { J.DB.completeList(me.id, l.id); toast('Lista concluída!'); render('lists/' + l.id); } catch (e8) { toast('Não foi possível.'); } };
+    var re = document.getElementById('ls-re'); if (re) re.onclick = function () { try { J.DB.reopenList(me.id, l.id); render('lists/' + l.id); } catch (e9) {} };
+    var ar = document.getElementById('ls-arch'); if (ar) ar.onclick = function () { try { J.DB.archiveList(me.id, l.id); toast('Lista arquivada.'); location.hash = '#/lists'; } catch (e10) { toast('Não foi possível.'); } };
+    var re2 = document.getElementById('ls-re2'); if (re2) re2.onclick = function () { try { J.DB.reopenList(me.id, l.id); render('lists/' + l.id); } catch (e11) {} };
+    void members;
+  }
+  function openListItemModal(me, listId, itemId) {
+    var it;
+    try {
+      it = J.DB.getListItems(me.id, listId, {}).filter(function (x) { return x.id === itemId; })[0];
+      if (!it) throw new Error('x');
+    } catch (e) { toast('Item não encontrado.'); return; }
+    var members = [];
+    try { members = J.DB.myCouple(me.id).users; } catch (e2) {}
+    var l;
+    try { l = J.DB.getList(me.id, listId); } catch (e3) { l = { visibility: 'PERSONAL' }; }
+    modalShell('<h2>Editar item</h2><div id="me"></div>' +
+      '<label>Título</label><input id="f-it" maxlength="140" value="' + esc(it.title) + '">' +
+      '<label>Descrição</label><input id="f-id" maxlength="500" value="' + esc(it.description || '') + '">' +
+      '<div class="row"><div><label>Quantidade</label><input id="f-iq" inputmode="decimal" placeholder="ex: 2" value="' + esc(it.quantity != null ? String(it.quantity).replace('.', ',') : '') + '"></div>' +
+      '<div><label>Unidade</label><input id="f-iu" maxlength="20" placeholder="kg, L, un..." value="' + esc(it.unit || '') + '"></div></div>' +
+      (l.visibility === 'COUPLE' ? '<label>Responsável</label><select id="f-ia"><option value="">Sem responsável</option>' + members.map(function (u) { return '<option value="' + u.id + '"' + (it.assigned_to === u.id ? ' selected' : '') + '>' + esc(u.nome) + (u.id === me.id ? ' (você)' : '') + '</option>'; }).join('') + '</select>' : '') +
+      '<div class="row"><button class="btn ghost sm" id="it-task">Transformar em tarefa</button><button class="btn ghost sm danger" id="it-del">Excluir</button></div>' +
+      '<button class="btn" id="sv">Salvar</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      try {
+        var qraw = document.getElementById('f-iq').value.trim();
+        var q = qraw === '' ? null : qraw;
+        var patch = { title: document.getElementById('f-it').value, description: document.getElementById('f-id').value, quantity: q, unit: document.getElementById('f-iu').value || null };
+        var sel = document.getElementById('f-ia');
+        if (sel) patch.assigned_to = sel.value || null;
+        J.DB.updateItem(me.id, itemId, patch);
+        closeModal(); toast('Item atualizado!'); render(here());
+      } catch (e4) { document.getElementById('me').innerHTML = err(e4); }
+    };
+    document.getElementById('it-del').onclick = function () {
+      try { J.DB.removeItem(me.id, itemId); closeModal(); toast('Item excluído.'); render(here()); }
+      catch (e5) { document.getElementById('me').innerHTML = err(e5); }
+    };
+    document.getElementById('it-task').onclick = function () {
+      try {
+        var t = J.DB.createListTask(me.id, itemId, {});
+        closeModal(); toast('Tarefa criada a partir do item!');
+        location.hash = '#/tasks';
+        void t;
+      } catch (e6) { document.getElementById('me').innerHTML = err(e6); }
+    };
+  }
+  function ovListsCard(me, day) {
+    var lst = (day && day.lists) || [];
+    if (!lst.length) return '';
+    var top = lst[0];
+    return '<div class="card"><b>📝 ' + esc(top.name) + '</b><p class="muted">' + top.pending + ' itens pendentes • <a href="#/lists/' + top.id + '">Ver lista ›</a></p></div>';
+  }
   /* ============ ETAPA 6: CALENDÁRIO ============ */
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
@@ -2635,7 +3016,7 @@
     return '<span class="pill ' + m[0] + '">' + esc(m[1]) + '</span>';
   }
   function calTypeIcon(t) {
-    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅', habit: '🌱' }[t] || '•';
+    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅', habit: '🌱', task: '☑' }[t] || '•';
   }
   function occIcon(o) {
     var t = o.rec ? o.rec.type : 'expense';
@@ -4078,7 +4459,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };
@@ -5934,6 +6315,7 @@
         '<button class="btn" id="fb-e">− Despesa</button>' +
         '<button class="btn ghost" id="fb-a">📅 Novo compromisso</button>' +
         '<button class="btn ghost" id="fb-h">🌱 Novo hábito</button>' +
+        '<button class="btn ghost" id="fb-t">☑ Nova tarefa</button>' +
         '<button class="btn ghost" id="fb-g">🎯 Nova meta</button>' +
         '<button class="btn ghost" id="fb-c">🔁 Nova conta recorrente</button>' +
         '<button class="btn ghost" id="cl">Cancelar</button>');
@@ -5942,6 +6324,7 @@
       document.getElementById('fb-e').onclick = function () { closeModal(); openTxModal(me, null, 'expense'); };
       document.getElementById('fb-a').onclick = function () { closeModal(); openAgendaModal(me, null, null); };
       document.getElementById('fb-h').onclick = function () { closeModal(); location.hash = '#/habits'; };
+      document.getElementById('fb-t').onclick = function () { closeModal(); location.hash = '#/tasks'; };
       document.getElementById('fb-g').onclick = function () { closeModal(); goAndOpen(me, '#/goals', 'goals', function () { openGoalModal(me, null); }); };
       document.getElementById('fb-c').onclick = function () { closeModal(); goAndOpen(me, '#/recurring', 'recurring', function () { openRecModal(me, null); }); };
     };

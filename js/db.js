@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -221,6 +221,9 @@ window.Juntos = window.Juntos || {};
     if (!db.agenda_events) { db.agenda_events = []; changed = true; }
     if (!db.habits) { db.habits = []; changed = true; }
     if (!db.habit_completions) { db.habit_completions = []; changed = true; }
+    if (!db.tasks) { db.tasks = []; changed = true; }
+    if (!db.lists) { db.lists = []; changed = true; }
+    if (!db.list_items) { db.list_items = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5918,6 +5921,10 @@ window.Juntos = window.Juntos || {};
         { key: 'habit_list', kind: 'read' }, { key: 'habit_today', kind: 'read' },
         { key: 'habit_status', kind: 'read' }, { key: 'habit_history', kind: 'read' },
         { key: 'habit_stats', kind: 'read' },
+        { key: 'task_list', kind: 'read' }, { key: 'task_today', kind: 'read' },
+        { key: 'task_tomorrow', kind: 'read' }, { key: 'task_week', kind: 'read' },
+        { key: 'task_upcoming', kind: 'read' }, { key: 'task_overdue', kind: 'read' },
+        { key: 'task_detail', kind: 'read' },
         { key: 'planning_status', kind: 'read' }, { key: 'notification_status', kind: 'read' },
         { key: 'product_navigation', kind: 'read' }, { key: 'money_mode_status', kind: 'read' },
         { key: 'whatsapp_status', kind: 'read' },
@@ -5930,14 +5937,21 @@ window.Juntos = window.Juntos || {};
         { key: 'cancel_agenda_event', kind: 'write' },
         { key: 'habit_create', kind: 'write' }, { key: 'habit_complete', kind: 'write' },
         { key: 'habit_remove_completion', kind: 'write' }, { key: 'habit_pause', kind: 'write' },
-        { key: 'habit_resume', kind: 'write' }
+        { key: 'habit_resume', kind: 'write' },
+        { key: 'task_create', kind: 'write' }, { key: 'task_complete', kind: 'write' },
+        { key: 'task_reopen', kind: 'write' }, { key: 'task_cancel', kind: 'write' },
+        { key: 'task_update', kind: 'write' }, { key: 'task_assign', kind: 'write' },
+        { key: 'task_archive', kind: 'write' },
+        { key: 'list_create', kind: 'write' }, { key: 'list_add_item', kind: 'write' },
+        { key: 'list_check_item', kind: 'write' }, { key: 'list_uncheck_item', kind: 'write' },
+        { key: 'list_view', kind: 'read' }, { key: 'list_search', kind: 'read' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6191,7 +6205,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['resumo do mes', 'resumo mensal', 'como esta meu mes', 'resumo do meu mes', 'o que tenho esse mes'])) out.intent = 'overview_month';
       else if (has(['alguma coisa importante', 'algo importante hoje', 'proximos eventos', 'o que vem por ai', 'o que vem pela frente', 'tem importante'])) out.intent = 'overview_upcoming';
       else if (has(['o que tenho amanha', 'que tenho amanha']) && noAG) out.intent = 'overview_tomorrow';
-      else if ((has(['completei', 'conclui', 'fiz ', 'marquei ']) && hasAny(HBW)) || /(como concluida|como concluido|como feito|como feita)\b/.test(s)) out.intent = 'habit_complete';
+      else if (((has(['completei', 'conclui', 'fiz ', 'marquei ']) || /(como concluida|como concluido|como feito|como feita)\b/.test(s))) && hasAny(HBW)) out.intent = 'habit_complete';
       else if ((has(['desfaz', 'desfazer', 'desmarca', 'desmarcar', 'remove']) && hasAny(HBW)) || /(desfaz|desmarca).*(hoje|de hoje)/.test(s)) out.intent = 'habit_remove_completion';
       else if (has(['pausa', 'pausar', 'pauso']) && hasAny(HBW)) out.intent = 'habit_pause';
       else if ((has(['retoma', 'retomar', 'volta com', 'voltar com', 'reativa']) && hasAny(HBW))) out.intent = 'habit_resume';
@@ -6207,9 +6221,28 @@ window.Juntos = window.Juntos || {};
       else if (has(['sequencia', 'como estou no habito', 'como estou na ', 'como vou no habito']) && (hasAny(HBW) || has(['sequencia']))) out.intent = 'habit_status';
       else if (has(['historico']) && hasAny(HBW)) out.intent = 'habit_history';
       else if (has(['consistencia', 'estatistica']) && hasAny(HBW)) out.intent = 'habit_stats';
+      else if ((has(['conclui', 'concluida', 'concluido', 'marca como concluida', 'marcar como concluida']) && has(['tarefa', 'tarefas'])) || /(marca|marcar|marque) .{2,60} como concluida/.test(s) && !hasAny(HBW)) out.intent = 'task_complete';
+      else if ((has(['reabre', 'reabrir', 'desfaz', 'desfazer']) && has(['tarefa', 'tarefas']))) out.intent = 'task_reopen';
+      else if ((has(['cancela', 'cancelar']) && has(['tarefa', 'tarefas']))) out.intent = 'task_cancel';
+      else if ((has(['arquiva', 'arquivar']) && has(['tarefa', 'tarefas']))) out.intent = 'task_archive';
+      else if ((has(['atribui', 'atribuir', 'atribua', 'responsavel']) && has(['tarefa', 'tarefas'])) || /(para (meu|minha|o|a) (parceiro|parceira|marido|esposa|namorado|namorada))\b/.test(s) && has(['tarefa'])) out.intent = 'task_assign';
+      else if (has(['me lembra de', 'me lembre de', 'lembra de ']) && !has(['compromisso', 'reuniao', 'consulta'])) out.intent = 'task_create';
+      else if ((has(['cria', 'criar', 'crie', 'nova tarefa', 'adiciona', 'adicionar']) && has(['tarefa', 'tarefas'])) || (has(['preciso']) && !hasAny(HBW.concat(AGW)))) out.intent = 'task_create';
+      else if (has(['quais tarefas', 'tarefas tenho hoje', 'tarefas de hoje', 'tarefas para hoje', 'o que preciso fazer hoje']) && !has(['atrasada', 'atrasadas', 'em atraso'])) out.intent = 'task_today';
+      else if (has(['tarefas amanha', 'o que preciso fazer amanha', 'tarefas para amanha'])) out.intent = 'task_tomorrow';
+      else if (has(['tarefas essa semana', 'tarefas da semana', 'tarefas temos'])) out.intent = 'task_week';
+      else if (has(['proximas tarefas', 'tarefas futuras', 'tarefas a fazer'])) out.intent = 'task_upcoming';
+      else if ((has(['atrasada', 'atrasadas', 'em atraso']) && has(['tarefa', 'tarefas'])) || has(['tarefa atrasada', 'tarefas atrasadas', 'tarefa em atraso', 'tarefas em atraso'])) out.intent = 'task_overdue';
+      else if (has(['minhas tarefas', 'lista de tarefas', 'tarefas do casal', 'atribuido a mim', 'atribuida a mim', 'tarefas pendentes'])) out.intent = 'task_list';
+      else if (has(['detalhe da tarefa', 'detalhes da tarefa', 'sobre a tarefa'])) out.intent = 'task_detail';
+      else if ((has(['altera', 'alterar', 'muda', 'mudar', 'edita', 'editar']) && has(['tarefa', 'tarefas']))) out.intent = 'task_update';
+      else if ((has(['marca', 'marcar', 'marque', 'comprei', 'já comprei', 'ja comprei']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(marca|marcar|marque|comprei|compra feita) .{2,60} (na lista|do mercado|da lista)/.test(s)) out.intent = 'list_check_item';
+      else if ((has(['adiciona', 'adicionar', 'adicione', 'coloca', 'colocar', 'coloque', 'inclui', 'incluir']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(adiciona|coloque|inclui) .{2,80} (na lista|no mercado|na viagem)/.test(s)) out.intent = 'list_add_item';
+      else if ((has(['cria', 'criar', 'crie', 'nova lista', 'nova check']) && has(['lista', 'listas', 'mercado', 'viagem', 'checklist', 'compras'])) || /(cria|criar|crie) .{2,60} lista/.test(s)) out.intent = 'list_create';
+      else if (has(['quais listas', 'minhas listas', 'lista do mercado', 'lista da viagem', 'mostra a lista', 'mostra as listas', 'tem alguma lista', 'o que falta comprar', 'o que falta na', 'quais itens faltam']) || (has(['lista', 'listas']) && has(['tenho', 'temos', 'mostra', 'mostre', 'quais', 'compartilhada', 'compartilhadas']))) out.intent = 'list_view';
       else if (has(['planejado e realizado', 'quanto temos previsto', 'previsto para', 'compromissos financeiros', 'planejado para'])) out.intent = 'planning_status';
       else if (has(['notifica', 'tenho notificacao', 'minhas notificacoes', 'o que esta pendente', 'fatura perto de vencer', 'fatura vencendo', 'alguma fatura'])) out.intent = 'notification_status';
-      else if (/^onde\b/.test(s) && has(['cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente'])) out.intent = 'product_navigation';
+      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente'])) out.intent = 'product_navigation';
       else if (has(['qual modo financeiro', 'modo financeiro estamos', 'modo do dinheiro', 'dinheiro separado ou tudo junto', 'como administramos'])) out.intent = 'money_mode_status';
       else if (has(['whatsapp esta conectado', 'whatsapp conectado', 'meu whatsapp'])) out.intent = 'whatsapp_status';
       else if (has(['conectar meu banco', 'conectar banco', 'ligar meu banco', 'integracao com banco', 'sincronizar banco'])) out.intent = 'openfinance_status';
@@ -6344,6 +6377,8 @@ window.Juntos = window.Juntos || {};
       if (/^overview_/.test(intent)) return 'OVERVIEW';
       if (/^agenda_/.test(intent)) return 'AGENDA';
       if (/^habit_/.test(intent)) return 'HABITS';
+      if (/^task_/.test(intent)) return 'TASKS';
+      if (/^list_/.test(intent)) return 'LISTS';
       if (/^(account_|card_|invoice_|installment_|recurring_|settlement_|cash_flow|transaction_|category_|budget_|financial_|income_|expense_|report_|openfinance_|planning_question|create_|mark_|update_)/.test(intent)) return 'FINANCE';
       if (/^(goal_|contribute_)/.test(intent)) return 'GOALS';
       if (/^planning_/.test(intent)) return 'PLANNING';
@@ -6390,8 +6425,30 @@ window.Juntos = window.Juntos || {};
         return gn.length >= 3 && s.indexOf(gn) >= 0;
       });
     },
+    aiFindTask: function (userId, text) {
+      var s = DB.aiNorm(text);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var rows = db.tasks.filter(function (t) { return t.couple_id === cid && !t.deleted_at && !t.recurrence_parent_id && DB.taskVisible(db, userId, t) && t.status !== 'ARCHIVED'; });
+      var scored = [];
+      rows.forEach(function (t) {
+        var tn = DB.aiNorm(t.title);
+        if (!tn) return;
+        var score = 0;
+        if (tn.length >= 3 && s.indexOf(tn) >= 0) score = tn.length + 10;
+        else {
+          tn.split(' ').filter(function (w) { return w.length >= 4; }).forEach(function (w) {
+            if (new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(s)) score += w.length;
+          });
+        }
+        if (score > 0) scored.push({ t: t, score: score });
+      });
+      scored.sort(function (a, b) { return b.score - a.score; });
+      return scored.map(function (x) { return x.t; });
+    },
     aiNavMap: function () {
       return [
+        { match: ['tarefa', 'tarefas'], label: 'Tarefas', route: '#/tasks' },
+        { match: ['lista', 'listas', 'mercado', 'checklist'], label: 'Listas', route: '#/lists' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
         { match: ['notifica'], label: 'Notificações', route: '#/notifications' },
@@ -6552,6 +6609,37 @@ window.Juntos = window.Juntos || {};
       } else if (name === 'money_mode_status') {
         var mm = DB.moneyMode(userId);
         out = { mode: mm, separate: mm !== 'JOINT' };
+      } else if (name === 'task_today' || name === 'task_list') {
+        var tt = DB.taskTodayStatus(userId, args.date || DB.agendaToday());
+        out = { date: tt.date, total: tt.total, done: tt.done, overdue: tt.overdue, items: tt.items };
+      } else if (name === 'task_tomorrow') {
+        var tmD = DB.agendaAddDays(DB.agendaToday(), 1);
+        out = { date: tmD, items: DB.taskOccurrences(userId, tmD, tmD, {}).map(function (o) { return { key: o.key, title: o.title, due_time: o.due_time, visibility: o.visibility }; }) };
+      } else if (name === 'task_week') {
+        var tw = DB.ovWeekRange(args.date);
+        out = { from: tw[0], to: tw[6], items: DB.taskOccurrences(userId, tw[0], tw[6], { limit: 30 }).map(function (o) { return { date: o.date, title: o.title, due_time: o.due_time, visibility: o.visibility, status: o.status }; }) };
+      } else if (name === 'task_upcoming') {
+        out = { items: DB.getUpcomingTasks(userId, 14, 15).map(function (o) { return { date: o.date, title: o.title, due_time: o.due_time, visibility: o.visibility }; }) };
+      } else if (name === 'task_overdue') {
+        out = { items: DB.getOverdueTasks(userId, 15).map(function (o) { return { date: o.date, title: o.title, visibility: o.visibility }; }) };
+      } else if (name === 'task_detail') {
+        var td = DB.aiFindTask(userId, args.task_name || '')[0];
+        if (!td) throw new Error('Tarefa não encontrada.');
+        var tf = DB.getTask(userId, td.id);
+        out = { id: tf.id, title: tf.title, status: tf.status, priority: tf.priority, visibility: tf.visibility, due_date: tf.due_date, due_time: tf.due_time, assigned_to: tf.assigned_to, recurrence: tf.recurrence_type };
+      } else if (name === 'list_view' || name === 'list_search') {
+        var lq = args.list_name || args.query || '';
+        var lrows = lq ? DB.searchLists(userId, lq, 10) : DB.getLists(userId, { status: 'ACTIVE', limit: 10 });
+        out = {
+          lists: lrows.map(function (l) {
+            var pr = DB.getListProgress(userId, l.id);
+            return { id: l.id, name: l.name, list_type: l.list_type, visibility: l.visibility, total: pr.total, done: pr.done, pending: pr.pending };
+          })
+        };
+        if (lq && out.lists.length === 1) {
+          var li = DB.getListItems(userId, out.lists[0].id, {});
+          out.items = li.slice(0, 15).map(function (it) { return { title: it.title, checked: !!it.checked, quantity: it.quantity, unit: it.unit }; });
+        }
       } else if (name === 'whatsapp_status') {
         var wc = DB.waMyConnection(userId);
         var wp = DB.waGetPreferences(userId);
@@ -6669,6 +6757,36 @@ window.Juntos = window.Juntos || {};
         var gg = db.goals.find(function (x) { return x.id === p.goal_id && x.couple_id === cid; });
         if (!gg) throw new Error('Meta inválida.');
         if (!(Number(p.amount) > 0)) throw new Error('Valor inválido.');
+      } else if (actionType === 'task_create') {
+        DB.validateTask(userId, { title: p.title, description: p.description, visibility: p.visibility || 'PERSONAL', priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, recurrence: p.recurrence, source_type: 'AI' });
+      } else if (actionType === 'task_complete' || actionType === 'task_reopen' || actionType === 'task_cancel' || actionType === 'task_archive') {
+        var tk = db.tasks.find(function (x) { return x.id === p.task_id && x.couple_id === cid && !x.deleted_at; });
+        if (!tk || !DB.taskCanAct(db, userId, tk)) throw new Error('Tarefa inválida.');
+        if ((actionType === 'task_complete' || actionType === 'task_reopen' || actionType === 'task_cancel') && p.date && !DB.agendaParseDay(p.date)) throw new Error('Data inválida.');
+      } else if (actionType === 'task_update') {
+        var tu = db.tasks.find(function (x) { return x.id === p.task_id && x.couple_id === cid && !x.deleted_at; });
+        if (!tu || !DB.taskCanAct(db, userId, tu)) throw new Error('Tarefa inválida.');
+        DB.validateTask(userId, { title: p.patch.title || tu.title, description: p.patch.description != null ? p.patch.description : tu.description, visibility: tu.visibility, priority: p.patch.priority || tu.priority, due_date: p.patch.due_date !== undefined ? p.patch.due_date : tu.due_date, due_time: p.patch.due_time !== undefined ? p.patch.due_time : tu.due_time, assigned_to: tu.assigned_to });
+      } else if (actionType === 'task_assign') {
+        if (p.task_id) {
+          var ta = db.tasks.find(function (x) { return x.id === p.task_id && x.couple_id === cid && !x.deleted_at; });
+          if (!ta || !DB.taskCanAct(db, userId, ta)) throw new Error('Tarefa inválida.');
+          if (ta.visibility !== 'COUPLE') throw new Error('Só tarefas do casal podem ser atribuídas a outra pessoa.');
+        } else {
+          DB.validateTask(userId, { title: p.title, description: p.description, visibility: 'COUPLE', priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, source_type: 'AI' });
+        }
+        if (!db.members.some(function (m) { return m.couple_id === cid && m.user_id === p.assigned_to; })) throw new Error('Pessoa inválida.');
+      } else if (actionType === 'list_create') {
+        DB.validateList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' });
+      } else if (actionType === 'list_add_item') {
+        var ll = db.lists.find(function (x) { return x.id === p.list_id && x.couple_id === cid && !x.deleted_at; });
+        if (!ll || !DB.listCanAct(db, userId, ll)) throw new Error('Lista inválida.');
+        DB.validateListItem(userId, { title: p.title, quantity: p.quantity, unit: p.unit });
+      } else if (actionType === 'list_check_item' || actionType === 'list_uncheck_item') {
+        var li = db.list_items.find(function (x) { return x.id === p.item_id && !x.deleted_at; });
+        if (!li) throw new Error('Item inválido.');
+        var lll = db.lists.find(function (x) { return x.id === li.list_id && x.couple_id === cid && !x.deleted_at; });
+        if (!lll || !DB.listCanAct(db, userId, lll)) throw new Error('Acesso negado.');
       } else throw new Error('Ação não permitida.');
       return true;
     },
@@ -6756,6 +6874,55 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'contribute_goal') {
           DB.addToGoal(userId, p.goal_id, { amount: String(p.amount).replace('.', ','), date: p.date || now().slice(0, 10) });
           res = { goal_id: p.goal_id };
+        } else if (r.action_type === 'task_create') {
+          var src = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var nt = DB.createTask(userId, { title: p.title, description: p.description, visibility: p.visibility || 'PERSONAL', priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, recurrence: p.recurrence, source_type: src }, { source_type: src });
+          res = { task_id: nt.id };
+        } else if (r.action_type === 'task_complete') {
+          DB.completeTask(userId, { task_id: p.task_id, date: p.date || null });
+          res = { task_id: p.task_id };
+        } else if (r.action_type === 'task_reopen') {
+          DB.reopenTask(userId, { task_id: p.task_id, date: p.date || null });
+          res = { task_id: p.task_id };
+        } else if (r.action_type === 'task_cancel') {
+          DB.cancelTask(userId, { task_id: p.task_id, date: p.date || null });
+          res = { task_id: p.task_id };
+        } else if (r.action_type === 'task_update') {
+          DB.updateTask(userId, p.task_id, p.patch || {}, p.scope ? { scope: p.scope, date: p.date } : {});
+          res = { task_id: p.task_id };
+        } else if (r.action_type === 'task_assign') {
+          if (p.task_id) { DB.assignTask(userId, p.task_id, p.assigned_to); res = { task_id: p.task_id }; }
+          else {
+            var srcA = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+            var nta = DB.createTask(userId, { title: p.title, description: p.description, visibility: 'COUPLE', priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, recurrence: { type: 'NONE' }, source_type: srcA }, { source_type: srcA });
+            res = { task_id: nta.id };
+          }
+        } else if (r.action_type === 'task_archive') {
+          DB.archiveTask(userId, p.task_id);
+          res = { task_id: p.task_id };
+        } else if (r.action_type === 'list_create') {
+          var srcL = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var nl = DB.createList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' }, { source_type: srcL });
+          if (p.items && p.items.length) {
+            try { DB.addItemsBulk(userId, nl.id, p.items.slice(0, 20), {}); } catch (eL) {}
+          }
+          res = { list_id: nl.id };
+        } else if (r.action_type === 'list_add_item') {
+          var srcI = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          if (p.items && p.items.length) {
+            DB.addItemsBulk(userId, p.list_id, p.items.slice(0, 20), { idempotency_key: 'ai:' + r.id });
+            res = { list_id: p.list_id, count: p.items.length };
+          } else {
+            var ni = DB.addItem(userId, p.list_id, { title: p.title, quantity: p.quantity, unit: p.unit }, { idempotency_key: 'ai:' + r.id });
+            res = { list_id: p.list_id, item_id: ni.id };
+          }
+          void srcI;
+        } else if (r.action_type === 'list_check_item') {
+          DB.checkItem(userId, p.item_id);
+          res = { item_id: p.item_id };
+        } else if (r.action_type === 'list_uncheck_item') {
+          DB.uncheckItem(userId, p.item_id);
+          res = { item_id: p.item_id };
         } else throw new Error('Ação não permitida.');
         var db2 = read();
         var r2 = db2.ai_actions.find(function (x) { return x.id === actionId; });
@@ -7055,6 +7222,146 @@ window.Juntos = window.Juntos || {};
           if (e.amount == null) throw { clarification: 'Qual o valor do aporte?' };
           params = { goal_id: gsel[0].id, goal_name: gsel[0].name, amount: e.amount, date: today };
           label = 'Aporte de ' + DB.aiMoney(e.amount) + ' na meta "' + gsel[0].name + '" (não cria movimentação)';
+        } else if (det.intent === 'task_create') {
+          var tkTitle = (rawText.replace(/(cria|criar|crie|nova tarefa|adiciona|adicionar|preciso|me lembra de|me lembre de|lembra de|para nós|pra nós|nós dois|nos dois|do casal|compartilhada|amanhã|amanha|hoje|sábado|sabado|sexta|segunda|terça|quarta|quinta|domingo|[0-9\/]+)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)) || '';
+          if (tkTitle.length < 2) throw { clarification: 'Qual tarefa você quer criar?' };
+          var tkW = DB.aiParseAgendaWhen(rawText, today);
+          if (tkW.clarification) tkW = { date: null, start: null };
+          var tkCouple = /(para nos|pra nos|nos dois|nós dois|do casal|casal|compartilhada|para meu|para minha|parceiro|parceira|marido|esposa|namorado|namorada)\b/.test(s);
+          var tkAsg = null;
+          if (tkCouple && /(meu parceiro|minha parceira|marido|esposa|namorado|namorada|para ele|para ela)\b/.test(s)) {
+            var ids = db.members.filter(function (m) { return m.couple_id === cid; }).map(function (m) { return m.user_id; });
+            tkAsg = ids.filter(function (x) { return x !== userId; })[0] || null;
+          }
+          params = { title: tkTitle.charAt(0).toUpperCase() + tkTitle.slice(1), description: '', visibility: tkCouple ? 'COUPLE' : 'PERSONAL', priority: 'NORMAL', due_date: tkW.date || null, due_time: tkW.start || null, assigned_to: tkAsg, recurrence: { type: 'NONE' } };
+          label = 'Criar tarefa "' + params.title + '"' + (params.due_date ? ' para ' + params.due_date.split('-').reverse().join('/') : '') + ' (' + (params.visibility === 'COUPLE' ? 'casal' : 'pessoal') + ')';
+          if (!tkCouple && !tkAsg) {
+            var created = DB.createTask(userId, params, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
+            try { DB.logSecurityEvent(userId, 'ai_action', { action: 'task_created', entity_type: 'task', entity_id: created.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (e2) {}
+            return { answer: 'Tarefa "' + created.title + '" criada' + (created.due_date ? ' para ' + created.due_date.split('-').reverse().join('/') : '') + '.', facts: [{ label: 'tarefa', value: 1 }], tools: ['task_create'], intent: det.intent, domain: 'TASKS' };
+          }
+        } else if (det.intent === 'task_complete' || det.intent === 'task_reopen' || det.intent === 'task_cancel' || det.intent === 'task_archive') {
+          var tcand = DB.aiFindTask(userId, rawText);
+          if (!tcand.length) throw { clarification: 'Não encontrei essa tarefa. Quer ver a lista de hoje?' };
+          if (tcand.length > 1) throw { clarification: 'Qual delas? ' + tcand.slice(0, 4).map(function (t) { return '"' + t.title + '"'; }).join(', ') + '?' };
+          var tone = tcand[0];
+          var tdate = null;
+          var twhen = DB.aiParseAgendaWhen(rawText, today);
+          if (!twhen.clarification && twhen.date && twhen.date !== today) tdate = twhen.date;
+          params = { task_id: tone.id, title: tone.title, date: tdate };
+          label = (det.intent === 'task_complete' ? 'Marcar "' + tone.title + '" como concluída' : det.intent === 'task_reopen' ? 'Reabrir "' + tone.title + '"' : det.intent === 'task_cancel' ? 'Cancelar "' + tone.title + '"' : 'Arquivar "' + tone.title + '"');
+          if (det.intent === 'task_complete' && tone.recurrence_type === 'NONE' && !tone.completed_at && tone.status !== 'COMPLETED') {
+            DB.completeTask(userId, tone.id);
+            try { DB.logSecurityEvent(userId, 'ai_action', { action: 'task_completed', entity_type: 'task', entity_id: tone.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (e3) {}
+            return { answer: 'Tarefa "' + tone.title + '" marcada como concluída.', facts: [{ label: 'tarefa', value: 1 }], tools: ['task_complete'], intent: det.intent, domain: 'TASKS' };
+          }
+        } else if (det.intent === 'task_update') {
+          var ucand = DB.aiFindTask(userId, rawText);
+          if (!ucand.length) throw { clarification: 'Qual tarefa você quer alterar?' };
+          if (ucand.length > 1) throw { clarification: 'Qual delas? ' + ucand.slice(0, 4).map(function (t) { return '"' + t.title + '"'; }).join(', ') + '?' };
+          var uone = ucand[0];
+          var uw = DB.aiParseAgendaWhen(rawText, today);
+          var upatch = {};
+          if (!uw.clarification && uw.date) upatch.due_date = uw.date;
+          if (!uw.clarification && uw.start) upatch.due_time = uw.start;
+          if (/\b(alta|urgente|prioridade alta)\b/.test(s)) upatch.priority = 'HIGH';
+          else if (/\b(baixa|prioridade baixa)\b/.test(s)) upatch.priority = 'LOW';
+          var unt = DB.aiNorm(rawText).match(/para\s+["']?([^"']{3,60})$/);
+          if (unt && !/\d/.test(unt[1]) && unt[1].indexOf('tarefa') < 0) upatch.title = unt[1].trim();
+          if (!upatch.due_date && !upatch.due_time && !upatch.priority && !upatch.title) throw { clarification: 'O que mudar? (prazo, horário, prioridade ou título)' };
+          params = { task_id: uone.id, title: uone.title, patch: upatch };
+          label = 'Alterar "' + uone.title + '"' + (upatch.due_date ? ' para ' + upatch.due_date.split('-').reverse().join('/') : '');
+        } else if (det.intent === 'task_assign') {
+          var aband = DB.aiNorm(rawText).replace(/(cria|criar|crie|uma tarefa|para|atribui|atribuir|atribua|responsavel)/g, ' ');
+          var acand = DB.aiFindTask(userId, rawText);
+          var atitle = null, atask = null;
+          if (acand.length === 1) { atask = acand[0]; atitle = acand[0].title; }
+          else {
+            atitle = aband.replace(/(meu parceiro|minha parceira|marido|esposa|namorado|namorada|nos|nós|para|minha|meu|dele|dela|ele|ela|casal|dois|comprar|reservar|buscar|pagar|ligar|fazer|amanhã|amanha|hoje|sexta|segunda|terca|quarta|quinta|sabado|domingo|[0-9\/]+)/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+            if (atitle.length < 2) throw { clarification: 'Qual tarefa? Ex: "cria uma tarefa para meu parceiro comprar pão amanhã".' };
+          }
+          var aids = db.members.filter(function (m) { return m.couple_id === cid; }).map(function (m) { return m.user_id; });
+          var apart = aids.filter(function (x) { return x !== userId; })[0] || null;
+          if (!apart) throw { clarification: 'Seu par ainda não entrou no casal.' };
+          var aw2 = DB.aiParseAgendaWhen(rawText, today);
+          if (atask) {
+            if (atask.visibility !== 'COUPLE') throw { clarification: '"' + atask.title + '" é pessoal. Para atribuir a outra pessoa, ela precisa ser do casal. Quer compartilhá-la?' };
+            params = { task_id: atask.id, title: atask.title, assigned_to: apart };
+            label = 'Atribuir "' + atask.title + '" ao seu par';
+          } else {
+            params = { title: atitle.charAt(0).toUpperCase() + atitle.slice(1), description: '', visibility: 'COUPLE', priority: 'NORMAL', due_date: (!aw2.clarification && aw2.date) ? aw2.date : null, due_time: (!aw2.clarification && aw2.start) ? aw2.start : null, assigned_to: apart, recurrence: { type: 'NONE' } };
+            label = 'Criar tarefa "' + params.title + '" para o seu par' + (params.due_date ? ' (' + params.due_date.split('-').reverse().join('/') + ')' : '');
+          }
+        } else if (det.intent === 'list_create') {
+          var ln = rawText.replace(/(cria|criar|crie|uma lista|nova lista|de coisas|para levar|para nos|pra nos|para nós|nos dois|nós dois|do casal|compartilhada|de mercado|de viagem|tipo|checklist|compras|geral)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Nova lista';
+          var lCouple = /(para nos|pra nos|nos dois|nós dois|do casal|casal|compartilhada|para nós)\b/.test(s);
+          var lType = /(mercado|compra|compra|supermercado)/.test(s) ? 'SHOPPING' : /(viagem|levar|check|prepar|documento)/.test(s) ? 'CHECKLIST' : 'GENERAL';
+          var lName = ln.length >= 2 ? (ln.charAt(0).toUpperCase() + ln.slice(1)) : 'Nova lista';
+          if (/^(nova lista|uma lista)$/i.test(lName)) lName = lType === 'SHOPPING' ? 'Mercado' : 'Nova lista';
+          params = { name: lName, description: '', list_type: lType, visibility: lCouple ? 'COUPLE' : 'PERSONAL', items: [] };
+          label = 'Criar lista "' + params.name + '" (' + (params.visibility === 'COUPLE' ? 'casal' : 'pessoal') + ')';
+          if (!lCouple) {
+            var createdL = DB.createList(userId, params, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
+            try { DB.logSecurityEvent(userId, 'ai_action', { action: 'list_created', entity_type: 'list', entity_id: createdL.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (eL2) {}
+            return { answer: 'Lista "' + createdL.name + '" criada (' + (createdL.visibility === 'COUPLE' ? 'casal' : 'pessoal') + '). Confirmar?', facts: [{ label: 'lista', value: 1 }], tools: ['list_create'], intent: det.intent, domain: 'LISTS' };
+          }
+        } else if (det.intent === 'list_add_item') {
+          var candL = DB.aiFindList(userId, rawText);
+          var ctxL = null;
+          try {
+            var lastCtx = DB.mmLastContext ? DB.mmLastContext(userId, 'list') : null;
+            if (lastCtx && lastCtx.entity_id) { try { ctxL = DB.getList(userId, lastCtx.entity_id); } catch (eC) { ctxL = null; } }
+          } catch (eC2) {}
+          var target = candL.length === 1 ? candL[0] : (candL.length === 0 && ctxL ? ctxL : null);
+          if (!target) {
+            if (!candL.length) throw { clarification: 'Qual lista? Ex: "adiciona café na lista do mercado".' };
+            throw { clarification: 'Qual delas? ' + candL.slice(0, 3).map(function (l) { return '"' + l.name + '"'; }).join(', ') + '?' };
+          }
+          var rawItems = rawText.split(/ na lista | no mercado | na viagem |,| e /i)[0];
+          var parts = rawItems.replace(/(adiciona|adicionar|adicione|coloca|colocar|coloque|inclui|incluir|café|cafe)/gi, function (m) { return m; });
+          var titles = rawText.match(/"([^"]{1,60})"/g);
+          var items = [];
+          if (titles) items = titles.map(function (t) { return { title: t.replace(/"/g, '').trim() }; }).filter(function (x) { return x.title.length >= 1; });
+          if (!items.length) {
+            var cut = rawText.replace(/(adiciona|adicionar|adicione|coloca|colocar|coloque|inclui|incluir|na lista|no mercado|na viagem|da lista|do mercado|por favor)/gi, ' ').replace(/\s+/g, ' ').trim();
+            cut.split(/,|\be\b/).forEach(function (pie) {
+              var qm = pie.match(/(\d+(?:[.,]\d+)?)\s?(kg|g|l|ml|un|pacote|pacotes|caixa|caixas|litros?|litro)?\s?(de\s+)?(.+)/i);
+              if (qm) items.push({ title: (qm[4] || pie).trim(), quantity: parseFloat(qm[1].replace(',', '.')), unit: (qm[2] || '').slice(0, 20) || null });
+              else if (pie.trim().length >= 1) items.push({ title: pie.trim().slice(0, 80) });
+            });
+            items = items.filter(function (x) { return x.title.length >= 1 && x.title.length <= 80 && !/^(a|o|na|no|da|do|de)$/i.test(x.title); }).slice(0, 10);
+          }
+          if (!items.length) throw { clarification: 'O que adicionar à lista "' + target.name + '"?' };
+          items = items.map(function (x) { x.title = x.title.charAt(0).toUpperCase() + x.title.slice(1); return x; });
+          params = { list_id: target.id, list_name: target.name, items: items, title: items[0].title, quantity: items[0].quantity || null, unit: items[0].unit || null };
+          label = 'Adicionar ' + items.map(function (x) { return '"' + x.title + '"'; }).join(', ') + ' à lista "' + target.name + '"';
+          if (items.length <= 4) {
+            DB.addItemsBulk(userId, target.id, items, { idempotency_key: 'ai:' + messageId });
+            return { answer: 'Adicionei à lista ' + target.name + ': ' + items.map(function (x) { return x.title; }).join(', ') + '.', facts: [{ label: 'itens', value: items.length }], tools: ['list_add_item'], intent: det.intent, domain: 'LISTS' };
+          }
+        } else if (det.intent === 'list_check_item' || det.intent === 'list_uncheck_item') {
+          var lc2 = DB.aiFindList(userId, rawText);
+          var tgt2 = lc2.length === 1 ? lc2[0] : (lc2.length ? null : null);
+          var itemPool = tgt2 ? DB.getListItems(userId, tgt2.id, {}) : DB.getLists(userId, { status: 'ACTIVE', limit: 20 }).reduce(function (acc, l) { return acc.concat(DB.getListItems(userId, l.id, {}).map(function (it) { it._list = l; return it; })); }, []);
+          var scored = itemPool.map(function (it) {
+            var tn = DB.aiNorm(it.title);
+            return { it: it, hit: tn.length >= 3 && s.indexOf(tn) >= 0 };
+          }).filter(function (x) { return x.hit; });
+          if (!scored.length) throw { clarification: 'Qual item? Ex: "marca café na lista do mercado".' };
+          if (scored.length > 1 && !tgt2) {
+            var names = scored.slice(0, 3).map(function (x) { return '"' + x.it.title + '" em "' + (x.it._list ? x.it._list.name : '') + '"'; }).join(', ');
+            throw { clarification: 'Qual deles? ' + names + '?' };
+          }
+          var one = scored[0].it;
+          params = { item_id: one.id, title: one.title, list_id: one.list_id };
+          label = (det.intent === 'list_check_item' ? 'Marcar "' + one.title + '" como concluído' : 'Desmarcar "' + one.title + '"');
+          if (det.intent === 'list_check_item') {
+            DB.checkItem(userId, one.id);
+            return { answer: 'Marquei "' + one.title + '" como concluído.', facts: [], tools: ['list_check_item'], intent: det.intent, domain: 'LISTS' };
+          } else {
+            DB.uncheckItem(userId, one.id);
+            return { answer: 'Desmarquei "' + one.title + '".', facts: [], tools: ['list_uncheck_item'], intent: det.intent, domain: 'LISTS' };
+          }
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -7087,7 +7394,18 @@ window.Juntos = window.Juntos || {};
         habit_remove_completion: 'Registro de hoje desfeito. Nada foi apagado do histórico antigo.',
         habit_pause: 'Hábito pausado. A sequência foi preservada.',
         habit_resume: 'Hábito retomado!',
-        contribute_goal: 'Aporte de ' + DB.aiMoney(p.amount) + ' registrado na meta. Isso não cria movimentação financeira.'
+        contribute_goal: 'Aporte de ' + DB.aiMoney(p.amount) + ' registrado na meta. Isso não cria movimentação financeira.',
+        task_create: 'Tarefa "' + (p.title || '') + '" criada' + (p.due_date ? ' para ' + String(p.due_date).split('-').reverse().join('/') : '') + '.',
+        task_complete: 'Tarefa "' + (p.title || 'concluída') + '" marcada como concluída.',
+        task_reopen: 'Tarefa reaberta.',
+        task_cancel: 'Tarefa cancelada.',
+        task_update: 'Tarefa atualizada.',
+        task_assign: 'Tarefa atribuída.',
+        task_archive: 'Tarefa arquivada.',
+        list_create: 'Lista "' + (p.name || '') + '" criada' + (p.items && p.items.length ? ' com ' + p.items.length + ' itens' : '') + '.',
+        list_add_item: (p.items && p.items.length ? 'Adicionei à lista ' + (p.list_name || '') + ': ' + p.items.map(function (x) { return x.title; }).join(', ') + '.' : 'Item adicionado à lista ' + (p.list_name || '') + '.'),
+        list_check_item: 'Item "' + (p.title || '') + '" marcado como concluído.',
+        list_uncheck_item: 'Item "' + (p.title || '') + '" desmarcado.'
       };
       return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed', domain: DB.aiDomainOf(action.action_type) };
     },
@@ -7357,6 +7675,20 @@ window.Juntos = window.Juntos || {};
         tools.push('notification_status'); toolOut = ant;
         if (!ant.unread) answer = 'Tudo tranquilo: nenhuma notificação não lida.';
         else answer = ant.unread + ' não lidas' + (ant.top.length ? ': ' + ant.top.map(function (x) { return x.title; }).join('; ') + '.' : '.') + ' Abra Notificações no app para ver tudo.';
+      } else if (det.intent === 'list_view' || det.intent === 'list_search') {
+        var lq = rawText.replace(/(quais listas|minhas listas|mostra|mostre|tem alguma|quais itens|o que falta|lista do|lista da|do mercado|da viagem|compartilhada|eu tenho|você|voce)/gi, ' ').trim().slice(0, 60);
+        var lres = DB.aiRunTool(userId, 'list_view', { list_name: lq });
+        tools.push('list_view'); toolOut = lres;
+        if (!lres.lists.length) answer = 'Você ainda não tem listas. Quer criar uma? Ex: "cria uma lista de mercado".';
+        else if (lres.lists.length === 1 && lres.items) {
+          var one1 = lres.lists[0];
+          var pend = lres.items.filter(function (i) { return !i.checked; });
+          answer = '*' + one1.name + '*\n' + lres.items.slice(0, 10).map(function (i) { return (i.checked ? '☑ ' : '☐ ') + i.title + (i.quantity ? ' — ' + String(i.quantity).replace('.', ',') + (i.unit ? ' ' + i.unit : '') : ''); }).join('\n') + '\n' + pend.length + ' itens pendentes.';
+        } else {
+          F('listas', lres.lists.length);
+          answer = 'Suas listas: ' + lres.lists.slice(0, 6).map(function (l) { return l.name + ' (' + l.pending + ' pendentes)'; }).join('; ') + '.';
+        }
+        navTarget = '#/lists';
       } else if (det.intent === 'product_navigation') {
         var navl = DB.aiNavMap();
         var sn = DB.aiNorm(rawText);
@@ -7364,10 +7696,46 @@ window.Juntos = window.Juntos || {};
         tools.push('product_navigation'); toolOut = { routes: navl.length };
         answer = hit ? 'Na área de membros: abra ' + hit.label + ' (' + hit.route.replace('#/', '') + ').' : 'Na área de membros, use o menu: Visão Geral, Agenda, Hábitos, Finanças ou Configurações.';
         navTarget = hit ? hit.route : null;
+      } else if (det.intent === 'task_today' || det.intent === 'task_list') {
+        var at = DB.aiRunTool(userId, 'task_today', {});
+        tools.push('task_today'); toolOut = at;
+        if (!at.total) answer = 'Nenhuma tarefa pendente para hoje.';
+        else {
+          F('tarefas pendentes', at.total);
+          answer = at.total + (at.total === 1 ? ' tarefa pendente hoje' : ' tarefas pendentes hoje') + (at.overdue ? ' (' + at.overdue + ' atrasadas)' : '') + ': ' + at.items.slice(0, 5).map(function (i) { return (i.overdue ? '[atrasada] ' : '') + i.title + (i.due_time ? ' às ' + i.due_time : ''); }).join('; ') + '.';
+        }
+      } else if (det.intent === 'task_tomorrow') {
+        var at2 = DB.aiRunTool(userId, 'task_tomorrow', {});
+        tools.push('task_tomorrow'); toolOut = at2;
+        answer = at2.items.length ? 'Amanhã: ' + at2.items.slice(0, 5).map(function (i) { return i.title + (i.due_time ? ' às ' + i.due_time : ''); }).join('; ') + '.' : 'Nada previsto para amanhã.';
+      } else if (det.intent === 'task_week') {
+        var at3 = DB.aiRunTool(userId, 'task_week', {});
+        tools.push('task_week'); toolOut = at3;
+        answer = at3.items.length ? 'Na semana (' + at3.from.split('-').reverse().join('/') + ' a ' + at3.to.split('-').reverse().join('/') + '): ' + at3.items.slice(0, 8).map(function (i) { return i.title + ' ' + i.date.split('-').reverse().join('/'); }).join('; ') + '.' : 'Sem tarefas nesta semana.';
+      } else if (det.intent === 'task_upcoming') {
+        var at4 = DB.aiRunTool(userId, 'task_upcoming', {});
+        tools.push('task_upcoming'); toolOut = at4;
+        answer = at4.items.length ? 'Próximas: ' + at4.items.slice(0, 5).map(function (i) { return i.title + ' ' + i.date.split('-').reverse().join('/'); }).join('; ') + '.' : 'Nenhuma tarefa futura.';
+      } else if (det.intent === 'task_overdue') {
+        var at5 = DB.aiRunTool(userId, 'task_overdue', {});
+        tools.push('task_overdue'); toolOut = at5;
+        if (!at5.items.length) answer = 'Nenhuma tarefa atrasada. Tudo em dia.';
+        else {
+          F('atrasadas', at5.items.length);
+          answer = at5.items.length + (at5.items.length === 1 ? ' tarefa atrasada' : ' tarefas atrasadas') + ': ' + at5.items.slice(0, 5).map(function (i) { return i.title + ' (era para ' + i.date.split('-').reverse().join('/') + ')'; }).join('; ') + '.';
+        }
+      } else if (det.intent === 'task_detail') {
+        var tdn = DB.aiFindTask(userId, rawText)[0];
+        if (!tdn) { answer = 'Qual tarefa?'; }
+        else {
+          var at6 = DB.aiRunTool(userId, 'task_detail', { task_name: tdn.title });
+          tools.push('task_detail'); toolOut = at6;
+          answer = '"' + at6.title + '": ' + at6.status + (at6.due_date ? ', prazo ' + at6.due_date.split('-').reverse().join('/') + (at6.due_time ? ' às ' + at6.due_time : '') : ', sem prazo') + ', ' + (at6.visibility === 'COUPLE' ? 'do casal' : 'pessoal') + ', prioridade ' + at6.priority + '.';
+        }
       } else {
         if (DB.aiNorm(rawText) === 'ajuda' || DB.aiNorm(rawText) === 'help') {
-          answer = 'Você pode me perguntar coisas como: "Como está meu dia?", "Quais hábitos faltam?", "Quanto gastamos esse mês?", "Qual a próxima fatura?", "Marca um compromisso amanhã às 14h." ou "Gastei 80 no mercado".';
-          follow = 'Diga /hoje, /semana, /habitos ou /resumo para atalhos.';
+          answer = 'Você pode me perguntar coisas como: "Como está meu dia?", "Quais hábitos faltam?", "Quais tarefas tenho hoje?", "Quanto gastamos esse mês?", "Qual a próxima fatura?", "Marca um compromisso amanhã às 14h." ou "Gastei 80 no mercado".';
+          follow = 'Diga /hoje, /semana, /habitos, /tarefas ou /resumo para atalhos.';
         } else {
           answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos, insights e agenda (compromissos, lembretes). O que quer saber?';
         }
@@ -7736,7 +8104,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -8571,10 +8939,12 @@ window.Juntos = window.Juntos || {};
         if (!o.start_at || o.start_at.length <= 10 || o.start_at.slice(11, 16) >= nowT.slice(11, 16)) next = DB.agendaOccurrencePublic(userId, o);
       });
       var finCom = DB.ovFinancialCommitments(userId, d, DB.agendaAddDays(d, 30), 4);
+      var tsk = DB.taskTodayStatus(userId, d);
+      var lst = DB.getRelevantLists(userId, 3);
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -8641,7 +9011,7 @@ window.Juntos = window.Juntos || {};
     },
     getOverviewSummary: function (userId, date) {
       var d = DB.getOverviewDay(userId, date, 'couple');
-      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tx: d.finance.count, next: d.next };
+      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], tx: d.finance.count, next: d.next };
     },
     /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
        Fonte própria (habits + habit_completions). Tudo por user_id do
@@ -9216,6 +9586,852 @@ window.Juntos = window.Juntos || {};
       var s = DB.getHabitStats(userId, from, to);
       return { active: s.active, today: { done: s.today_done, total: s.today_total }, consistency: s.consistency, habits: s.habits.map(function (x) { return { name: x.name, pct: x.pct }; }) };
     },
+    /* ============ TAREFAS (fazer; fonte oficial TaskService) ============
+       PERSONAL por padrão; RLS por visibilidade (nunca só couple_id).
+       Recorrência por expansão controlada (sem infinitas linhas):
+       a série guarda a regra; ocorrências materializam por janela com
+       chave estável (idempotentes); overrides guardam conclusão/edição
+       de "somente esta". Datas locais YYYY-MM-DD. Sem finanças aqui. */
+    TASK_STATUSES: function () { return ['TODO', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ARCHIVED']; },
+    TASK_PRIORITIES: function () { return ['LOW', 'NORMAL', 'HIGH']; },
+    TASK_FREQS: function () { return ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY', 'SPECIFIC_DAYS']; },
+    TASK_SOURCES: function () { return ['MANUAL', 'AI', 'WHATSAPP', 'ROUTINE', 'PROJECT', 'INBOX', 'UNIVERSAL_CAPTURE', 'WEEKLY_PLANNING']; },
+    TASK_TERMINAL: function () { return ['COMPLETED', 'CANCELLED', 'ARCHIVED']; },
+    taskVisible: function (db, userId, t) {
+      if (!t || t.deleted_at) return false;
+      if (t.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return t.owner_user_id === userId;
+    },
+    taskCanAct: function (db, userId, t) {
+      if (!DB.taskVisible(db, userId, t)) return false;
+      if (t.visibility === 'COUPLE') return true;
+      return t.owner_user_id === userId;
+    },
+    taskIsOverdue: function (t, today) {
+      today = today || DB.agendaToday();
+      if (!t || !t.due_date || t.due_date >= today) return false;
+      return DB.TASK_TERMINAL().indexOf(t.status) < 0;
+    },
+    validateTask: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var title = String(data.title || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title.length < 2) throw new Error('Dê um título à tarefa.');
+      if (title.length > 120) throw new Error('Título muito longo (máx 120 caracteres).');
+      var desc = String(data.description || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var pri = String(data.priority || 'NORMAL').toUpperCase();
+      if (DB.TASK_PRIORITIES().indexOf(pri) < 0) throw new Error('Prioridade inválida.');
+      var due = data.due_date ? String(data.due_date).slice(0, 10) : null;
+      if (due && !DB.agendaParseDay(due)) throw new Error('Prazo inválido.');
+      var tm = data.due_time ? String(data.due_time).slice(0, 5) : null;
+      if (tm && !/^([01]\d|2[0-3]):[0-5]\d$/.test(tm)) throw new Error('Horário inválido.');
+      var asg = data.assigned_to != null && data.assigned_to !== '' ? String(data.assigned_to) : null;
+      if (asg && !db.members.some(function (m) { return m.couple_id === cid && m.user_id === asg; })) throw new Error('Responsável inválido.');
+      var rec = data.recurrence || data.recurrence_config || null;
+      var rule = { type: 'NONE', interval: 1, daysOfWeek: [], dayOfMonth: null, startDate: null, endDate: null };
+      if (rec) {
+        var ft = String(rec.type || rec.freq || 'NONE').toUpperCase();
+        if (['NONE', 'DAILY', 'WEEKLY', 'MONTHLY', 'SPECIFIC_DAYS'].indexOf(ft) < 0) throw new Error('Recorrência inválida.');
+        rule.type = ft;
+        rule.interval = Math.max(1, Math.min(30, parseInt(rec.interval, 10) || 1));
+        if (ft === 'SPECIFIC_DAYS') {
+          var dw = (Array.isArray(rec.daysOfWeek) ? rec.daysOfWeek : String(rec.daysOfWeek || '').split(',')).map(function (x) { return parseInt(x, 10); }).filter(function (x) { return x >= 0 && x <= 6; });
+          dw = dw.filter(function (x, ix) { return dw.indexOf(x) === ix; }).sort();
+          if (!dw.length) throw new Error('Escolha ao menos um dia da semana.');
+          rule.daysOfWeek = dw;
+        }
+        if (rec.dayOfMonth != null && rec.dayOfMonth !== '') {
+          var dm = parseInt(rec.dayOfMonth, 10);
+          if (!(dm >= 1 && dm <= 31)) throw new Error('Dia do mês inválido.');
+          rule.dayOfMonth = dm;
+        }
+        if (rec.startDate) {
+          var sd = String(rec.startDate).slice(0, 10);
+          if (!DB.agendaParseDay(sd)) throw new Error('Início da recorrência inválido.');
+          rule.startDate = sd;
+        }
+        if (rec.endDate) {
+          var ed = String(rec.endDate).slice(0, 10);
+          if (!DB.agendaParseDay(ed)) throw new Error('Fim da recorrência inválido.');
+          if (rule.startDate && ed < rule.startDate) throw new Error('Fim anterior ao início.');
+          rule.endDate = ed;
+        }
+      }
+      var src = String(data.source_type || 'MANUAL').toUpperCase();
+      if (DB.TASK_SOURCES().indexOf(src) < 0) throw new Error('Origem inválida.');
+      var sid = data.source_id != null ? String(data.source_id).slice(0, 120) : null;
+      return { couple_id: cid, title: title, description: desc, visibility: vis, priority: pri, due_date: due, due_time: tm, assigned_to: asg, recurrence: rule, source_type: src, source_id: sid };
+    },
+    createTask: function (userId, data, opt) {
+      DB.requireAuthz(userId, 'task_create', null);
+      opt = opt || {};
+      var v = DB.validateTask(userId, data);
+      var db = read();
+      var t = { id: id('tk'), couple_id: v.couple_id, created_by: userId, owner_user_id: userId, assigned_to: v.assigned_to || userId, title: v.title, description: v.description, visibility: v.visibility, status: 'TODO', priority: v.priority, due_date: v.due_date, due_time: v.due_time, recurrence_type: v.recurrence.type, recurrence_config: v.recurrence, completed_at: null, completed_by: null, source_type: opt.source_type || v.source_type, source_id: opt.source_id != null ? String(opt.source_id).slice(0, 120) : v.source_id, recurrence_parent_id: null, recurrence_date: null, exceptions: [], created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+      db.tasks.push(t);
+      logAudit(db, v.couple_id, userId, 'task', t.id, 'created', { title: t.title, visibility: t.visibility });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'task', { action: 'task_created', entity_type: 'task', entity_id: t.id, metadata: { visibility: t.visibility } }); } catch (e) {}
+      try {
+        if (t.visibility === 'COUPLE' && t.assigned_to && t.assigned_to !== userId) {
+          DB.notifCreate(t.assigned_to, { type: 'task_assigned', title: 'Nova tarefa para você', body: 'Uma tarefa foi atribuída a você: ' + t.title + '.', priority: 'attention', user_id: t.assigned_to, related_entity_type: 'task', related_entity_id: t.id, idempotency_key: ['task', 'assigned', t.couple_id, t.id, t.assigned_to].join('|'), payload: { task_id: t.id } });
+        }
+      } catch (e2) {}
+      return t;
+    },
+    getTask: function (userId, taskId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var t = db.tasks.find(function (x) { return x.id === taskId && x.couple_id === cid && !x.deleted_at; });
+      if (!t || !DB.taskVisible(db, userId, t)) {
+        try { DB.logAuthorizationFailure(userId, 'task_read', { entity_type: 'task', entity_id: taskId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return t;
+    },
+    getTasks: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var today = DB.agendaToday();
+      function statusOf(t) { return t.status === 'ARCHIVED' ? 'ARCHIVED' : t.status; }
+      var rows = db.tasks.filter(function (t) {
+        if (t.couple_id !== cid || t.deleted_at || t.recurrence_parent_id) return false;
+        if (!DB.taskVisible(db, userId, t)) return false;
+        var st = statusOf(t);
+        if (f.status && st !== String(f.status).toUpperCase()) return false;
+        if (!f.include_archived && st === 'ARCHIVED') return false;
+        if (f.visibility && t.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.assigned === 'me' && t.assigned_to !== userId) return false;
+        if (f.assigned === 'unassigned' && t.assigned_to) return false;
+        if (f.assigned_to && t.assigned_to !== f.assigned_to) return false;
+        if (f.search) {
+          var q = String(f.search).toLowerCase();
+          if ((t.title + ' ' + (t.description || '')).toLowerCase().indexOf(q) < 0) return false;
+        }
+        if (f.due === 'today' && t.due_date !== today) return false;
+        if (f.due === 'nodate' && t.due_date) return false;
+        return true;
+      });
+      function rank(t) {
+        if (DB.taskIsOverdue(t, today)) return 0;
+        if (t.due_date === today) return 1;
+        if (t.due_date && t.due_date > today) return 2;
+        return 3;
+      }
+      var pw = { HIGH: 0, NORMAL: 1, LOW: 2 };
+      rows.sort(function (a, b) {
+        var r = rank(a) - rank(b);
+        if (r) return r;
+        if ((a.due_date || '9999') !== (b.due_date || '9999')) return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1;
+        if ((a.due_time || '99') !== (b.due_time || '99')) return (a.due_time || '99') < (b.due_time || '99') ? -1 : 1;
+        var pr = ((pw[a.priority] == null ? 1 : pw[a.priority]) - (pw[b.priority] == null ? 1 : pw[b.priority]));
+        if (pr) return pr;
+        return (a.created_at + a.id).localeCompare(b.created_at + b.id);
+      });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    getPersonalTasks: function (userId, f) { return DB.getTasks(userId, Object.assign({}, f, { visibility: 'PERSONAL' })); },
+    getCoupleTasks: function (userId, f) { return DB.getTasks(userId, Object.assign({}, f, { visibility: 'COUPLE' })); },
+    getAssignedTasks: function (userId, f) { return DB.getTasks(userId, Object.assign({}, f, { assigned: 'me' })); },
+    taskExpandDates: function (t, from, to) {
+      var out = [], guard = 0;
+      var freq = t.recurrence_type || 'NONE';
+      var cfg = t.recurrence_config || {};
+      var anchor = cfg.startDate || (t.created_at || '').slice(0, 10) || t.due_date || from;
+      if (freq === 'NONE') {
+        if (t.due_date && t.due_date >= from && t.due_date <= to) out.push(t.due_date);
+        return out;
+      }
+      var start = anchor > from ? anchor : from;
+      var end = cfg.endDate && cfg.endDate < to ? cfg.endDate : to;
+      if (start > end) return out;
+      function match(d) {
+        var age = DB.agendaParseDay(d);
+        if (freq === 'DAILY') return true;
+        if (freq === 'WEEKLY') {
+          var a0 = DB.agendaParseDay(anchor);
+          var dt = new Date(age.y, age.m - 1, age.d), a0d = new Date(a0.y, a0.m - 1, a0.d);
+          var diff = Math.round((dt - a0d) / 864e5);
+          if (diff < 0 || (diff % (cfg.interval || 1)) !== 0) return false;
+          return (dt.getDay() === a0d.getDay());
+        }
+        if (freq === 'MONTHLY') {
+          var want = cfg.dayOfMonth || DB.agendaParseDay(anchor).d;
+          var dim = DB.agendaDim(age.y, age.m);
+          return age.d === (want > dim ? dim : want);
+        }
+        if (freq === 'SPECIFIC_DAYS') {
+          var dtx = new Date(age.y, age.m - 1, age.d);
+          return (cfg.daysOfWeek || []).indexOf(dtx.getDay()) >= 0;
+        }
+        return false;
+      }
+      var cur = start;
+      while (cur <= end && guard++ < 400) {
+        if (match(cur)) out.push(cur);
+        cur = DB.agendaAddDays(cur, 1);
+      }
+      return out;
+    },
+    taskOccurrences: function (userId, from, to, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var out = [];
+      var today = DB.agendaToday();
+      var series = db.tasks.filter(function (t) { return t.couple_id === cid && !t.deleted_at && !t.recurrence_parent_id && DB.taskVisible(db, userId, t); });
+      if (opt.visibility) series = series.filter(function (t) { return t.visibility === opt.visibility; });
+      if (opt.assigned === 'me') series = series.filter(function (t) { return t.assigned_to === userId; });
+      series.forEach(function (t) {
+        if (t.status === 'ARCHIVED') return;
+        var kids = {};
+        db.tasks.forEach(function (k) {
+          if (k.recurrence_parent_id === t.id && !k.deleted_at && k.recurrence_date) kids[k.recurrence_date] = k;
+        });
+        var skip = {};
+        (t.exceptions || []).forEach(function (x) { if (x.action === 'skip') skip[x.date] = true; });
+        DB.taskExpandDates(t, from, to).forEach(function (d) {
+          if (skip[d]) return;
+          var k = kids[d];
+          var st = k ? k.status : t.status;
+          if (st === 'ARCHIVED') return;
+          if (opt.hide_completed && st === 'COMPLETED') return;
+          if (opt.hide_cancelled !== false && st === 'CANCELLED') return;
+          var od = { due_date: d, status: st };
+          out.push({ key: 't:' + t.id + (t.recurrence_type !== 'NONE' ? '@' + d : ''), task_id: t.id, occurrence_id: k ? k.id : null, date: d, title: k ? (k.title || t.title) : t.title, description: k ? (k.description || t.description) : t.description, status: st, priority: t.priority, visibility: t.visibility, assigned_to: t.assigned_to, owner_user_id: t.owner_user_id, due_time: t.due_time, is_recurring: t.recurrence_type !== 'NONE', is_override: !!k, completed_at: k ? k.completed_at : t.completed_at, completed_by: k ? k.completed_by : t.completed_by, overdue: DB.taskIsOverdue(od, today) });
+        });
+      });
+      out.sort(function (a, b) {
+        var oa = a.overdue ? 0 : (a.date === today ? 1 : 2), ob = b.overdue ? 0 : (b.date === today ? 1 : 2);
+        if (oa !== ob) return oa - ob;
+        return (a.date + (a.due_time || '') + a.key).localeCompare(b.date + (b.due_time || '') + b.key);
+      });
+      if (opt.limit) out = out.slice(0, opt.limit);
+      return out;
+    },
+    getTodayTasks: function (userId) { return DB.taskOccurrences(userId, DB.agendaToday(), DB.agendaToday(), {}); },
+    getTomorrowTasks: function (userId) { var t = DB.agendaAddDays(DB.agendaToday(), 1); return DB.taskOccurrences(userId, t, t, {}); },
+    getWeekTasks: function (userId, date) { var w = DB.ovWeekRange(date); return DB.taskOccurrences(userId, w[0], w[6], {}); },
+    getUpcomingTasks: function (userId, days, limit) { return DB.taskOccurrences(userId, DB.agendaToday(), DB.agendaAddDays(DB.agendaToday(), days || 7), { hide_completed: true, limit: limit || 20 }); },
+    getOverdueTasks: function (userId, limit) {
+      var out = DB.taskOccurrences(userId, '0000-01-01', DB.agendaAddDays(DB.agendaToday(), -1), { hide_completed: true, limit: limit || 50 });
+      return out.filter(function (o) { return o.overdue; });
+    },
+    taskTodayStatus: function (userId, date) {
+      var d = date || DB.agendaToday();
+      var occs = DB.taskOccurrences(userId, '0000-01-01', d, {}).filter(function (o) {
+        return (o.date === d || o.overdue) && o.status !== 'COMPLETED';
+      });
+      var done = DB.taskOccurrences(userId, d, d, {}).filter(function (o) { return o.status === 'COMPLETED'; }).length;
+      return { date: d, total: occs.length, done: done, overdue: occs.filter(function (o) { return o.overdue; }).length, items: occs.slice(0, 8).map(function (o) { return { key: o.key, task_id: o.task_id, date: o.date, title: o.title, due_time: o.due_time, done: o.status === 'COMPLETED', overdue: o.overdue, visibility: o.visibility, assigned_to: o.assigned_to }; }) };
+    },
+    taskWriteGuard: function (db, userId, taskId) {
+      var cid = DB.myCoupleId(userId);
+      var t = db.tasks.find(function (x) { return x.id === taskId && x.couple_id === cid && !x.deleted_at; });
+      if (!t || !DB.taskCanAct(db, userId, t)) {
+        try { DB.logAuthorizationFailure(userId, 'task_write', { entity_type: 'task', entity_id: taskId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return t;
+    },
+    updateTask: function (userId, taskId, data, opt) {
+      DB.requireAuthz(userId, 'task_update', null);
+      opt = opt || {};
+      var db = read();
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      data = data || {};
+      if (t.recurrence_type !== 'NONE' && opt.scope === 'single' && opt.date) {
+        if (!DB.agendaParseDay(opt.date)) throw new Error('Data inválida.');
+        var cur = { title: t.title, description: t.description, due_time: t.due_time, priority: t.priority, assigned_to: t.assigned_to };
+        ['title', 'description', 'due_time', 'priority', 'assigned_to'].forEach(function (k) { if (data[k] !== undefined) cur[k] = data[k]; });
+        var v = DB.validateTask(userId, { title: cur.title, description: cur.description, visibility: t.visibility, priority: cur.priority, due_date: opt.date, due_time: cur.due_time, assigned_to: cur.assigned_to });
+        var kid = db.tasks.filter(function (x) { return x.recurrence_parent_id === t.id && x.recurrence_date === opt.date && !x.deleted_at; })[0];
+        if (!kid) {
+          kid = { id: id('tk'), couple_id: t.couple_id, created_by: userId, owner_user_id: t.owner_user_id, assigned_to: v.assigned_to, title: v.title, description: v.description, visibility: t.visibility, status: 'TODO', priority: v.priority, due_date: opt.date, due_time: v.due_time, recurrence_type: 'NONE', recurrence_config: { type: 'NONE' }, completed_at: null, completed_by: null, source_type: t.source_type, source_id: t.source_id, recurrence_parent_id: t.id, recurrence_date: opt.date, exceptions: [], created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+          db.tasks.push(kid);
+        } else {
+          kid.title = v.title; kid.description = v.description; kid.priority = v.priority; kid.due_time = v.due_time; kid.assigned_to = v.assigned_to; kid.updated_at = now();
+        }
+        logAudit(db, t.couple_id, userId, 'task', kid.id, 'occurrence_updated', { date: opt.date });
+        write(db);
+        return kid;
+      }
+      if (t.recurrence_type !== 'NONE' && opt.scope === 'following' && opt.date) {
+        if (!DB.agendaParseDay(opt.date)) throw new Error('Data inválida.');
+        t.recurrence_config = t.recurrence_config || {};
+        t.recurrence_config.endDate = DB.agendaAddDays(opt.date, -1);
+        var patch = { title: t.title, description: t.description, visibility: t.visibility, priority: t.priority, due_date: opt.date, due_time: t.due_time, assigned_to: t.assigned_to, recurrence: { type: t.recurrence_type, interval: (t.recurrence_config || {}).interval || 1, daysOfWeek: (t.recurrence_config || {}).daysOfWeek || [], dayOfMonth: (t.recurrence_config || {}).dayOfMonth, startDate: opt.date, endDate: null } };
+        ['title', 'description', 'visibility', 'priority', 'due_time', 'assigned_to'].forEach(function (k) { if (data[k] !== undefined) patch[k] = data[k]; });
+        var v2 = DB.validateTask(userId, patch);
+        var nt = { id: id('tk'), couple_id: t.couple_id, created_by: userId, owner_user_id: t.owner_user_id, assigned_to: v2.assigned_to || t.owner_user_id, title: v2.title, description: v2.description, visibility: v2.visibility, status: 'TODO', priority: v2.priority, due_date: v2.due_date, due_time: v2.due_time, recurrence_type: v2.recurrence.type, recurrence_config: v2.recurrence, completed_at: null, completed_by: null, source_type: t.source_type, source_id: t.source_id, recurrence_parent_id: null, recurrence_date: null, exceptions: [], created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+        db.tasks.push(nt);
+        t.updated_at = now();
+        logAudit(db, t.couple_id, userId, 'task', t.id, 'series_split', { from: opt.date, new_series: nt.id });
+        write(db);
+        return nt;
+      }
+      var merged = { title: t.title, description: t.description, visibility: t.visibility, priority: t.priority, due_date: t.due_date, due_time: t.due_time, assigned_to: t.assigned_to, recurrence: { type: t.recurrence_type, interval: (t.recurrence_config || {}).interval || 1, daysOfWeek: (t.recurrence_config || {}).daysOfWeek || [], dayOfMonth: (t.recurrence_config || {}).dayOfMonth, startDate: (t.recurrence_config || {}).startDate, endDate: (t.recurrence_config || {}).endDate } };
+      var visBefore = t.visibility, asgBefore = t.assigned_to;
+      Object.keys(data).forEach(function (k) { if (data[k] !== undefined && merged.hasOwnProperty(k)) merged[k] = data[k]; });
+      var vv = DB.validateTask(userId, merged);
+      Object.keys(vv).forEach(function (k) { if (k !== 'couple_id' && k !== 'recurrence') t[k] = vv[k]; });
+      t.recurrence_type = vv.recurrence.type; t.recurrence_config = vv.recurrence;
+      t.updated_at = now();
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'updated', { title: t.title });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'task', { action: 'task_updated', entity_type: 'task', entity_id: t.id }); } catch (e) {}
+      if (visBefore !== t.visibility) {
+        try { DB.logSecurityEvent(userId, 'task', { action: t.visibility === 'COUPLE' ? 'task_shared' : 'task_privatized', entity_type: 'task', entity_id: t.id, metadata: { from: visBefore, to: t.visibility } }); } catch (e2) {}
+      }
+      if (t.visibility === 'COUPLE' && t.assigned_to && t.assigned_to !== asgBefore && t.assigned_to !== userId) {
+        try {
+          DB.notifCreate(t.assigned_to, { type: 'task_assigned', title: 'Tarefa atribuída a você', body: 'Uma tarefa foi atribuída a você: ' + t.title + '.', priority: 'attention', user_id: t.assigned_to, related_entity_type: 'task', related_entity_id: t.id, idempotency_key: ['task', 'assigned', t.couple_id, t.id, t.assigned_to, 'upd'].join('|'), payload: { task_id: t.id } });
+        } catch (e3) {}
+      }
+      return t;
+    },
+    completeTask: function (userId, ref, opt) {
+      DB.requireAuthz(userId, 'task_complete', null);
+      var db = read();
+      var taskId = typeof ref === 'string' ? ref : ref.task_id;
+      var date = typeof ref === 'string' ? null : (ref.date || null);
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      if (t.recurrence_type !== 'NONE' && date) {
+        if (!DB.agendaParseDay(date)) throw new Error('Data inválida.');
+        var kid = db.tasks.filter(function (x) { return x.recurrence_parent_id === t.id && x.recurrence_date === date && !x.deleted_at; })[0];
+        if (kid && kid.status === 'COMPLETED') return kid;
+        if (!kid) {
+          kid = { id: id('tk'), couple_id: t.couple_id, created_by: userId, owner_user_id: t.owner_user_id, assigned_to: t.assigned_to, title: t.title, description: t.description, visibility: t.visibility, status: 'COMPLETED', priority: t.priority, due_date: date, due_time: t.due_time, recurrence_type: 'NONE', recurrence_config: { type: 'NONE' }, completed_at: now(), completed_by: userId, source_type: t.source_type, source_id: t.source_id, recurrence_parent_id: t.id, recurrence_date: date, exceptions: [], created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+          db.tasks.push(kid);
+        } else { kid.status = 'COMPLETED'; kid.completed_at = now(); kid.completed_by = userId; kid.updated_at = now(); }
+        logAudit(db, t.couple_id, userId, 'task', kid.id, 'occurrence_completed', { date: date });
+        write(db);
+        try { DB.taskNotifyCompleted(userId, t); } catch (e) {}
+        return kid;
+      }
+      if (t.status === 'COMPLETED') return t;
+      t.status = 'COMPLETED'; t.completed_at = now(); t.completed_by = userId; t.updated_at = now();
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'completed', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'task', { action: 'task_completed', entity_type: 'task', entity_id: t.id }); } catch (e2) {}
+      try { DB.taskNotifyCompleted(userId, t); } catch (e3) {}
+      return t;
+    },
+    taskNotifyCompleted: function (actorId, t) {
+      if (t.visibility !== 'COUPLE') return;
+      var db = read();
+      db.members.filter(function (m) { return m.couple_id === t.couple_id && m.user_id !== actorId; }).forEach(function (m) {
+        try {
+          DB.notifCreate(m.user_id, { type: 'task_completed', title: 'Tarefa concluída', body: '"' + t.title + '" foi marcada como concluída.', priority: 'info', user_id: m.user_id, related_entity_type: 'task', related_entity_id: t.id, idempotency_key: ['task', 'completed', t.couple_id, t.id, actorId].join('|'), payload: { task_id: t.id } });
+        } catch (e) {}
+      });
+    },
+    reopenTask: function (userId, ref) {
+      DB.requireAuthz(userId, 'task_reopen', null);
+      var db = read();
+      var taskId = typeof ref === 'string' ? ref : ref.task_id;
+      var date = typeof ref === 'string' ? null : (ref.date || null);
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      if (t.recurrence_type !== 'NONE' && date) {
+        var ix = db.tasks.findIndex(function (x) { return x.recurrence_parent_id === t.id && x.recurrence_date === date && !x.deleted_at; });
+        if (ix >= 0) {
+          var kid = db.tasks[ix];
+          if (kid.status === 'COMPLETED' && (kid.title !== t.title || kid.description !== t.description)) {
+            kid.status = 'TODO'; kid.completed_at = null; kid.completed_by = null; kid.updated_at = now();
+          } else db.tasks.splice(ix, 1);
+          logAudit(db, t.couple_id, userId, 'task', t.id, 'occurrence_reopened', { date: date });
+          write(db);
+        }
+        return t;
+      }
+      t.status = 'TODO'; t.completed_at = null; t.completed_by = null; t.updated_at = now();
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'reopened', {});
+      write(db);
+      return t;
+    },
+    cancelTask: function (userId, ref) {
+      DB.requireAuthz(userId, 'task_cancel', null);
+      var db = read();
+      var taskId = typeof ref === 'string' ? ref : ref.task_id;
+      var date = typeof ref === 'string' ? null : (ref.date || null);
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      if (t.recurrence_type !== 'NONE' && date) {
+        var kid = db.tasks.filter(function (x) { return x.recurrence_parent_id === t.id && x.recurrence_date === date && !x.deleted_at; })[0];
+        if (!kid) {
+          kid = { id: id('tk'), couple_id: t.couple_id, created_by: userId, owner_user_id: t.owner_user_id, assigned_to: t.assigned_to, title: t.title, description: t.description, visibility: t.visibility, status: 'CANCELLED', priority: t.priority, due_date: date, due_time: t.due_time, recurrence_type: 'NONE', recurrence_config: { type: 'NONE' }, completed_at: null, completed_by: null, source_type: t.source_type, source_id: t.source_id, recurrence_parent_id: t.id, recurrence_date: date, exceptions: [], created_at: now(), updated_at: now(), archived_at: null, deleted_at: null };
+          db.tasks.push(kid);
+        } else { kid.status = 'CANCELLED'; kid.updated_at = now(); }
+        logAudit(db, t.couple_id, userId, 'task', kid.id, 'occurrence_cancelled', { date: date });
+        write(db);
+        return kid;
+      }
+      t.status = 'CANCELLED'; t.updated_at = now();
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'cancelled', {});
+      write(db);
+      return t;
+    },
+    archiveTask: function (userId, taskId) {
+      DB.requireAuthz(userId, 'task_archive', null);
+      var db = read();
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      if (t.recurrence_parent_id) throw new Error('Arquive a tarefa principal.');
+      t.status = 'ARCHIVED'; t.archived_at = now(); t.updated_at = now();
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'archived', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'task', { action: 'task_archived', entity_type: 'task', entity_id: t.id }); } catch (e) {}
+      return t;
+    },
+    deleteTask: function (userId, taskId) {
+      DB.requireAuthz(userId, 'task_delete', null);
+      var db = read();
+      var t = DB.taskWriteGuard(db, userId, taskId);
+      if (t.recurrence_parent_id) throw new Error('Exclua a tarefa principal.');
+      t.deleted_at = now(); t.updated_at = now();
+      db.tasks.forEach(function (k) { if (k.recurrence_parent_id === t.id && !k.deleted_at) { k.deleted_at = now(); k.updated_at = now(); } });
+      logAudit(db, t.couple_id, userId, 'task', t.id, 'deleted', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'task', { action: 'task_deleted', entity_type: 'task', entity_id: t.id }); } catch (e) {}
+      return true;
+    },
+    assignTask: function (userId, taskId, assigneeId) {
+      return DB.updateTask(userId, taskId, { assigned_to: assigneeId || null });
+    },
+    unassignTask: function (userId, taskId) {
+      return DB.updateTask(userId, taskId, { assigned_to: null });
+    },
+    taskProcessDue: function (userId, nowISO) {
+      var today = (nowISO || now()).slice(0, 10);
+      var made = [];
+      DB.taskOccurrences(userId, '0000-01-01', today, {}).forEach(function (o) {
+        if (o.status === 'COMPLETED' || o.status === 'CANCELLED') return;
+        var isDue = o.date === today, isOver = o.date < today;
+        if (!isDue && !isOver) return;
+        try {
+          var type = isOver ? 'task_overdue' : 'task_due';
+          var r = DB.notifCreate(userId, { type: type, title: isOver ? 'Tarefa atrasada: ' + o.title : 'Tarefa para hoje: ' + o.title, body: isOver ? '"' + o.title + '" estava prevista para ' + o.date.split('-').reverse().join('/') + '.' : '"' + o.title + '"' + (o.due_time ? ' às ' + o.due_time : '') + ' está prevista para hoje.', priority: isOver ? 'attention' : 'info', user_id: userId, related_entity_type: 'task', related_entity_id: o.task_id, idempotency_key: ['task', type, o.task_id, o.date].join('|'), payload: { task_id: o.task_id, date: o.date } });
+          if (r && r.id) made.push(r.id);
+        } catch (e) {}
+      });
+      return made;
+    },
+    /* ============ LISTAS (organizar itens; fonte oficial ListService) ============
+       Lista organiza itens; tarefa organiza ações. Nunca cria finança nem
+       tarefa automática. Conversão p/ tarefa só explícita via createListTask
+       (reusa TaskService + linked_task_id). RLS por visibilidade. */
+    LIST_TYPES: function () { return ['GENERAL', 'SHOPPING', 'CHECKLIST']; },
+    LIST_STATUSES: function () { return ['ACTIVE', 'COMPLETED', 'ARCHIVED']; },
+    listVisible: function (db, userId, l) {
+      if (!l || l.deleted_at) return false;
+      if (l.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return l.owner_user_id === userId;
+    },
+    listCanAct: function (db, userId, l) {
+      if (!DB.listVisible(db, userId, l)) return false;
+      if (l.visibility === 'COUPLE') return true;
+      return l.owner_user_id === userId;
+    },
+    listWriteGuard: function (db, userId, listId) {
+      var cid = DB.myCoupleId(userId);
+      var l = db.lists.find(function (x) { return x.id === listId && x.couple_id === cid && !x.deleted_at; });
+      if (!l || !DB.listCanAct(db, userId, l)) {
+        try { DB.logAuthorizationFailure(userId, 'list_write', { entity_type: 'list', entity_id: listId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return l;
+    },
+    listItemGuard: function (db, userId, itemId) {
+      var cid = DB.myCoupleId(userId);
+      var it = db.list_items.find(function (x) { return x.id === itemId && !x.deleted_at; });
+      if (!it) { try { DB.logAuthorizationFailure(userId, 'list_item_read', { entity_type: 'list_item', entity_id: itemId }); } catch (e) {} throw new Error('Acesso negado.'); }
+      var l = db.lists.find(function (x) { return x.id === it.list_id && x.couple_id === cid && !x.deleted_at; });
+      if (!l || !DB.listCanAct(db, userId, l)) {
+        try { DB.logAuthorizationFailure(userId, 'list_item_write', { entity_type: 'list_item', entity_id: itemId }); } catch (e2) {}
+        throw new Error('Acesso negado.');
+      }
+      return { item: it, list: l };
+    },
+    validateList: function (userId, data) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var name = String(data.name || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name.length < 2) throw new Error('Dê um nome à lista.');
+      if (name.length > 80) throw new Error('Nome muito longo (máx 80 caracteres).');
+      var desc = String(data.description || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var tp = String(data.list_type || 'GENERAL').toUpperCase();
+      if (DB.LIST_TYPES().indexOf(tp) < 0) throw new Error('Tipo inválido.');
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      return { couple_id: cid, name: name, description: desc, list_type: tp, visibility: vis };
+    },
+    validateListItem: function (userId, data) {
+      data = data || {};
+      var title = String(data.title || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title.length < 1) throw new Error('Descreva o item.');
+      if (title.length > 140) throw new Error('Item muito longo (máx 140 caracteres).');
+      var desc = String(data.description || '').replace(/[ -]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var q = null;
+      if (data.quantity != null && data.quantity !== '') {
+        q = Number(String(data.quantity).replace(',', '.'));
+        if (!isFinite(q) || q <= 0 || q > 999999) throw new Error('Quantidade inválida.');
+        q = Math.round(q * 1000) / 1000;
+      }
+      var unit = data.unit != null && String(data.unit).trim() !== '' ? String(data.unit).trim().slice(0, 20) : null;
+      return { title: title, description: desc, quantity: q, unit: unit };
+    },
+    createList: function (userId, data, opt) {
+      DB.requireAuthz(userId, 'list_create', null);
+      opt = opt || {};
+      var v = DB.validateList(userId, data);
+      var db = read();
+      var l = { id: id('lst'), couple_id: v.couple_id, created_by: userId, owner_user_id: userId, name: v.name, description: v.description, list_type: v.list_type, visibility: v.visibility, status: 'ACTIVE', created_at: now(), updated_at: now(), archived_at: null, deleted_at: null, source_type: opt.source_type || 'MANUAL', source_id: opt.source_id || null };
+      db.lists.push(l);
+      logAudit(db, v.couple_id, userId, 'list', l.id, 'created', { name: l.name, visibility: l.visibility, list_type: l.list_type });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'list', { action: 'list_created', entity_type: 'list', entity_id: l.id, metadata: { visibility: l.visibility } }); } catch (e) {}
+      try { DB.emitListEvent(userId, 'list_created', l, {}); } catch (e2) {}
+      return l;
+    },
+    getList: function (userId, listId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var l = db.lists.find(function (x) { return x.id === listId && x.couple_id === cid && !x.deleted_at; });
+      if (!l || !DB.listVisible(db, userId, l)) {
+        try { DB.logAuthorizationFailure(userId, 'list_read', { entity_type: 'list', entity_id: listId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return l;
+    },
+    getLists: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.lists.filter(function (l) {
+        if (l.couple_id !== cid || l.deleted_at) return false;
+        if (!DB.listVisible(db, userId, l)) return false;
+        if (f.status && l.status !== String(f.status).toUpperCase()) return false;
+        if (!f.include_archived && l.status === 'ARCHIVED') return false;
+        if (f.visibility && l.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.list_type && l.list_type !== String(f.list_type).toUpperCase()) return false;
+        if (f.search) {
+          var q = String(f.search).toLowerCase();
+          var items = db.list_items.filter(function (it) { return it.list_id === l.id && !it.deleted_at; });
+          var hay = (l.name + ' ' + (l.description || '') + ' ' + items.map(function (it) { return it.title; }).join(' ')).toLowerCase();
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+      rows.sort(function (a, b) { return (b.updated_at + b.id).localeCompare(a.updated_at + a.id); });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    getPersonalLists: function (userId, f) { return DB.getLists(userId, Object.assign({}, f, { visibility: 'PERSONAL' })); },
+    getCoupleLists: function (userId, f) { return DB.getLists(userId, Object.assign({}, f, { visibility: 'COUPLE' })); },
+    searchLists: function (userId, q, limit) { return DB.getLists(userId, { search: q, limit: limit || 20 }); },
+    searchListItems: function (userId, q, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid || !q) return [];
+      var needle = String(q).toLowerCase();
+      var out = [];
+      db.list_items.forEach(function (it) {
+        if (it.deleted_at || it.title.toLowerCase().indexOf(needle) < 0) return;
+        var l = db.lists.find(function (x) { return x.id === it.list_id && x.couple_id === cid && !x.deleted_at; });
+        if (!l || !DB.listVisible(db, userId, l)) return;
+        out.push({ list_id: l.id, list_name: l.name, item_id: it.id, title: it.title, checked: !!it.checked });
+      });
+      return out.slice(0, limit || 20);
+    },
+    updateList: function (userId, listId, data) {
+      DB.requireAuthz(userId, 'list_update', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      data = data || {};
+      var visBefore = l.visibility;
+      var merged = { name: l.name, description: l.description, list_type: l.list_type, visibility: l.visibility };
+      Object.keys(data).forEach(function (k) { if (data[k] !== undefined && merged.hasOwnProperty(k)) merged[k] = data[k]; });
+      var v = DB.validateList(userId, merged);
+      l.name = v.name; l.description = v.description; l.list_type = v.list_type; l.visibility = v.visibility;
+      l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'updated', { name: l.name });
+      write(db);
+      if (visBefore !== l.visibility) {
+        try { DB.logSecurityEvent(userId, 'list', { action: l.visibility === 'COUPLE' ? 'list_shared' : 'list_privatized', entity_type: 'list', entity_id: l.id, metadata: { from: visBefore, to: l.visibility } }); } catch (e) {}
+      }
+      try { DB.emitListEvent(userId, 'list_updated', l, {}); } catch (e2) {}
+      return l;
+    },
+    completeList: function (userId, listId) {
+      DB.requireAuthz(userId, 'list_update', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      l.status = 'COMPLETED'; l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'completed', {});
+      write(db);
+      try { DB.emitListEvent(userId, 'list_completed', l, {}); } catch (e) {}
+      return l;
+    },
+    reopenList: function (userId, listId) {
+      DB.requireAuthz(userId, 'list_update', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      l.status = 'ACTIVE'; l.archived_at = null; l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'reopened', {});
+      write(db);
+      return l;
+    },
+    archiveList: function (userId, listId) {
+      DB.requireAuthz(userId, 'list_archive', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      l.status = 'ARCHIVED'; l.archived_at = now(); l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'archived', {});
+      write(db);
+      try { DB.emitListEvent(userId, 'list_archived', l, {}); } catch (e) {}
+      return l;
+    },
+    deleteList: function (userId, listId) {
+      DB.requireAuthz(userId, 'list_delete', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      l.deleted_at = now(); l.updated_at = now();
+      db.list_items.forEach(function (it) { if (it.list_id === l.id && !it.deleted_at) { it.deleted_at = now(); it.updated_at = now(); } });
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'deleted', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'list', { action: 'list_deleted', entity_type: 'list', entity_id: l.id }); } catch (e) {}
+      return true;
+    },
+    getListItems: function (userId, listId, opt) {
+      opt = opt || {};
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      void l;
+      var rows = db.list_items.filter(function (it) { return it.list_id === listId && !it.deleted_at; });
+      if (opt.hide_checked) rows = rows.filter(function (it) { return !it.checked; });
+      rows.sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)) || (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+      return rows;
+    },
+    listNextPosition: function (db, listId) {
+      var max = -1;
+      db.list_items.forEach(function (it) { if (it.list_id === listId && !it.deleted_at && it.position != null && it.position > max) max = it.position; });
+      return max + 1;
+    },
+    addItem: function (userId, listId, data, opt) {
+      DB.requireAuthz(userId, 'list_item_add', null);
+      opt = opt || {};
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      var v = DB.validateListItem(userId, data || {});
+      var asg = (data && (data.assigned_to !== undefined)) ? data.assigned_to : null;
+      if (asg) {
+        asg = String(asg);
+        if (!db.members.some(function (m) { return m.couple_id === l.couple_id && m.user_id === asg; })) throw new Error('Responsável inválido.');
+      } else asg = null;
+      if (opt.idempotency_key) {
+        var dup = db.list_items.find(function (it) { return it.list_id === listId && !it.deleted_at && it.idempotency_key === String(opt.idempotency_key).slice(0, 120); });
+        if (dup) return dup;
+      }
+      var it = { id: id('li'), list_id: listId, created_by: userId, assigned_to: asg, title: v.title, description: v.description, quantity: v.quantity, unit: v.unit, checked: false, checked_at: null, checked_by: null, position: DB.listNextPosition(db, listId), linked_task_id: null, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, created_at: now(), updated_at: now(), deleted_at: null };
+      db.list_items.push(it);
+      l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list_item', it.id, 'added', { list_id: listId, title: it.title });
+      write(db);
+      try { DB.emitListEvent(userId, 'list_item_added', l, { item_id: it.id }); } catch (e) {}
+      if (l.visibility === 'COUPLE' && asg && asg !== userId) {
+        try {
+          DB.notifCreate(asg, { type: 'list_item_assigned', title: 'Item atribuído a você', body: '"' + it.title + '" (' + l.name + ') foi atribuído a você.', priority: 'attention', user_id: asg, related_entity_type: 'list', related_entity_id: l.id, idempotency_key: ['list', 'assigned', l.couple_id, it.id, asg].join('|'), payload: { list_id: l.id, item_id: it.id } });
+        } catch (e2) {}
+      }
+      return it;
+    },
+    addItemsBulk: function (userId, listId, arr, opt) {
+      arr = arr || [];
+      if (!arr.length) return [];
+      if (arr.length > 50) throw new Error('Muitos itens de uma vez (máx 50).');
+      var out = [];
+      arr.forEach(function (d, ix) {
+        out.push(DB.addItem(userId, listId, d, Object.assign({}, opt, { idempotency_key: (opt && opt.idempotency_key ? opt.idempotency_key + ':' + ix : undefined) })));
+      });
+      return out;
+    },
+    updateItem: function (userId, itemId, data) {
+      DB.requireAuthz(userId, 'list_item_update', null);
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      var it = g.item;
+      data = data || {};
+      var v = DB.validateListItem(userId, { title: data.title !== undefined ? data.title : it.title, description: data.description !== undefined ? data.description : it.description, quantity: data.quantity !== undefined ? data.quantity : it.quantity, unit: data.unit !== undefined ? data.unit : it.unit });
+      it.title = v.title; it.description = v.description; it.quantity = v.quantity; it.unit = v.unit;
+      if (data.assigned_to !== undefined) {
+        var asg = data.assigned_to ? String(data.assigned_to) : null;
+        if (asg && !db.members.some(function (m) { return m.couple_id === g.list.couple_id && m.user_id === asg; })) throw new Error('Responsável inválido.');
+        var before = it.assigned_to;
+        it.assigned_to = asg;
+        if (g.list.visibility === 'COUPLE' && asg && asg !== before && asg !== userId) {
+          try { DB.notifCreate(asg, { type: 'list_item_assigned', title: 'Item atribuído a você', body: '"' + it.title + '" (' + g.list.name + ') foi atribuído a você.', priority: 'attention', user_id: asg, related_entity_type: 'list', related_entity_id: g.list.id, idempotency_key: ['list', 'assigned', g.list.couple_id, it.id, asg, 'upd'].join('|'), payload: { list_id: g.list.id, item_id: it.id } }); } catch (e) {}
+        }
+        try { DB.emitListEvent(userId, 'list_item_assigned', g.list, { item_id: it.id }); } catch (e2) {}
+      }
+      it.updated_at = now(); g.list.updated_at = now();
+      logAudit(db, g.list.couple_id, userId, 'list_item', it.id, 'updated', { title: it.title });
+      write(db);
+      try { DB.emitListEvent(userId, 'list_item_updated', g.list, { item_id: it.id }); } catch (e3) {}
+      return it;
+    },
+    removeItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'list_item_remove', null);
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      g.item.deleted_at = now(); g.item.updated_at = now(); g.list.updated_at = now();
+      logAudit(db, g.list.couple_id, userId, 'list_item', g.item.id, 'removed', {});
+      write(db);
+      try { DB.emitListEvent(userId, 'list_item_removed', g.list, { item_id: g.item.id }); } catch (e) {}
+      return true;
+    },
+    checkItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'list_item_check', null);
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      if (!g.item.checked) {
+        g.item.checked = true; g.item.checked_at = now(); g.item.checked_by = userId; g.item.updated_at = now(); g.list.updated_at = now();
+        logAudit(db, g.list.couple_id, userId, 'list_item', g.item.id, 'checked', {});
+        write(db);
+        try { DB.emitListEvent(userId, 'list_item_checked', g.list, { item_id: g.item.id }); } catch (e) {}
+      }
+      return g.item;
+    },
+    uncheckItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'list_item_check', null);
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      if (g.item.checked) {
+        g.item.checked = false; g.item.checked_at = null; g.item.checked_by = null; g.item.updated_at = now(); g.list.updated_at = now();
+        logAudit(db, g.list.couple_id, userId, 'list_item', g.item.id, 'unchecked', {});
+        write(db);
+        try { DB.emitListEvent(userId, 'list_item_unchecked', g.list, { item_id: g.item.id }); } catch (e) {}
+      }
+      return g.item;
+    },
+    assignItem: function (userId, itemId, assigneeId) {
+      DB.requireAuthz(userId, 'list_item_assign', null);
+      return DB.updateItem(userId, itemId, { assigned_to: assigneeId || null });
+    },
+    unassignItem: function (userId, itemId) {
+      return DB.assignItem(userId, itemId, null);
+    },
+    reorderItems: function (userId, listId, order) {
+      DB.requireAuthz(userId, 'list_item_update', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      if (!Array.isArray(order) || !order.length) throw new Error('Ordem inválida.');
+      if (order.length > 500) throw new Error('Lista muito grande para reordenar.');
+      var seen = {};
+      order.forEach(function (iid, ix) {
+        if (seen[iid]) throw new Error('Ordem com item duplicado.');
+        seen[iid] = true;
+        var it = db.list_items.find(function (x) { return x.id === iid && x.list_id === listId && !x.deleted_at; });
+        if (!it) throw new Error('Item não pertence a esta lista.');
+        it.position = ix; it.updated_at = now();
+      });
+      l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'reordered', { count: order.length });
+      write(db);
+      return true;
+    },
+    moveItem: function (userId, itemId, direction) {
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      var rows = db.list_items.filter(function (it) { return it.list_id === g.list.id && !it.deleted_at; });
+      rows.sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)); });
+      var ix = rows.findIndex(function (r) { return r.id === itemId; });
+      var jx = direction === 'up' ? ix - 1 : ix + 1;
+      if (ix < 0 || jx < 0 || jx >= rows.length) return false;
+      var a = rows[ix], b = rows[jx], tp = a.position;
+      a.position = b.position; b.position = tp;
+      a.updated_at = now(); b.updated_at = now(); g.list.updated_at = now();
+      logAudit(db, g.list.couple_id, userId, 'list', g.list.id, 'reordered', { move: itemId });
+      write(db);
+      return true;
+    },
+    clearCheckedItems: function (userId, listId) {
+      DB.requireAuthz(userId, 'list_item_remove', null);
+      var db = read();
+      var l = DB.listWriteGuard(db, userId, listId);
+      var n = 0;
+      db.list_items.forEach(function (it) { if (it.list_id === listId && !it.deleted_at && it.checked) { it.deleted_at = now(); it.updated_at = now(); n++; } });
+      l.updated_at = now();
+      logAudit(db, l.couple_id, userId, 'list', l.id, 'cleared_checked', { count: n });
+      write(db);
+      return n;
+    },
+    getListProgress: function (userId, listId) {
+      var items = DB.getListItems(userId, listId, {});
+      var total = items.length, done = items.filter(function (it) { return it.checked; }).length;
+      return { total: total, done: done, pending: total - done, pct: total ? Math.round(done / total * 100) : 0, label: done + ' de ' + total };
+    },
+    listSummary: function (userId, l) {
+      var p = DB.getListProgress(userId, l.id);
+      return { id: l.id, name: l.name, list_type: l.list_type, visibility: l.visibility, status: l.status, total: p.total, done: p.done, pending: p.pending, pct: p.pct };
+    },
+    getRelevantLists: function (userId, limit) {
+      var rows = DB.getLists(userId, { status: 'ACTIVE', limit: 50 });
+      var scored = rows.map(function (l) {
+        var p = DB.getListProgress(userId, l.id);
+        return { list: l, pending: p.pending, updated: l.updated_at };
+      }).filter(function (s) { return s.pending > 0; });
+      scored.sort(function (a, b) { return (b.updated + '').localeCompare(a.updated + ''); });
+      return scored.slice(0, limit || 3).map(function (s) { return DB.listSummary(userId, s.list); });
+    },
+    emitListEvent: function (userId, kind, list, extra) {
+      extra = extra || {};
+      var db = read();
+      var allowed = ['list_created', 'list_updated', 'list_completed', 'list_archived', 'list_item_added', 'list_item_updated', 'list_item_checked', 'list_item_unchecked', 'list_item_removed', 'list_item_assigned'];
+      if (allowed.indexOf(kind) < 0) return null;
+      logAudit(db, list.couple_id, userId, 'list', list.id, kind, { item_id: extra.item_id || null });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'list', { action: kind, entity_type: 'list', entity_id: list.id }); } catch (e) {}
+      return true;
+    },
+    createListTask: function (userId, itemId, taskData) {
+      DB.requireAuthz(userId, 'task_create', null);
+      var db = read();
+      var g = DB.listItemGuard(db, userId, itemId);
+      if (g.item.linked_task_id) {
+        var ex = db.tasks.find(function (t) { return t.id === g.item.linked_task_id && !t.deleted_at; });
+        if (ex) return ex;
+      }
+      taskData = taskData || {};
+      var t = DB.createTask(userId, {
+        title: taskData.title || g.item.title,
+        description: taskData.description || g.item.description || '',
+        visibility: taskData.visibility || g.list.visibility,
+        priority: taskData.priority || 'NORMAL',
+        due_date: taskData.due_date || null,
+        due_time: taskData.due_time || null,
+        assigned_to: taskData.assigned_to !== undefined ? taskData.assigned_to : (g.item.assigned_to || undefined),
+        source_type: 'MANUAL'
+      }, { source_type: 'MANUAL' });
+      var db2 = read();
+      var it2 = db2.list_items.find(function (x) { return x.id === itemId && !x.deleted_at; });
+      if (it2) { it2.linked_task_id = t.id; it2.updated_at = now(); write(db2); }
+      try { logAudit(read(), g.list.couple_id, userId, 'list_item', itemId, 'task_linked', { task_id: t.id }); } catch (e) {}
+      return t;
+    },
+    aiFindList: function (userId, q) {
+      if (!q) return [];
+      var rows = DB.getLists(userId, { status: 'ACTIVE', limit: 100 });
+      var nq = DB.aiNorm(q);
+      return rows.filter(function (l) { return DB.aiNorm(l.name).indexOf(nq) >= 0 || nq.indexOf(DB.aiNorm(l.name)) >= 0; });
+    },
+    aiFindListItem: function (userId, listId, q) {
+      var items = DB.getListItems(userId, listId, {});
+      var nq = DB.aiNorm(q);
+      return items.filter(function (it) { return DB.aiNorm(it.title).indexOf(nq) >= 0; });
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -9258,7 +10474,12 @@ window.Juntos = window.Juntos || {};
         { key: 'agenda_event_cancelled', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
         { key: 'habit_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'habits' },
         { key: 'habit_due', priority: 'info', channels: ['in_app'], cooldownH: 20, expiresInH: 30, retry: false, maxAttempts: 1, route: 'habits' },
-        { key: 'habit_streak', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 168, expiresInH: 336, retry: false, maxAttempts: 1, route: 'habits' }
+        { key: 'habit_streak', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 168, expiresInH: 336, retry: false, maxAttempts: 1, route: 'habits' },
+        { key: 'task_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'tasks' },
+        { key: 'task_overdue', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
+        { key: 'task_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
+        { key: 'task_completed', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
+        { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' }
       ];
     },
     notifTypeDef: function (type) {
@@ -9739,6 +10960,12 @@ window.Juntos = window.Juntos || {};
           made3.forEach(function (id) { made.push(id); });
         } catch (e2) { /* hábitos indisponíveis: segue */ }
       }
+      if (types.indexOf('task_due') >= 0 || types.indexOf('task_overdue') >= 0) {
+        try {
+          var made4 = DB.taskProcessDue(userId, opt.nowISO || now());
+          made4.forEach(function (id) { made.push(id); });
+        } catch (e3) { /* tarefas indisponíveis: segue */ }
+      }
       DB.notifExpireStale(userId, types, opt);
       return made;
     },
@@ -9779,6 +11006,9 @@ window.Juntos = window.Juntos || {};
         } else if (n.type === 'habit_reminder' || n.type === 'habit_due' || n.type === 'habit_streak') {
           var hh = n.related_entity_id ? (db.habits || []).find(function (x) { return x.id === n.related_entity_id; }) : null;
           if (!hh || !hh.active || DB.habitEffectiveStatus(hh) === 'ARCHIVED') expire(n, 'hábito arquivado');
+        } else if (n.type === 'task_due' || n.type === 'task_overdue' || n.type === 'task_assigned' || n.type === 'task_completed') {
+          var tk = n.related_entity_id ? (db.tasks || []).find(function (x) { return x.id === n.related_entity_id; }) : null;
+          if (!tk || tk.deleted_at || tk.status === 'ARCHIVED' || tk.status === 'COMPLETED' || tk.status === 'CANCELLED') expire(n, 'tarefa resolvida');
         }
       });
       write(db);
@@ -11119,7 +12349,7 @@ window.Juntos = window.Juntos || {};
        duplica: compra+parcela+fatura+pagamento são eventos distintos;
        pagamento/transferência/acerto nunca viram receita/despesa.
        Datas são strings YYYY-MM-DD (sem conversão de timezone). */
-    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda', 'habit'],
+    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda', 'habit', 'task'],
     CALENDAR_STATES: ['realizado', 'previsto', 'planejado', 'pendente', 'vencido', 'pago', 'concluído', 'cancelado', 'pulado', 'info'],
     calValidateFilters: function (userId, opt) {
       opt = opt || {};
@@ -11365,13 +12595,21 @@ window.Juntos = window.Juntos || {};
       /* 12. Agenda: compromissos pessoais + casal (só visíveis; RLS no serviço).
          Financeiro continua vindo das fontes acima; aqui nada é somado. */
       try {
-        var agOcc = DB.agendaOccurrences(userId, from.slice(0, 10), to.slice(0, 10), { vision: f.vision });
-        agOcc.forEach(function (o) {
+        var agOcc = DB.agendaOccurrences(userId, from.slice(0, 10), to.slice(0, 10), { vision: f.vision });        agOcc.forEach(function (o) {
           var who = o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal';
           var st = o.date < f.today ? 'realizado' : 'previsto';
           push(mk({ id: 'ag:' + o.key, event_type: 'agenda', source_type: 'agenda', source_id: o.event_id, title: o.title, description: who + (o.location ? ' • ' + o.location : '') + (o.all_day ? ' • dia inteiro' : ''), event_date: o.date, due_date: o.date, amount: 0, status: st, user_id: o.owner_user_id || null, is_recurring: o.is_recurring, related_entity_type: 'agenda', related_entity_id: o.event_id, metadata: { agenda: true, visibility: o.visibility, all_day: o.all_day, start_at: o.start_at, end_at: o.end_at, occurrence_date: o.date, cash_impact: 0 }, route: '#/agenda' }));
         });
       } catch (e) {}
+      /* 13. Tarefas com prazo: representação da fonte TaskService (sem valor).
+         Tarefas sem data não aparecem aqui; concluídas aparecem como tal. */
+      try {
+        var tkOcc = DB.taskOccurrences(userId, from.slice(0, 10), to.slice(0, 10), {});
+        tkOcc.forEach(function (o) {
+          var tst = o.status === 'COMPLETED' ? 'concluído' : (o.overdue ? 'vencido' : 'previsto');
+          push(mk({ id: 'task:' + o.key, event_type: 'task', source_type: 'task', source_id: o.task_id, title: o.title, description: (o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal') + (o.due_time ? ' • ' + o.due_time : '') + ' • tarefa, sem valor financeiro.', event_date: o.date, due_date: o.date, amount: 0, status: tst, user_id: o.owner_user_id || null, is_recurring: o.is_recurring, related_entity_type: 'task', related_entity_id: o.task_id, metadata: { task: true, visibility: o.visibility, occurrence_date: o.date, cash_impact: 0 }, route: '#/tasks' }));
+        });
+      } catch (e2) {}
       evs.sort(function (a, b) { return (a.event_date + a.id).localeCompare(b.event_date + b.id); });
       return evs;
     },
@@ -11452,6 +12690,7 @@ window.Juntos = window.Juntos || {};
           return { event: ev, actions: [{ label: 'Ver na agenda', route: '#/agenda' }], occurrence: occ };
         } catch (eag) { throw new Error('Evento não encontrado.'); }
       }
+      else if (kind === 'task') actions = [{ label: 'Ver tarefa', route: '#/tasks' }, { label: 'Concluir', route: '#/tasks' }];
       else if (kind === 'plan') actions = [{ label: 'Ver no planejamento', route: ev.route }, { label: 'Registrar despesa', route: '#/transactions' }];
       else actions = [{ label: 'Abrir origem', route: ev.route }];
       return { event: ev, actions: actions };
@@ -12289,6 +13528,33 @@ window.Juntos = window.Juntos || {};
     canExecuteAutomation: function (userId) { return !!DB.authzContext(userId).member; },
     canExecuteAIAction: function (userId) { return !!DB.authzContext(userId).member; },
     canManageWhatsApp: function (userId) { return !!DB.authzContext(userId).member; },
+    canViewList: function (userId, listId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!listId) return true;
+      var db = read();
+      var l = db.lists.find(function (x) { return x.id === listId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!l && DB.listVisible(db, userId, l);
+    },
+    canCreateList: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditList: function (userId, listId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !listId) return !!c.member;
+      var db = read();
+      var l = db.lists.find(function (x) { return x.id === listId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!l && DB.listCanAct(db, userId, l);
+    },
+    canDeleteList: function (userId, listId) { return DB.canEditList(userId, listId); },
+    canAddListItem: function (userId, listId) { return DB.canEditList(userId, listId); },
+    canEditListItem: function (userId, itemId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !itemId) return !!c.member;
+      var db = read();
+      try { DB.listItemGuard(db, userId, itemId); return true; } catch (e) { return false; }
+    },
+    canRemoveListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
+    canCheckListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
+    canAssignListItem: function (userId, itemId) { return DB.canEditListItem(userId, itemId); },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
        financeira (audit_logs). Sem segredos; IP/UA só como hash. */

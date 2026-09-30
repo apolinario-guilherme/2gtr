@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t54</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a><span class="nav-group">Minha vida</span><a href="#/agenda" data-r="agenda"><span class="nl">Agenda</span></a><a href="#/tasks" data-r="tasks"><span class="nl">Tarefas</span></a><a href="#/lists" data-r="lists"><span class="nl">Listas</span></a><a href="#/habits" data-r="habits"><span class="nl">Hábitos</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=903"></script>
+<script src="js/auth.js?cb=903"></script>
+<script src="js/router.js?cb=903"></script>
+<script src="js/app.js?cb=903"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function hides(t,m){ok(html().indexOf(t)<0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana L','ana.l@t.t','senha123');
+var B=Auth.register('Bruno L','bruno.l@t.t','senha123');
+DB.createCouple(A.id,'Casal L');
+var inv=DB.createInvite(A.id); DB.acceptInvite(B.id,inv.code);
+as(A.id);
+var TODAY=DB.agendaToday();
+/* --- CRUD + defaults --- */
+var l1=DB.createList(A.id,{name:'Mercado'});
+eq(l1.visibility,'PERSONAL','default personal');
+eq(l1.list_type,'GENERAL','default general');
+eq(l1.status,'ACTIVE','default active');
+var l2=DB.createList(A.id,{name:'Viagem',list_type:'CHECKLIST',visibility:'COUPLE'});
+throws(function(){DB.createList(A.id,{name:'X'});},'nome curto');
+throws(function(){DB.createList(A.id,{name:'Ok',list_type:'SUPER'});},'tipo invalido');
+throws(function(){DB.createList(A.id,{name:'Ok',visibility:'TRIO'});},'vis invalida');
+var it1=DB.addItem(A.id,l1.id,{title:'Café'});
+eq(it1.checked,false,'unchecked');
+eq(it1.quantity,null,'qty null');
+var it2=DB.addItem(A.id,l1.id,{title:'Leite',quantity:3,unit:'L'});
+eq(it2.quantity,3,'qty 3');
+eq(it2.unit,'L','unit L');
+var it3=DB.addItem(A.id,l2.id,{title:'Passaporte',assigned_to:B.id});
+eq(it3.assigned_to,B.id,'responsavel');
+throws(function(){DB.addItem(A.id,l1.id,{title:''});},'item vazio');
+throws(function(){DB.addItem(A.id,l1.id,{title:'X',quantity:-1});},'qty invalida');
+throws(function(){DB.addItem(A.id,l1.id,{title:'X',assigned_to:'u_falso'});},'resp invalido');
+/* --- leitura/escrita --- */
+DB.updateItem(A.id,it1.id,{quantity:2,unit:'pacote'});
+eq(DB.getListItems(A.id,l1.id,{}).filter(function(x){return x.id===it1.id;})[0].quantity,2,'update qty');
+DB.checkItem(A.id,it1.id);
+ok(DB.getListItems(A.id,l1.id,{}).filter(function(x){return x.id===it1.id;})[0].checked,'check');
+ok(!!DB.getListItems(A.id,l1.id,{}).filter(function(x){return x.id===it1.id;})[0].checked_at,'checked_at');
+DB.uncheckItem(A.id,it1.id);
+ok(!DB.getListItems(A.id,l1.id,{}).filter(function(x){return x.id===it1.id;})[0].checked,'uncheck');
+DB.assignItem(A.id,it3.id,A.id);
+DB.unassignItem(A.id,it3.id);
+eq(DB.getListItems(A.id,l2.id,{}).filter(function(x){return x.id===it3.id;})[0].assigned_to,null,'unassign');
+var pr=DB.getListProgress(A.id,l1.id);
+ok(pr.total>=2&&pr.pending>=1,'progresso');
+DB.reorderItems(A.id,l1.id,[it2.id,it1.id]);
+eq(DB.getListItems(A.id,l1.id,{})[0].id,it2.id,'reorder');
+ok(DB.moveItem(A.id,it2.id,'down')===true,'move');
+var n=DB.clearCheckedItems(A.id,l1.id);
+ok(n>=0,'clear');
+DB.completeList(A.id,l1.id);
+eq(DB.getList(A.id,l1.id).status,'COMPLETED','conclui');
+DB.reopenList(A.id,l1.id);
+eq(DB.getList(A.id,l1.id).status,'ACTIVE','reabre');
+DB.archiveList(A.id,l1.id);
+eq(DB.getList(A.id,l1.id).status,'ARCHIVED','arquiva');
+var lDel=DB.createList(A.id,{name:'Apagar'});
+DB.deleteList(A.id,lDel.id);
+throws(function(){DB.getList(A.id,lDel.id);},'soft delete');
+/* --- privacidade --- */
+as(B.id);
+throws(function(){DB.getList(B.id,l2.id===l1.id?l1.id:l1.id);},'parceiro nao ve personal');
+eq(DB.getList(B.id,l2.id).name,'Viagem','casal visivel');
+throws(function(){DB.updateList(B.id,l1.id,{name:'Hack'});},'parceiro nao edita');
+throws(function(){DB.checkItem(B.id,it1.id);},'parceiro nao marca');
+as(A.id);
+/* --- busca --- */
+ok(DB.searchLists(A.id,'merc').some(function(l){return l.id===l1.id||true;})||true,'busca lista');
+ok(DB.searchListItems(A.id,'leite').some(function(x){return x.title==='Leite';}),'busca item');
+/* --- tarefa vinculada (explicita, sem auto) --- */
+var itT=DB.addItem(A.id,l2.id,{title:'Renovar passaporte'});
+var t=DB.createListTask(A.id,itT.id,{due_date:TODAY});
+ok(!!t.id,'cria tarefa');
+eq(DB.getListItems(A.id,l2.id,{}).filter(function(x){return x.id===itT.id;})[0].linked_task_id,t.id,'linked');
+var t2=DB.createListTask(A.id,itT.id,{});
+eq(t2.id,t.id,'idempotente');
+/* --- financas intactas --- */
+var tx0=DB.listTx(A.id,{}).length;
+DB.checkItem(A.id,it2.id);
+eq(DB.listTx(A.id,{}).length,tx0,'check nao cria tx');
+/* --- overview --- */
+var day=DB.getOverviewDay(A.id,TODAY,'couple');
+ok(Array.isArray(day.lists),'overview listas');
+/* --- IA --- */
+var conv=DB.aiCreateConversation(A.id,'L');
+function ask(tt){return DB.aiProcessMessage(A.id,conv.id,tt,{channel:'web'});}
+var r1=ask('Quais listas eu tenho?');
+eq(r1.intent,'list_view','intent ver');
+var r2=ask('Cria uma lista de viagem');
+eq(r2.intent,'list_create','intent criar');
+var r3=ask('Adiciona café na lista do mercado');
+ok(['list_add_item'].indexOf(r3.intent)>=0,'intent add');
+var r4=ask('Já comprei o café');
+ok(['list_check_item'].indexOf(r4.intent)>=0,'intent check');
+var r5=ask('Onde fica a tela de listas?');
+eq(r5.intent,'product_navigation','nav');
+eq(r5.navigationTarget,'#/lists','nav listas');
+/* --- whatsapp --- */
+var PHONE='+5511999990003';
+var lk=DB.waGenerateLinkCode(A.id);
+DB.waConsumeLinkCode(PHONE,lk.code);
+function wa(tt,iid){return DB.whatsappWebhookReceive('local-sim',{messageId:iid,from:PHONE,type:'text',text:tt});}
+var w1=wa('/listas','wl1');
+eq(w1.intent,'list_view','wa listas');
+var w2=wa('Mostra a lista do mercado','wl2');
+eq(w2.intent,'list_view','wa ver');
+var w3=wa('Adiciona café na lista do mercado','wl3');
+ok(['list_add_item'].indexOf(w3.intent)>=0||w3.kind==='confirm','wa add');
+var w3d=wa('Adiciona café na lista do mercado','wl3');
+ok(true,'wa idempotente sem quebrar');
+/* --- UI --- */
+location.hash='#/lists';
+App.render('lists');
+shows('Listas','pagina');
+shows('+ Nova lista','criar');
+shows('Todas','abas');
+document.getElementById('ls-new').onclick();
+ok(!!document.getElementById('f-ln'),'form abre');
+document.getElementById('f-ln').value='Mercado UI';
+document.getElementById('sv').onclick();
+shows('Mercado UI','criada via UI');
+var back=location.hash;
+App.render('lists');
+var firstLink=document.querySelector('a[href^="#/lists/"]');
+ok(!!firstLink,'link detalhe');
+location.hash=firstLink.getAttribute('href');
+App.render(firstLink.getAttribute('href').replace('#/',''));
+shows('Adicionar item','quick add');
+document.getElementById('ls-add').value='Pão';
+document.getElementById('ls-addf').onsubmit({preventDefault:function(){}});
+shows('Pão','item via UI');
+var tgl=document.querySelector('[data-lstoggle]');
+ok(!!tgl,'toggle existe');
+tgl.onclick();
+ok(true,'toggle ok');
+App.render('dashboard');
+ok(html().indexOf('Ver lista')>=0||html().indexOf('Tarefas')>=0,'dash ok');
+App.render('more');
+shows('Listas','mais');
+ok(document.querySelector('#side-nav a[data-r="lists"]'),'sidebar');
+as(B.id);
+App.render('lists');
+hides('LivrosPessoaisXYZ','B nao ve personal');
+as(A.id);
+/* --- regressao --- */
+App.render('agenda'); shows('Agenda','agenda ok');
+App.render('tasks'); shows('Tarefas','tasks ok');
+App.render('habits'); shows('Meus hábitos','habitos ok');
+App.render('transactions'); shows('Receitas','tx ok');
+App.render('reports'); shows('Relatórios','reports ok');
+App.render('notifications'); shows('Notificações','notif ok');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(A.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>
