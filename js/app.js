@@ -48,7 +48,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
+    var fn = { landing: pLanding, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
     try { fn(v, me); } catch (e) {
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
       document.getElementById('retry').onclick = function () { render(route); };
@@ -77,6 +77,136 @@
     if (cm) cm.textContent = ctx.users.map(function (u) { return u.nome.split(' ')[0]; }).join(' & ');
   }
 
+  /* ============ HOME PÚBLICA (só apresentação; zero dados reais) ============
+     Página institucional em HTML estático: nenhum serviço, nenhuma leitura
+     de dados do usuário. Mockups com valores ilustrativos fixos. */
+  function pLanding(v) {
+    var rm = false;
+    try { rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    function feat(icon, title, desc, mini, cta) {
+      return '<article class="lp-card"><div class="lp-mini" aria-hidden="true">' + mini + '</div><h3>' + icon + ' ' + title + '</h3><p>' + desc + '</p><button class="btn ghost sm lp-cta" data-lgo="#/register">' + cta + '</button></article>';
+    }
+    v.innerHTML =
+    '<div class="lp">' +
+    '<header class="lp-head"><div class="lp-wrap lp-head-in">' +
+      '<a class="lp-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(30) + '<strong>2gtr</strong></a>' +
+      '<nav class="lp-nav" id="lp-nav" aria-label="Navegação da página"><button data-ls="funcionalidades">Funcionalidades</button><button data-ls="como-funciona">Como funciona</button><button data-ls="para-quem">Para quem é</button></nav>' +
+      '<div class="lp-head-cta"><a class="link" href="#/login">Entrar</a><button class="btn sm lp-btn" data-lgo="#/register">Começar agora</button>' +
+      '<button class="lp-burger" id="lp-burger" aria-label="Abrir menu" aria-expanded="false" aria-controls="lp-nav">☰</button></div>' +
+    '</div></header>' +
+    '<main>' +
+    '<section class="lp-hero" aria-labelledby="lp-h1"><div class="lp-wrap lp-hero-in">' +
+      '<div><h1 id="lp-h1">Sua vida organizada em um só lugar.</h1>' +
+      '<p class="lp-lead">Finanças, agenda, hábitos e planejamento para você organizar sua rotina e sua vida a dois de forma simples.</p>' +
+      '<div class="lp-cta-row"><button class="btn lp-btn" data-lgo="#/register">Começar agora</button><button class="btn ghost" data-ls="funcionalidades">Conhecer o 2gtr</button></div></div>' +
+      '<div class="lp-mock" role="img" aria-label="Exemplo da Visão Geral do 2gtr com compromissos, hábitos e resumo financeiro">' +
+        '<div class="lp-mock-card"><b>Hoje</b><p>2 compromissos • 3/5 hábitos</p><p class="lp-next">19:30 • Jantar ❤️</p></div>' +
+        '<div class="lp-mock-card"><b>✓ Hábitos</b><p>✓ Ler &nbsp; ✓ Água &nbsp; ○ Exercício</p><div class="bar"><div style="width:60%"></div></div></div>' +
+        '<div class="lp-mock-card"><b>Finanças do mês</b><p>Receitas <b class="pos">R$ 4.500</b> • Despesas <b class="neg">R$ 1.850</b></p></div>' +
+        '<div class="lp-mock-card accent"><b>🎯 Viagem</b><p>R$ 3.200 de R$ 5.000</p><div class="bar"><div style="width:64%"></div></div></div>' +
+      '</div>' +
+    '</div></section>' +
+    '<section class="lp-strip" aria-label="Resumo"><div class="lp-wrap lp-strip-in">' +
+      '<div><b>🗂️ Organize</b><p>Sua rotina, compromissos e hábitos.</p></div>' +
+      '<div><b>🗺️ Planeje</b><p>Suas metas, projetos e próximos passos.</p></div>' +
+      '<div><b>💚 Cuide das finanças</b><p>Suas contas, cartões, gastos e planejamento financeiro.</p></div>' +
+    '</div></section>' +
+    '<section class="lp-sec" id="funcionalidades" aria-labelledby="lp-f"><div class="lp-wrap">' +
+      '<h2 id="lp-f">Muito mais do que controlar gastos.</h2>' +
+      '<p class="lp-sub">O 2gtr reúne as ferramentas que você precisa para organizar diferentes partes da sua vida sem precisar espalhar tudo entre vários aplicativos.</p>' +
+      '<div class="lp-grid">' +
+      feat('💰', 'Finanças sem complicação', 'Organize receitas, despesas, contas, cartões, faturas, orçamentos e metas em um só lugar.', '<p>Receitas <b class="pos">+ R$ 4.500</b></p><p>Despesas <b class="neg">− R$ 1.850</b></p><p>Saldo <b>R$ 2.650</b> • 🏦 Contas • 💳 Cartões • 🧾 Faturas</p>', 'Organizar minhas finanças') +
+      feat('📅', 'Sua agenda, do seu jeito', 'Organize compromissos pessoais e compromissos do casal em uma visão simples do seu dia, semana e mês.', '<p>09:00 Consulta <span class="pill">👤 Pessoal</span></p><p>19:30 Jantar <span class="pill">❤️ Casal</span></p><p class="muted">Próximos eventos • Calendário</p>', 'Organizar minha agenda') +
+      feat('🌱', 'Transforme planos em rotina', 'Crie hábitos, acompanhe sua evolução e mantenha uma visão clara do que você quer construir no dia a dia.', '<p>✓ Ler &nbsp; ✓ Meditar &nbsp; ○ Exercitar</p><p>🔥 7 dias • 📅 Calendário de hábitos</p>', 'Criar meus hábitos') +
+      feat('🎯', 'Saiba para onde você está indo', 'Crie metas pessoais e do casal, acompanhe o progresso e visualize o caminho até seus objetivos.', '<p><b>Viagem</b> R$ 3.200 de R$ 5.000</p><div class="bar"><div style="width:64%"></div></div>', 'Criar uma meta') +
+      feat('🔮', 'Planeje antes de acontecer', 'Visualize compromissos futuros, despesas previstas, receitas planejadas e o impacto das suas decisões.', '<p>Planejado <b>R$ 5.000</b> • Realizado <b>R$ 3.100</b></p><p class="muted">Próximos compromissos • Fluxo futuro</p>', 'Conhecer o planejamento') +
+      feat('🏠', 'Tudo começa pela sua Visão Geral', 'Uma visão simples do que está acontecendo hoje, nesta semana e neste mês.', '<p>Hoje: 2 compromissos • 3/5 hábitos</p><p>Finanças do dia • Próximos eventos • Checklist</p>', 'Ver a Visão Geral') +
+      '</div></div></section>' +
+    '<section class="lp-sec alt" id="para-quem" aria-labelledby="lp-pq"><div class="lp-wrap">' +
+      '<h2 id="lp-pq">Sua vida. Seu relacionamento. Suas finanças.</h2>' +
+      '<p class="lp-sub">O 2gtr foi pensado para acompanhar tanto o que é seu quanto o que vocês constroem juntos.</p>' +
+      '<div class="lp-duo"><article class="lp-card"><h3>👤 Minha vida</h3><ul><li>Agenda pessoal</li><li>Hábitos</li><li>Metas pessoais</li><li>Organização pessoal</li><li>Minhas movimentações</li></ul></article>' +
+      '<article class="lp-card"><h3>❤️ Nossa vida</h3><ul><li>Finanças do casal</li><li>Compromissos compartilhados</li><li>Metas do casal</li><li>Despesas compartilhadas</li><li>Planejamento conjunto</li></ul></article></div>' +
+      '<p class="lp-note">As duas áreas convivem no mesmo aplicativo — e informações pessoais permanecem visíveis só para você.</p>' +
+    '</div></section>' +
+    '<section class="lp-sec" aria-labelledby="lp-mm"><div class="lp-wrap">' +
+      '<h2 id="lp-mm">Cada casal funciona de um jeito.</h2>' +
+      '<p class="lp-sub">Por isso, o 2gtr permite organizar o dinheiro de acordo com a realidade de vocês.</p>' +
+      '<div class="lp-duo"><article class="lp-card"><h3>💑 Dinheiro separado</h3><p>Cada um mantém seu dinheiro e vocês fazem acertos quando necessário.</p></article>' +
+      '<article class="lp-card"><h3>💚 Tudo junto</h3><p>As receitas e despesas dos dois fazem parte do dinheiro do casal, sem acertos internos por quem pagou.</p></article></div>' +
+    '</div></section>' +
+    '<section class="lp-sec alt" aria-labelledby="lp-dia"><div class="lp-wrap">' +
+      '<h2 id="lp-dia">Comece o dia sabendo o que importa.</h2>' +
+      '<p class="lp-sub">Uma visão simples do seu dia, da sua semana e do seu mês — sem transformar sua rotina em uma tela cheia de informações.</p>' +
+      '<div class="lp-mock wide" role="img" aria-label="Exemplo da Visão Geral com cards de hoje, compromissos, hábitos e finanças">' +
+        '<div class="lp-mock-card"><b>Hoje</b><p>3 compromissos • 4 hábitos • 2 movimentações</p></div>' +
+        '<div class="lp-mock-card"><b>📅 Próximos</b><p>19:30 Jantar ❤️</p></div>' +
+        '<div class="lp-mock-card"><b>🌱 Hábitos 3/5</b><div class="bar"><div style="width:60%"></div></div></div>' +
+        '<div class="lp-mock-card"><b>💰 Hoje</b><p>+ R$ 500 • − R$ 120</p></div>' +
+      '</div>' +
+    '</div></section>' +
+    '<section class="lp-sec" id="como-funciona" aria-labelledby="lp-cf"><div class="lp-wrap">' +
+      '<h2 id="lp-cf">Como funciona</h2><div class="lp-steps">' +
+      '<div><span class="lp-num" aria-hidden="true">01</span><h3>🗂️ Organize</h3><p>Cadastre suas informações, compromissos, hábitos e finanças.</p></div>' +
+      '<div><span class="lp-num" aria-hidden="true">02</span><h3>🗺️ Planeje</h3><p>Defina metas e acompanhe o que está por vir.</p></div>' +
+      '<div><span class="lp-num" aria-hidden="true">03</span><h3>🏠 Acompanhe</h3><p>Use sua Visão Geral para entender o que precisa da sua atenção.</p></div>' +
+      '</div></div></section>' +
+    '<section class="lp-sec alt" aria-labelledby="lp-fin"><div class="lp-wrap">' +
+      '<h2 id="lp-fin">Tudo o que você precisa para cuidar do seu dinheiro.</h2>' +
+      '<ul class="lp-tags"><li>Movimentações</li><li>Contas</li><li>Cartões</li><li>Faturas</li><li>Compras parceladas</li><li>Orçamento</li><li>Metas</li><li>Planejamento</li><li>Acertos</li><li>Relatórios</li><li>Insights</li><li>Conciliação</li></ul>' +
+    '</div></section>' +
+    '<section class="lp-sec" aria-labelledby="lp-dif"><div class="lp-wrap">' +
+      '<h2 id="lp-dif">Por que o 2gtr?</h2><div class="lp-grid">' +
+      '<article class="lp-card"><h3>🧩 Um só lugar</h3><p>Menos aplicativos para controlar diferentes partes da sua vida.</p></article>' +
+      '<article class="lp-card"><h3>❤️ Feito para duas pessoas</h3><p>Organize o que é seu e o que é de vocês.</p></article>' +
+      '<article class="lp-card"><h3>✨ Visão simples</h3><p>Informação suficiente para ajudar, sem poluir sua rotina.</p></article>' +
+      '<article class="lp-card"><h3>🔮 Planejamento real</h3><p>Veja o que aconteceu, o que está acontecendo e o que está por vir.</p></article>' +
+      '<article class="lp-card"><h3>🔒 Privacidade</h3><p>Cada informação disponível somente para quem tem permissão.</p></article>' +
+      '<article class="lp-card"><h3>🌱 Evolução contínua</h3><p>Estruturado para crescer junto com as suas necessidades.</p></article>' +
+      '</div></div></section>' +
+    '<section class="lp-sec alt" aria-labelledby="lp-telas"><div class="lp-wrap">' +
+      '<h2 id="lp-telas">Conheça o produto</h2>' +
+      '<p class="lp-sub">As telas que você vai usar todos os dias.</p>' +
+      '<div class="lp-shots">' +
+      '<figure class="lp-shot"><div class="lp-mock-card"><b>🏠 Visão Geral</b><p>Hoje • Hábitos 3/5</p><p>19:30 Jantar ❤️</p><p>+ R$ 500 • − R$ 120</p></div><figcaption>Visão Geral</figcaption></figure>' +
+      '<figure class="lp-shot"><div class="lp-mock-card"><b>💰 Finanças</b><p>Receitas <b class="pos">+ R$ 4.500</b></p><p>Despesas <b class="neg">− R$ 1.850</b></p><p>Resultado <b>R$ 2.650</b></p></div><figcaption>Finanças</figcaption></figure>' +
+      '<figure class="lp-shot"><div class="lp-mock-card"><b>📅 Agenda</b><p>09:00 Consulta 👤</p><p>19:30 Jantar ❤️</p><p class="muted">Dia • Semana • Mês</p></div><figcaption>Agenda</figcaption></figure>' +
+      '<figure class="lp-shot"><div class="lp-mock-card"><b>🌱 Hábitos</b><p>✓ Ler • ✓ Água • ○ Exercício</p><div class="bar"><div style="width:60%"></div></div><p>🔥 7 dias</p></div><figcaption>Hábitos</figcaption></figure>' +
+      '</div></div></section>' +
+    '<section class="lp-final" aria-labelledby="lp-cta"><div class="lp-wrap">' +
+      '<h2 id="lp-cta">Organize sua vida com mais clareza.</h2>' +
+      '<p class="lp-sub">Tenha suas finanças, seus planos, seus hábitos e sua rotina em um só lugar.</p>' +
+      '<button class="btn lp-btn" data-lgo="#/register">Começar agora</button>' +
+      '<p><a href="#/login">Já tem uma conta? Entrar</a></p>' +
+    '</div></section>' +
+    '</main>' +
+    '<footer class="lp-foot"><div class="lp-wrap lp-foot-in">' +
+      '<div><b>2gtr</b><p class="muted">Sua vida organizada em um só lugar.</p><ul><li><button data-ls="funcionalidades">Sobre</button></li><li><button data-ls="funcionalidades">Funcionalidades</button></li><li><button data-ls="como-funciona">Como funciona</button></li></ul></div>' +
+      '<div><b>Produto</b><ul><li>Finanças</li><li>Agenda</li><li>Hábitos</li><li>Metas</li><li>Planejamento</li></ul></div>' +
+      '<div><b>Conta</b><ul><li><a href="#/login">Entrar</a></li><li><a href="#/register">Criar conta</a></li></ul></div>' +
+      '<div><b>Legal</b><ul><li><span class="muted">Privacidade <small>(em breve)</small></span></li><li><span class="muted">Termos de uso <small>(em breve)</small></span></li></ul></div>' +
+    '</div><p class="lp-copy">© 2gtr</p></footer>' +
+    '</div>';
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ls]'), function (b) {
+      b.onclick = function () {
+        var el = document.getElementById(b.getAttribute('data-ls'));
+        if (el) el.scrollIntoView({ behavior: rm ? 'auto' : 'smooth', block: 'start' });
+        var nav = document.getElementById('lp-nav');
+        if (nav) nav.classList.remove('open');
+        var bg = document.getElementById('lp-burger');
+        if (bg) bg.setAttribute('aria-expanded', 'false');
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-lgo]'), function (b) {
+      b.onclick = function () { location.hash = b.getAttribute('data-lgo'); };
+    });
+    var burger = document.getElementById('lp-burger');
+    if (burger) burger.onclick = function () {
+      var nav = document.getElementById('lp-nav');
+      var open = nav && nav.classList.toggle('open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+  }
   /* ---------- AUTH (etapa 1, preservado) ---------- */
   function pLogin(v) {
     v.innerHTML = '<div class="card">' + brandLockup({ size: 56 }) + '<h1>Entrar ❤️</h1><p class="muted">Que bom ver vocês por aqui.</p><div id="e"></div><label>E-mail</label><input id="f-em" type="email" autocomplete="email"><label>Senha</label><input id="f-pw" type="password" autocomplete="current-password"><button class="btn" id="go">Entrar</button><p class="center"><a href="#/register">Criar conta</a> • <a href="#/forgot-password">Esqueci a senha</a></p></div>';
@@ -5581,7 +5711,7 @@
       document.getElementById('fb-c').onclick = function () { closeModal(); goAndOpen(me, '#/recurring', 'recurring', function () { openRecModal(me, null); }); };
     };
     var _bt = document.getElementById('boot'); if (_bt) _bt.classList.add('hidden');
-    if (!location.hash) location.hash = '#/dashboard';
+    if (!location.hash) location.hash = '#/landing';
     J.Router.start();
   }
 

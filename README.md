@@ -22,3 +22,6 @@
 ## Visao Geral / Planner (camada de agregacao, sem fonte propria)
 - OverviewAggregationService + /dashboard como planner (Dia/Semana/Mes, checklist de habitos, timeline, financas por periodo, respeito a SEPARATE/JOINT e privacidade). Dashboard financeiro antigo preservado sem rota.
 - Testes (73/73 PASS): agregacao dia/semana/mes, upcoming, leitura nao cria tx, privacidade (servico + UI), checklist marcar/desmarcar, navegacao temporal, 10 rotas de regressao, JOINT/SEPARATE, OF off, diagnose. Desktop/mobile (DOM sem overflow; corte do screenshot e artefato da largura minima do headless). Console limpo.
+## Home publica (apresentacao, sem dados reais)
+- Rota publica landing como / (default), autenticado segue p/ app, login/cadastro intactos, guard impede dados privados, CTAs conectados, SEO basico, menu mobile, sem Open Finance/investimentos.
+- Testes (57/57 PASS): todas as secoes, h1 unico, shell bare, CTAs register/login, scroll sem mudar hash, register+login funcionais, redirect autenticado, zero vazamento (tx/habito/nome/conta), guard, 9 rotas de regressao, OF off, diagnose, sem overflow no piso mensuravel (477<492; corte do screenshot e artefato da largura minima do headless; botoes com width:auto e grids 1col no mobile). Console limpo.
