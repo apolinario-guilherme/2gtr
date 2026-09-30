@@ -42,7 +42,20 @@
         cnt.textContent = n ? ' ' + n : '';
       } else if (bell) bell.style.display = 'none';
     } catch (e2) { /* badge nunca quebra a página */ }
+    try { paintShell(me); } catch (e3) { /* shell nunca quebra a página */ }
     window.scrollTo(0, 0);
+  }
+  /* Moldura estática (só apresentação): nomes do casal vindos dos serviços. */
+  function paintShell(me) {
+    var eb = document.getElementById('couple-eyebrow');
+    var cn = document.getElementById('couple-card-name');
+    var cm = document.getElementById('couple-card-members');
+    if (!me) { if (eb) eb.textContent = ''; return; }
+    var ctx = J.DB.myCouple(me.id);
+    var cname = (ctx.couple && ctx.couple.name) || '';
+    if (eb) eb.textContent = cname;
+    if (cn) cn.textContent = cname || 'Seu casal';
+    if (cm) cm.textContent = ctx.users.map(function (u) { return u.nome.split(' ')[0]; }).join(' & ');
   }
 
   /* ---------- AUTH (etapa 1, preservado) ---------- */
@@ -145,7 +158,9 @@
     location.hash = '#/transactions';
   }
   function txRow(me, t) {
-    return '<button class="tx" data-id="' + t.id + '"><span class="tx-ic">' + (t.type === 'income' ? '💰' : esc((J.DB.all().categories.find(function (c) { return c.id === t.category_id; }) || { icon: '🧾' }).icon)) + '</span>' +
+    var pal = t.type === 'expense' ? catColor(t.category_id) : null;
+    var tile = pal ? ' style="background:' + pal[0] + ';color:' + pal[1] + '"' : '';
+    return '<button class="tx" data-id="' + t.id + '"><span class="tx-ic"' + tile + '>' + (t.type === 'income' ? '💰' : esc((J.DB.all().categories.find(function (c) { return c.id === t.category_id; }) || { icon: '🧾' }).icon)) + '</span>' +
       '<span class="tx-mid"><b>' + esc(t.description) + '</b><small>' + esc(t.date.split('-').reverse().join('/')) + ' • ' + esc(J.DB.catName(me.id, t.category_id)) + ' • ' + esc(J.DB.userName(me.id, t.payer_user_id)) + (t.is_shared ? ' • 🤝' : ' • 👤') + (t.credit_card_id ? ' • 💳' : '') + (t.needs_review ? ' • 👀 revisar' : '') + '</small></span>' +
       '<b class="' + (t.type === 'income' ? 'pos' : 'neg') + '">' + (t.type === 'income' ? '+' : '−') + ' ' + BRL(t.amount) + '</b></button>';
   }
@@ -331,9 +346,11 @@
       if (va.note) s += '<p class="muted">' + esc(va.note) + '</p>';
       return s + '<p class="muted">Dinheiro em contas. Limite de cartão não entra aqui.</p><p><a href="#/accounts">Ver contas ›</a> • <a href="#/accounts" id="d-tr">Transferir ›</a></p></div>';
     });
-    // 2. resultado do período
+    // 2. resultado do período (hero no formato do exemplo: saldo + receitas/despesas)
     html += blk('Resultado', function () {
-      var s = '<div class="card hero"><span class="muted">Resultado ' + (r.single ? 'do mês' : 'do período') + '</span><h1>' + BRL(d.balance) + '</h1><p>Receitas <b class="pos">' + BRL(d.income) + '</b> • Despesas <b class="neg">' + BRL(d.expense) + '</b></p>';
+      var s = '<div class="card hero"><span class="muted">Saldo de ' + esc(monthLabel(r.single ? r.from : r.to).toLowerCase().replace(' ', ' de ')) + '</span><h1>' + BRL(d.balance) + '</h1>' +
+        '<div class="hero-split"><div class="cell"><span class="k">↑ Receitas</span><span class="v">' + BRL(d.income) + '</span></div>' +
+        '<div class="cell"><span class="k">↓ Despesas</span><span class="v">' + BRL(d.expense) + '</span></div></div>';
       if (d.balance < 0) s += '<div class="alert">Vocês gastaram mais do que receberam neste período.</div>';
       s += '</div>' + spendCard(avail);
       s += '<div class="dash-2col"><a class="card center dash-link" href="#/transactions" id="d-rec">💰<br><b>Receitas</b><br><strong class="pos">' + BRL(d.income) + '</strong><br><span class="muted">' + (d.incomeCount ? txNoun(d.incomeCount) : 'Você ainda não registrou receitas neste período.') + '</span></a>';
@@ -453,9 +470,9 @@
         n.top.map(function (x) { return '<p>• <b>' + esc(x.title) + '</b></p>'; }).join('') +
         '<p><a href="#/notifications">Abrir central ›</a></p></div>';
     });
-    // 9. gastos por categoria
+    // 9. gastos por categoria (donut + barras com drill-down)
     html += blk('Gastos', function () {
-      return '<div class="card"><b>Gastos por categoria</b>' + (d.byCat.length ? catChart(d) + '<p class="muted">Maior categoria de despesas no período: <b>' + esc(d.topCat.icon + ' ' + d.topCat.name) + '</b> ' + BRL(d.topCat.value) + ' (' + String(d.topCat.pct).replace('.', ',') + '%)</p>' : '<p class="muted">Sem despesas neste período.</p>') + '</div>';
+      return donutBlock(d.byCat, d.expense) + '<div class="card"><b>Gastos por categoria</b>' + (d.byCat.length ? catChart(d) + '<p class="muted">Maior categoria de despesas no período: <b>' + esc(d.topCat.icon + ' ' + d.topCat.name) + '</b> ' + BRL(d.topCat.value) + ' (' + String(d.topCat.pct).replace('.', ',') + '%)</p>' : '<p class="muted">Sem despesas neste período.</p>') + '</div>';
     });
     // 10. gráficos + evolução (resultado mensal explícito)
     html += blk('Gráficos', function () {
@@ -589,7 +606,7 @@
       try { cn = J.DB.cardName(me.id, J.DB.getInvoiceRaw(me.id, p.invoice_id).credit_card_id); } catch (e) { cn = 'Cartão'; }
       return '<div class="tx"><span class="tx-ic">🧾</span><span class="tx-mid"><b>Pagamento de fatura</b><small>' + dueLabel(p.payment_date) + ' • ' + esc(cn) + ' • ' + esc(J.DB.accountName(me.id, p.payment_account_id)) + '</small></span><b class="neg">− ' + BRL(p.amount) + '</b></div>';
     }).join('');
-    return '<div class="card"><div class="row between"><b>Movimentações recentes</b><a href="#/transactions" id="d-all">Ver todas ›</a></div><div>' + (rows || '<p class="muted">Sem movimentações no período.</p>') + '</div></div>';
+    return '<div class="card"><div class="row between"><b>Últimos lançamentos</b><a href="#/transactions" id="d-all">Ver tudo ›</a></div><div>' + (rows || '<p class="muted">Sem movimentações no período.</p>') + '</div></div>';
   }
   function dashTips(me, r) {
     var tips = [];
@@ -666,6 +683,29 @@
     }).join('') + '</div><p class="muted">Verde = receitas • vermelho = despesas.' + (spanMonths > 6 ? ' Mostrando os últimos 6 meses do período.' : '') + '</p>';
   }
   var catExp = {};
+  /* Paleta determinística por categoria (só apresentação: tiles e donut). */
+  var CATPAL = [['#E3EDFD', '#2F6FED'], ['#FBE7F0', '#A63C6E'], ['#E7F4EE', '#0A6E46'], ['#ECE7FB', '#6A4FD0'], ['#FBF3E3', '#A9721B'], ['#E0F2F1', '#0F766E'], ['#EDE9FE', '#7C5CD6'], ['#F5E6DC', '#A35C2E']];
+  function catColor(id) { var h = 0, s = String(id || ''); for (var i = 0; i < s.length; i++) h = ((h * 31) + s.charCodeAt(i)) >>> 0; return CATPAL[h % CATPAL.length]; }
+  function donutBlock(byCat, total) {
+    if (!byCat.length || !(total > 0)) return '';
+    var top = byCat.slice(0, 6);
+    var restV = byCat.slice(6).reduce(function (a, c) { return a + c.value; }, 0);
+    var items = top.map(function (c) { return { name: c.name, value: c.value, pct: c.pct, col: catColor(c.id)[1] }; });
+    if (restV > 0.005) items.push({ name: 'Outras categorias', value: Math.round(restV * 100) / 100, pct: Math.round(restV / total * 1000) / 10, col: '#C26D8C' });
+    var R = 70, C = 2 * Math.PI * R, off = 0, segs = '';
+    items.forEach(function (it) {
+      var len = Math.max(0, it.value / total * C);
+      if (len <= 0) return;
+      segs += '<circle cx="84" cy="84" r="' + R + '" fill="none" stroke="' + it.col + '" stroke-width="26" stroke-dasharray="' + len.toFixed(1) + ' ' + C.toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '" transform="rotate(-90 84 84)"/>';
+      off += len;
+    });
+    var svg = '<svg class="donut" viewBox="0 0 168 168" role="img" aria-label="Gastos do mês por categoria"><circle cx="84" cy="84" r="' + R + '" fill="none" stroke="var(--surface-2)" stroke-width="26"/>' + segs +
+      '<text x="84" y="80" text-anchor="middle" class="dc-k">Gastos do mês</text><text x="84" y="102" text-anchor="middle" class="dc-v">' + esc(BRL(total)) + '</text></svg>';
+    var leg = '<ul class="legend">' + items.map(function (it) {
+      return '<li><span class="dot" style="background:' + it.col + '"></span><span class="lg-name">' + esc(it.name) + '<span class="lg-sub">' + String(it.pct).replace('.', ',') + '% do mês</span></span><span class="lg-val">' + BRL(it.value) + '</span></li>';
+    }).join('') + '</ul>';
+    return '<div class="card"><div class="donut-wrap">' + svg + leg + '</div></div>';
+  }
   function catChart(d, scope) {
     scope = scope || 'dash';
     var max = Math.max.apply(null, d.byCat.map(function (c) { return c.value; }).concat([0.01]));
@@ -762,7 +802,9 @@
       html += '<div class="card empty"><div class="ico">💸</div><h2>' + (J.DB.listTx(me.id, {}).length ? 'Nada por aqui' : 'Nenhum lançamento ainda') + '</h2><p class="muted">' + (J.DB.listTx(me.id, {}).length ? 'Ajuste os filtros ou o mês.' : 'Registre a primeira receita ou despesa do casal.') + '</p></div>';
     } else {
       html += rows.slice(0, txShown).map(function (t) {
-        return '<button class="tx" data-id="' + t.id + '"><span class="tx-ic">' + (t.type === 'income' ? '💰' : esc((J.DB.all().categories.find(function (c) { return c.id === t.category_id; }) || { icon: '🧾' }).icon)) + '</span>' +
+        var pal2 = t.type === 'expense' ? catColor(t.category_id) : null;
+        var tile2 = pal2 ? ' style="background:' + pal2[0] + ';color:' + pal2[1] + '"' : '';
+        return '<button class="tx" data-id="' + t.id + '"><span class="tx-ic"' + tile2 + '>' + (t.type === 'income' ? '💰' : esc((J.DB.all().categories.find(function (c) { return c.id === t.category_id; }) || { icon: '🧾' }).icon)) + '</span>' +
           '<span class="tx-mid"><b>' + esc(t.description) + '</b><small>' + esc(t.date.split('-').reverse().join('/')) + ' • ' + esc(J.DB.catName(me.id, t.category_id)) + ' • ' + esc(J.DB.userName(me.id, t.payer_user_id)) + (t.is_shared ? ' • 🤝' : ' • 👤') + (t.credit_card_id ? ' • 💳' : '') + (t.needs_review ? ' • 👀 revisar' : '') + '</small></span>' +
           '<b class="' + (t.type === 'income' ? 'pos' : 'neg') + '">' + (t.type === 'income' ? '+' : '−') + ' ' + BRL(t.amount) + '</b></button>';
       }).join('');

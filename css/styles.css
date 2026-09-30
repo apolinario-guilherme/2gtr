@@ -95,6 +95,7 @@ p{margin:8px 0}
 
 /* ---- layout ---- */
 #shell{min-height:100vh}
+#sidebar{display:none}
 .main{padding-bottom:104px}
 #view{padding:16px 16px 8px;max-width:720px;margin:0 auto}
 
@@ -213,6 +214,18 @@ label{font-size:13px;color:var(--text-2);font-weight:600}
 .ht{height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden}
 .ht>div{height:100%;background:var(--primary);border-radius:6px}
 .hv{color:var(--text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* ---- donut + legenda (só apresentação; valores oficiais) ---- */
+.donut-wrap{display:grid;gap:18px;justify-items:center}
+@media(min-width:560px){.donut-wrap{grid-template-columns:auto 1fr;align-items:center;justify-items:stretch}}
+.donut{width:168px;height:168px;flex:none}
+.dc-k{font-size:11px;fill:var(--text-2)}
+.dc-v{font-size:16px;font-weight:800;fill:var(--text-1);font-family:var(--font-display)}
+.legend{list-style:none;margin:0;padding:0;display:grid;gap:10px;width:100%}
+.legend li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.legend .dot{width:10px;height:10px;border-radius:3px}
+.legend .lg-name{font-size:14px;min-width:0;display:grid;font-weight:600}
+.legend .lg-sub{font-size:11px;color:var(--text-2);font-weight:400}
+.legend .lg-val{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
 
 /* ---- miscelânea legada ---- */
 .opt{border:2px solid var(--line);border-radius:var(--radius);padding:18px;margin:8px 0;cursor:pointer;background:var(--surface);width:100%;text-align:left;font-size:16px}
@@ -238,6 +251,11 @@ label{font-size:13px;color:var(--text-2);font-weight:600}
 .card.hero .muted{color:rgba(255,255,255,.82)}
 .card.hero .pos{color:#fff}
 .card.hero .neg{color:#FFD9D2}
+.card.hero .hero-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid rgba(255,255,255,.22);padding-top:14px;margin-top:14px;text-align:left}
+.card.hero .hero-split .cell{display:grid;gap:2px}
+.card.hero .hero-split .k{font-size:12px;color:rgba(255,255,255,.82)}
+.card.hero .hero-split .v{font-family:var(--font-display);font-weight:700;font-size:18px;white-space:nowrap}
+.card.hero .alert{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.25);color:#fff}
 button.card.hero{width:100%;cursor:pointer;color:#fff}
 button.card.spend h1{color:#fff}
 .dash-link{text-decoration:none;color:inherit;display:block}
@@ -360,11 +378,17 @@ details.card summary::-webkit-details-marker{display:none}
   .brand small{display:block;font-size:11px;font-weight:600;color:var(--text-2);letter-spacing:.02em;margin-top:2px;font-family:var(--font)}
   #side-nav{display:flex;flex-direction:column;gap:4px;overflow:auto}
   #side-nav a{color:var(--text-2);text-decoration:none;padding:10px 12px;border-radius:var(--radius-md);font-weight:500;font-size:15px;display:flex;gap:12px;align-items:center}
+  #side-nav a svg{flex:none}
   #side-nav a:hover{background:var(--surface-2);color:var(--text-1)}
   #side-nav a.active{background:var(--primary-light);color:var(--primary);font-weight:600}
   .nav-group{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin:14px 6px 4px}
   .side-foot{margin-top:auto;padding-top:12px}
   .side-foot .btn.ghost{background:var(--surface-2);color:var(--text-1)}
+  .couple-card{display:grid;gap:4px;padding:14px;border-radius:var(--radius-md);background:var(--primary-subtle);border:1px solid var(--line);margin-bottom:12px}
+  .couple-card .label{font-size:12px;color:var(--text-2)}
+  .couple-card .value{font-family:var(--font-display);font-weight:700;font-size:15px}
+.top-eyebrow{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-eyebrow:empty{display:none}
   .main{flex:1;padding-bottom:40px;min-width:0}
   #view{max-width:880px;padding:28px}
   #bottomnav,#fab{display:none}

@@ -340,3 +340,6 @@ Nome exibido: 2gtr (title, meta description, boot, sidebar, onboarding, fallback
 ## 37. Visual OpenDesign (só CSS + fontes; zero logica).
 
 Transplante do sistema visual do prototipo OpenDesign (C:\Users\Guilherme\Desktop\2gtr\index.html, preservado fora do repo): tokens (verde #0E8F5B/#0A6E46, rosa 2gtr, fundo #F4F7F5, raio 20px, sombras suaves), fontes Inter + Plus Jakarta Sans (com fallbacks), botoes/inputs 12px, linhas de lancamento sem borda com tile, hero verde-escuro (Resultado + Quanto podemos gastar), sidebar clara, bottomnav com pill ativa, FAB com borda, toast pill, marca bicolor 2g/tres + dot rosa. Nenhum HTML gerado pelo app.js foi alterado; nenhuma regra/calculo/banco; Open Finance segue invisivel e desativado.
+## 38. Fidelidade ao exemplo (só apresentação; zero logica).
+
+Sidebar com icones SVG de linha + card "Espaco do casal" (paintShell preenche nomes via myCouple); topbar com eyebrow do casal; hero "Saldo de <mes>" + split Receitas/Despesas; donut SVG + legenda (top 6 + Outras) no dashboard; tiles de lancamento com cor deterministica por categoria (catColor); "Ultimos lancamentos / Ver tudo". Correcao real: sidebar aparecia no mobile (faltava display:none base). Nenhum calculo/banco/rota alterado; Open Finance segue invisivel e desativado.
