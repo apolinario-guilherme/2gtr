@@ -524,6 +524,41 @@ details.card summary::-webkit-details-marker{display:none}
   .lp-cta-row .btn{width:100%}
 }
 @media(prefers-reduced-motion:reduce){.lp2 *{animation:none!important;transition:none!important}}
+/* ---- login em painel duplo (só apresentação; mesmo fluxo de auth) ---- */
+.lg{display:grid;gap:0;border-radius:24px;overflow:hidden;border:1px solid #E7DCC6;background:#FFFDF8;box-shadow:0 24px 60px rgba(60,45,20,.12)}
+.lg-art{background:radial-gradient(ellipse at 85% 15%,rgba(198,106,69,.35) 0 120px,transparent 121px),radial-gradient(ellipse at 10% 95%,rgba(255,255,255,.07) 0 160px,transparent 161px),linear-gradient(180deg,#0E4A37,#0B3B2C);color:#fff;padding:36px 32px;position:relative;overflow:hidden}
+.lg-art-in{position:relative;z-index:1}
+.lg-brand{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#fff;font-family:var(--font-display);font-weight:800;font-size:24px}
+.lg-brand strong{color:#fff}
+.lg-art h1{color:#fff;font-size:clamp(30px,4vw,44px);line-height:1.06;letter-spacing:-.02em;margin:26px 0 12px}
+.lg-art h1 .tx-terra{color:#E8A87C}
+.lg-art p{color:#D9CDB4;font-size:16px;max-width:26em}
+.lg-frame{margin:28px 0 0;max-width:230px;background:#F6EFDD;color:#0B3B2C;border-radius:6px;padding:20px 18px;transform:rotate(-2deg);box-shadow:0 12px 30px rgba(0,0,0,.25);font-family:Georgia,serif;font-style:italic;font-size:17px}
+.lg-frame b{display:block;color:#C66A45;font-style:normal;margin-top:6px}
+.lg-form{padding:36px 32px;background:#FFFDF8}
+.lg-back{margin:0 0 26px}
+.lg-back a{color:var(--text-1);text-decoration:none;font-weight:600;font-size:14px}
+.lg-form h1{font-size:clamp(26px,3vw,34px);letter-spacing:-.02em;margin:0 0 4px}
+.lg-pw{position:relative}
+.lg-pw input{width:100%;padding-right:52px}
+.lg-pw button{position:absolute;right:6px;top:6px;min-width:44px;min-height:44px;border:0;background:none;font-size:19px;cursor:pointer;border-radius:10px}
+.lg-forgot{text-align:right;margin:6px 0 18px}
+.lg-forgot a{font-size:14px}
+.lg-enter{min-height:56px;font-size:16px;border-radius:14px;background:#0B3B2C}
+.lg-enter:hover{background:#095c3b}
+.lg-legal{text-align:center;font-size:13px;color:var(--text-3);margin:26px 0 0}
+.lg-legal a{color:var(--text-2)}
+@media(min-width:900px){
+  .lg{grid-template-columns:1fr 1fr;max-width:1020px;margin:12px auto}
+  .lg-form{padding:48px 56px}
+}
+@media(max-width:899px){
+  .lg-art{padding:28px 24px}
+  .lg-art h1{font-size:32px}
+  .lg-frame{display:none}
+  .lg-form{padding:28px 22px}
+}
+@media(prefers-reduced-motion:reduce){.lg *{animation:none!important;transition:none!important}}
 /* ---- telas públicas sem navegação ---- */
 #shell.bare #sidebar,#shell.bare #bottomnav,#shell.bare #fab,#shell.bare #avatar-btn,#shell.bare #hello-name,#shell.bare .top-actions{display:none}
 #shell.bare .main{padding-bottom:24px}

@@ -42,7 +42,8 @@
       a.classList.toggle('active', on);
       if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
-    document.getElementById('avatar-btn').textContent = (J.Auth.current() || { nome: '?' }).nome.charAt(0).toUpperCase();
+    var _ab = document.getElementById('avatar-btn');
+    if (_ab) _ab.textContent = (J.Auth.current() || { nome: '?' }).nome.charAt(0).toUpperCase();
     var _hn = document.getElementById('hello-name'); if (_hn) { var _me = J.Auth.current(); _hn.textContent = _me ? 'Olá, ' + _me.nome.split(' ')[0] : 'Olá'; }
     J.App.render(r);
   }

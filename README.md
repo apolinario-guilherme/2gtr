@@ -34,3 +34,6 @@
 ## Home v2 (estilo da referencia, conteudo honesto)
 - Hero casal + mock Visao do casal, confianca, 3 cards com mocks CSS, Minha/Nossa vida, modos neutros, planner, passos, grade financeira, CTA escuro, footer real. Sem funcionalidades inventadas.
 - Testes (43/43 PASS). Desktop/mobile (piso 492; corte do screenshot e artefato do headless). Console limpo.
+## Login em painel duplo (estilo da referencia)
+- Painel verde + formulario creme, olho de senha acessivel, mesmo fluxo e IDs. Ajuda aponta p/ inicio (sem pagina ficticia).
+- Testes (21/21 PASS). Desktop/mobile. Console limpo.

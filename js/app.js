@@ -322,11 +322,41 @@
       }).join('') + '</div>';
   }
   /* ---------- AUTH (etapa 1, preservado) ---------- */
+  /* ---------- AUTH: login em painel duplo (só apresentação; mesmo fluxo) ---------- */
   function pLogin(v) {
-    v.innerHTML = '<div class="card">' + brandLockup({ size: 56 }) + '<h1>Entrar ❤️</h1><p class="muted">Que bom ver vocês por aqui.</p><div id="e"></div><label>E-mail</label><input id="f-em" type="email" autocomplete="email"><label>Senha</label><input id="f-pw" type="password" autocomplete="current-password"><button class="btn" id="go">Entrar</button><p class="center"><a href="#/register">Criar conta</a> • <a href="#/forgot-password">Esqueci a senha</a></p></div>';
+    v.innerHTML = '<div class="lg">' +
+      '<section class="lg-art" aria-label="A vida a dois, mais organizada">' +
+        '<div class="lg-art-in"><a class="lg-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(34) + '<strong>2gtr</strong></a>' +
+        '<h1>A vida <span class="tx-terra">a dois,</span><br>mais organizada.</h1>' +
+        '<p>Um espaço para cuidar das finanças e dos planos que vocês constroem juntos.</p>' +
+        '<figure class="lg-frame" aria-hidden="true"><span>Juntos hoje,<br>sempre mais longe</span><b>♥</b></figure></div>' +
+      '</section>' +
+      '<section class="lg-form" aria-labelledby="lg-h1">' +
+        '<p class="lg-back"><a href="#/landing">← Voltar ao início</a></p>' +
+        '<h1 id="lg-h1">Bom ter você de volta.</h1>' +
+        '<p class="muted">Entre para acessar seu espaço no 2gtr.</p>' +
+        '<div id="e"></div>' +
+        '<label for="f-em">E-mail</label><input id="f-em" type="email" autocomplete="email" placeholder="voce@exemplo.com">' +
+        '<label for="f-pw">Senha</label><div class="lg-pw"><input id="f-pw" type="password" autocomplete="current-password"><button type="button" id="pw-eye" aria-label="Mostrar senha" aria-pressed="false">👁</button></div>' +
+        '<p class="lg-forgot"><a href="#/forgot-password">Esqueci minha senha</a></p>' +
+        '<button class="btn lg-enter" id="go">Entrar</button>' +
+        '<p class="center muted">Ainda não tem uma conta? <a href="#/register"><b>Criar conta</b></a></p>' +
+        '<p class="lg-legal"><a href="#/privacy">Privacidade</a> • <a href="#/terms">Termos</a> • <a href="#/landing">Ajuda</a></p>' +
+      '</section>' +
+    '</div>';
     document.getElementById('go').onclick = function () {
       try { var me = J.Auth.login(document.getElementById('f-em').value, document.getElementById('f-pw').value); J.Router.go(me); toast('Bem-vindo de volta!'); }
       catch (e) { document.getElementById('e').innerHTML = err(e); }
+    };
+    var eye = document.getElementById('pw-eye');
+    eye.onclick = function () {
+      var pw = document.getElementById('f-pw');
+      var show = pw.type === 'password';
+      pw.type = show ? 'text' : 'password';
+      eye.textContent = show ? '🙈' : '👁';
+      eye.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+      eye.setAttribute('aria-pressed', show ? 'true' : 'false');
+      pw.focus();
     };
   }
   function pRegister(v) {
