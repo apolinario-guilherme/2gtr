@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -218,6 +218,7 @@ window.Juntos = window.Juntos || {};
     if (!db.open_finance_transaction_versions) { db.open_finance_transaction_versions = []; changed = true; }
     if (!db.open_finance_reconciliation_exceptions) { db.open_finance_reconciliation_exceptions = []; changed = true; }
     if (!db.open_finance_balance_snapshots) { db.open_finance_balance_snapshots = []; changed = true; }
+    if (!db.agenda_events) { db.agenda_events = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5905,17 +5906,20 @@ window.Juntos = window.Juntos || {};
         { key: 'cash_flow', kind: 'read' }, { key: 'financial_insights', kind: 'read' },
         { key: 'transaction_search', kind: 'read' }, { key: 'report_explanation', kind: 'read' },
         { key: 'planning_question', kind: 'read' }, { key: 'help', kind: 'read' },
+        { key: 'agenda_query', kind: 'read' },
         { key: 'openfinance_status', kind: 'read' }, { key: 'openfinance_reconciliation', kind: 'read' },
         { key: 'create_transaction', kind: 'write' }, { key: 'create_transfer', kind: 'write' },
         { key: 'create_goal', kind: 'write' }, { key: 'create_recurring', kind: 'write' },
-        { key: 'mark_invoice_paid', kind: 'write' }, { key: 'update_transaction', kind: 'write' }
+        { key: 'mark_invoice_paid', kind: 'write' }, { key: 'update_transaction', kind: 'write' },
+        { key: 'create_agenda_event', kind: 'write' }, { key: 'update_agenda_event', kind: 'write' },
+        { key: 'cancel_agenda_event', kind: 'write' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6145,6 +6149,9 @@ window.Juntos = window.Juntos || {};
       else if (has(['crie uma meta', 'criar meta', 'nova meta', 'meta de']) || (has(['meta']) && has(['criar', 'nova', 'novo']))) out.intent = 'create_goal';
       else if (has(['recorrente']) && has(['criar', 'cria', 'crie', 'nova', 'novo', 'cadastrar'])) out.intent = 'create_recurring';
       else if (has(['corrija', 'corrigir', 'altere', 'alterar', 'mude ', 'mudar', 'edite', 'editar'])) out.intent = 'update_transaction';
+      else if (has(['cancela o compromisso', 'cancelar o compromisso', 'cancela a reuniao', 'cancelar a reuniao', 'cancela a consulta', 'cancelar a consulta', 'cancela o jantar', 'cancelar o jantar', 'cancela o cinema', 'cancelar o cinema', 'desmarca', 'desmarcar', 'cancela o aniversario', 'cancelar o aniversario', 'cancela o evento', 'cancelar o evento']) || ((has(['cancela', 'cancelar']) || has(['exclui', 'excluir', 'apaga', 'apagar'])) && has(['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'evento', 'agenda']))) out.intent = 'cancel_agenda_event';
+      else if (has(['remarca', 'remarcar', 'reagendar', 'reagenda', 'adiar', 'adia', 'antecipar', 'antecipa', 'muda o compromisso', 'muda a reuniao', 'muda o jantar', 'muda a consulta', 'mudar o compromisso']) || (has(['muda', 'mudar', 'altera', 'alterar']) && has(['compromisso', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'agenda']))) out.intent = 'update_agenda_event';
+      else if (has(['marca o compromisso', 'marcar o compromisso', 'marque o compromisso', 'marca a reuniao', 'marcar a reuniao', 'marca a consulta', 'marcar a consulta', 'marca o jantar', 'marcar o jantar', 'marca o cinema', 'novo compromisso', 'nova reuniao', 'agende', 'agendar', 'marca academia']) || ((has(['marca', 'marcar', 'marque', 'cria', 'criar', 'crie', 'anota', 'anote']) || has(['compromisso', 'reuniao', 'dentista', 'aniversario', 'academia'])) && has(['compromisso', 'compromissos', 'reuniao', 'consulta', 'dentista', 'jantar', 'cinema', 'aniversario', 'academia', 'medico', 'evento', 'agenda']))) out.intent = 'create_agenda_event';
       else if (has(['gastei', 'recebi', 'registre', 'registra', 'anota', 'anote', 'lance', 'lanca', 'adicione', 'paguei', 'recebido']) || (has(['despesa', 'receita']) && has(['nova', 'novo', 'criar', 'cria']))) out.intent = 'create_transaction';
       /* ---- leitura ---- */
       else if (has(['quanto gastamos', 'quanto foi gasto', 'total gasto', 'total de gastos', 'como estamos', 'resumo', 'quanto sobrou', 'balanco', 'situacao'])) out.intent = 'financial_summary';
@@ -6156,6 +6163,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['parcela', 'parcelas', 'parcelado', 'falta pagar das parcelas'])) out.intent = 'installment_status';
       else if (has(['recorrente', 'recorrentes', 'fixo', 'fixa', 'assinatura', 'mensalidade'])) out.intent = 'recurring_status';
       else if (has(['acerto', 'devo ', 'devendo', 'me deve', 'pendente de acerto', 'dividas entre'])) out.intent = 'settlement_status';
+      else if ((has(['amanha', 'hoje']) && has(['temos', 'tenho', 'tem', 'marcado', 'agenda', 'compromisso', 'reuniao'])) || has(['compromisso', 'compromissos', 'reuniao', 'dentista', 'consulta', 'cinema', 'aniversario', 'academia', 'jantar em familia', 'minha agenda', 'nossa agenda', 'o que temos', 'temos marcado', 'temos amanha', 'marcado para']) || (has(['agenda', 'evento', 'eventos', 'jantar', 'medico']) && has(['que', 'qual', 'quais', 'tem', 'tenho', 'temos', 'marcado', 'amanha', 'hoje', 'semana', 'quando', 'onde', 'proximos', 'fim de semana']))) out.intent = 'agenda_query';
       else if (has(['fluxo de caixa', 'fluxo', 'resultado'])) out.intent = 'cash_flow';
       else if (has(['atencao', 'atencoes', 'novidade', 'insights', 'alerta', 'preocupar', 'olhar'])) out.intent = 'financial_insights';
       else if (has(['maior despesa', 'maiores gastos', 'maiores despesas', 'mostre', 'liste', 'listar', 'procure', 'buscar', 'gastos com', 'quanto foi'])) out.intent = 'transaction_search';
@@ -6172,7 +6180,75 @@ window.Juntos = window.Juntos || {};
       if (out.intent !== 'help') out.confidence = out.clarification ? 'low' : 'medium';
       return out;
     },
-    /* Tools de LEITURA: só chamam serviços oficiais. Allowlist rígida. */
+    /* Data/hora p/ agenda a partir de texto (determinístico; sem inventar).
+       Retorna {date,start,end,ambiguous} ou {clarification}. */
+    aiParseAgendaWhen: function (text, todayStr) {
+      var s = DB.aiNorm(text);
+      var today = DB.agendaParseDay(String(todayStr || '').slice(0, 10)) ? String(todayStr).slice(0, 10) : DB.agendaToday();
+      function pad(n) { return ('0' + n).slice(-2); }
+      function nextWeekday(wd, after) {
+        var cur = DB.agendaParseDay(after), guard = 0;
+        var dt = new Date(cur.y, cur.m - 1, cur.d + 1);
+        while (dt.getDay() !== wd && guard++ < 10) dt = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + 1);
+        return DB.agendaFmt(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+      }
+      var WD = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+      var date = null, qualifier = null;
+      if (/\b(hoje|hj)\b/.test(s)) date = today;
+      else if (/\b(amanha|amanhã)\b/.test(s)) date = DB.agendaAddDays(today, 1);
+      else if (/depois de amanha/.test(s)) date = DB.agendaAddDays(today, 2);
+      else {
+        var m = s.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+        if (m) {
+          var yy = m[3] ? (+m[3] < 100 ? 2000 + (+m[3]) : +m[3]) : +today.slice(0, 4);
+          var cand = yy + '-' + pad(+m[2]) + '-' + pad(+m[1]);
+          if (!DB.agendaParseDay(cand)) return { clarification: 'Não entendi a data. Pode informar dia e mês? (ex: 12/10)' };
+          date = cand < today ? (DB.agendaParseDay((yy + 1) + '-' + pad(+m[2]) + '-' + pad(+m[1])) ? (yy + 1) + '-' + pad(+m[2]) + '-' + pad(+m[1]) : cand) : cand;
+        } else {
+          var dm = s.match(/\bdia\s?(\d{1,2})\b/);
+          if (dm) {
+            var dd = pad(+dm[1]), ym = today.slice(0, 7);
+            cand = ym + '-' + dd;
+            if (!DB.agendaParseDay(cand)) return { clarification: 'Esse dia não existe neste mês. Qual data?' };
+            date = cand < today ? DB.agendaFmt(+ym.slice(0, 4), +ym.slice(5, 7) + 1 > 12 ? 1 : +ym.slice(5, 7) + 1, 1).slice(0, 7) + '-' + dd : cand;
+            if (!DB.agendaParseDay(date)) return { clarification: 'Esse dia não existe no próximo mês. Qual data?' };
+          } else {
+            var wmatch = null, wkey = null;
+            Object.keys(WD).forEach(function (k) { if (new RegExp('\\b' + k + '\\b').test(s)) { wmatch = WD[k]; wkey = k; } });
+            if (wmatch != null) {
+              if (/(proximo|proxima|que vem|semana que vem)/.test(s)) { qualifier = 'next'; var nx = DB.agendaParseDay(nextWeekday(wmatch, today)); var nb = new Date(nx.y, nx.m - 1, nx.d + 7); date = DB.agendaFmt(nb.getFullYear(), nb.getMonth() + 1, nb.getDate()); }
+              else if (/(esse|essa|neste|nesta)\b/.test(s)) { qualifier = 'this'; date = nextWeekday(wmatch, DB.agendaAddDays(today, -1)); if (date < today) date = nextWeekday(wmatch, today); }
+              else return { clarification: 'Qual ' + wkey + ' você quer dizer? (este ou o próximo?)', weekday: wkey };
+            }
+          }
+        }
+      }
+      if (!date) return { clarification: 'Para quando? (ex: amanhã, sábado, dia 12/10)' };
+      var t1 = null, t2 = null;
+      var tm = s.match(/(\d{1,2})(?::(\d{2}))?\s?(h|hora|horas)\b/) || s.match(/\bas\s?(\d{1,2})(?::(\d{2}))?\b/);
+      if (!tm) { var tcol = s.match(/\b(\d{1,2}):(\d{2})\b/); if (tcol) tm = [tcol[0], tcol[1], tcol[2]]; }
+      if (tm) {
+        var hh = +tm[1], mm = tm[2] ? +tm[2] : 0;
+        if (/noite/.test(s) && hh < 12) hh += 12;
+        if (/tarde/.test(s) && hh < 12 && hh >= 1 && hh <= 7) hh += 12;
+        if (hh > 23 || mm > 59) return { clarification: 'Horário inválido. Qual horário? (ex: 20h)' };
+        t1 = pad(hh) + ':' + pad(mm);
+        var tm2 = s.match(/(?:ate|às|as)\s?(\d{1,2})(?::(\d{2}))?\s?(h|hora|horas)?\b.*/) ;
+        var allNums = [];
+        var re = /(\d{1,2})(?::(\d{2}))?\s?h\b/g, mt;
+        while ((mt = re.exec(s)) !== null) allNums.push([+mt[1], mt[2] ? +mt[2] : 0]);
+        if (!tm2 && allNums.length >= 2) {
+          var h2 = allNums[1][0], m2 = allNums[1][1];
+          if (/noite/.test(s) && h2 < 12) h2 += 12;
+          if (h2 <= 23) t2 = pad(h2) + ':' + pad(m2);
+        } else if (tm2 && tm2[1] != null && String(tm2[1]).length <= 2) {
+          var h3 = +tm2[1], m3 = tm2[2] ? +tm2[2] : 0;
+          if (/noite/.test(s) && h3 < 12) h3 += 12;
+          if (h3 <= 23 && (h3 > hh || (h3 === hh && m3 > mm))) t2 = pad(h3) + ':' + pad(m3);
+        }
+      }
+      return { date: date, start: t1, end: t2, qualifier: qualifier };
+    },
     aiRunTool: function (userId, name, args) {
       args = args || {};
       var db = read(), cid = DB.myCoupleId(userId);
@@ -6252,6 +6328,10 @@ window.Juntos = window.Juntos || {};
         out = rows.map(function (t) {
           return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
         });
+      } else if (name === 'agenda_events') {
+        var af = (r.start && r.start !== '0000-00') ? r.start : DB.agendaToday();
+        var at = (r.end && r.end !== '0000-00') ? r.end : DB.agendaAddDays(af, 30);
+        out = { from: af, to: at, events: DB.agendaOccurrences(userId, af, at, { vision: view, search: args.search || '' }).slice(0, 20).map(function (o) { return DB.agendaOccurrencePublic(userId, o); }) };
       } else if (name === 'openfinance_status') {
         DB.ofAssertEnabled();
         out = { connections: DB.ofListConnections(userId).map(function (c) { return { institution: c.institution_name, provider: c.provider, status: c.status, lastSync: c.last_sync_at, health: DB.ofConnectionHealth(userId, c.id).status }; }) };
@@ -6349,6 +6429,20 @@ window.Juntos = window.Juntos || {};
         if (!tx) throw new Error('Transação inválida.');
         if (p.amount != null && !(Number(p.amount) > 0)) throw new Error('Valor inválido.');
         if (p.category_id) ownCat(p.category_id);
+      } else if (actionType === 'create_agenda_event') {
+        if (String(p.title || '').trim().length < 2) throw new Error('Título obrigatório.');
+        if (!DB.agendaParseDay(String(p.date || '').slice(0, 10))) throw new Error('Data inválida.');
+        if (p.visibility !== 'PRIVATE' && p.visibility !== 'COUPLE') throw new Error('Visibilidade inválida.');
+        if (p.start_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(p.start_time)) throw new Error('Horário inválido.');
+        if (p.end_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(p.end_time)) throw new Error('Horário inválido.');
+      } else if (actionType === 'update_agenda_event' || actionType === 'cancel_agenda_event') {
+        var agev = db.agenda_events.find(function (x) { return x.id === p.event_id && x.couple_id === cid && !x.deleted_at; });
+        if (!agev) throw new Error('Compromisso inválido.');
+        if (agev.visibility !== 'COUPLE' && agev.owner_user_id !== userId) throw new Error('Acesso negado.');
+        if (actionType === 'update_agenda_event' && p.patch) {
+          if (p.patch.date && !DB.agendaParseDay(p.patch.date)) throw new Error('Data inválida.');
+          if (p.patch.title && String(p.patch.title).trim().length < 2) throw new Error('Título inválido.');
+        }
       } else throw new Error('Ação não permitida.');
       return true;
     },
@@ -6409,6 +6503,15 @@ window.Juntos = window.Juntos || {};
           var old = DB.getTx(userId, p.transaction_id);
           DB.updateTx(userId, p.transaction_id, { type: old.type, description: p.description || old.description, amount: p.amount != null ? String(p.amount).replace('.', ',') : String(old.amount).replace('.', ','), date: old.date, category_id: p.category_id || old.category_id, payer_user_id: old.payer_user_id, is_shared: old.is_shared, account_id: old.account_id, credit_card_id: old.credit_card_id, notes: old.notes || '' });
           res = { transaction_id: p.transaction_id };
+        } else if (r.action_type === 'create_agenda_event') {
+          var ae = DB.createAgendaEvent(userId, { title: p.title, date: p.date, start_time: p.start_time, end_time: p.end_time, all_day: !!p.all_day, visibility: p.visibility, event_type: p.event_type || 'COMMITMENT', location: p.location || '', reminder_minutes: p.reminder_minutes != null ? p.reminder_minutes : 15 });
+          res = { event_id: ae.id };
+        } else if (r.action_type === 'update_agenda_event') {
+          DB.updateAgendaEvent(userId, p.event_id, p.patch || {}, p.date ? { scope: 'single', occurrence: p.date } : {});
+          res = { event_id: p.event_id };
+        } else if (r.action_type === 'cancel_agenda_event') {
+          DB.deleteAgendaEvent(userId, p.event_id, {});
+          res = { event_id: p.event_id };
         } else throw new Error('Ação não permitida.');
         var db2 = read();
         var r2 = db2.ai_actions.find(function (x) { return x.id === actionId; });
@@ -6624,6 +6727,45 @@ window.Juntos = window.Juntos || {};
           if (cands.length !== 1) throw { clarification: cands.length ? 'Encontrei mais de um lançamento parecido. Qual deles (data e valor)?' : 'Não encontrei o lançamento dos últimos 30 dias. Qual a descrição exata?' };
           params = { transaction_id: cands[0].id, description: null, amount: e.amount != null ? e.amount : null, category_id: e.category_id || null };
           label = 'Ajuste no lançamento "' + cands[0].description + '" de ' + DB.aiMoney(cands[0].amount);
+        } else if (det.intent === 'create_agenda_event' || det.intent === 'update_agenda_event' || det.intent === 'cancel_agenda_event') {
+          var aw = DB.aiParseAgendaWhen(rawText, today);
+          if (aw.clarification && !e.agenda_force) throw { clarification: aw.clarification };
+          var coupleW = /(nos dois|nós dois|nosdois|casal|juntos|pra nos|para nos)\b/.test(s);
+          var privW = /(so eu|somente eu|só eu|pra mim|para mim|meu compromisso|minha consulta)\b/.test(s);
+          if (det.intent === 'create_agenda_event') {
+            var stopA = { para: 1, com: 1, por: 1, uma: 1, um: 1, de: 1, da: 1, do: 1, das: 1, dos: 1, em: 1, no: 1, na: 1, nos: 1, nas: 1, esse: 1, essa: 1, este: 1, esta: 1, marca: 1, marcar: 1, marque: 1, cria: 1, criar: 1, crie: 1, anota: 1, anote: 1, novo: 1, nova: 1, compromisso: 1, para2: 1 };
+            var tw = DB.aiNorm(rawText).split(' ').filter(function (w) { return w.length >= 3 && !stopA[w] && !/^\d/.test(w); });
+            var ttl = tw.slice(0, 6).join(' ').replace(/\b(amanha|hoje|sabado|domingo|segunda|terca|quarta|quinta|sexta|as|às|hs?|horas?|dia|mes|ano|que|vem|proximo|proxima|esse|essa|neste|nesta|dois|casal|juntos|mim|minha|meu)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+            if (!ttl) throw { clarification: 'Qual o título do compromisso?' };
+            var vis = coupleW ? 'COUPLE' : 'PRIVATE';
+            params = { title: ttl.charAt(0).toUpperCase() + ttl.slice(1), date: aw.date || today, start_time: aw.start || null, end_time: aw.end || null, all_day: !aw.start, visibility: vis, event_type: /(consulta|dentista|medico|exame)\b/.test(s) ? 'APPOINTMENT' : /(lembrete|lembrar|avisa)\b/.test(s) ? 'REMINDER' : (vis === 'COUPLE' ? 'COUPLE' : 'COMMITMENT'), location: '', reminder_minutes: 15 };
+            label = 'Compromisso "' + params.title + '" em ' + params.date.split('-').reverse().join('/') + (params.start_time ? ' às ' + params.start_time : '') + ' (' + (vis === 'COUPLE' ? 'casal' : 'só você') + ')';
+          } else {
+            var found = DB.agendaFindForAI(userId, rawText, null);
+            if (found.length > 1 && aw.date) {
+              var f2 = found.filter(function (o) { return o.date === aw.date; });
+              if (f2.length) found = f2;
+            }
+            if (!found.length) throw { clarification: 'Não encontrei esse compromisso na agenda. Qual o título e a data?' };
+            if (found.length > 1) throw { clarification: 'Encontrei ' + found.length + ' parecidos: ' + found.slice(0, 3).map(function (o) { return '"' + o.title + '" em ' + o.date.split('-').reverse().join('/'); }).join('; ') + '. Qual deles?' };
+            var one = found[0];
+            if (det.intent === 'cancel_agenda_event') {
+              params = { event_id: one.event_id, date: one.date };
+              label = 'Cancelar "' + one.title + '" de ' + one.date.split('-').reverse().join('/') + (one.recurring ? ' (toda a série)' : '');
+            } else {
+              var patch = {};
+              if (!aw.clarification || aw.date) {
+                if (aw.date && aw.date !== one.date) patch.date = aw.date;
+                if (aw.start) patch.start_time = aw.start;
+                if (aw.end) patch.end_time = aw.end;
+              }
+              var nt = DB.aiNorm(rawText).match(/para\s+["']?([^"']{3,60})$/);
+              if (nt && !/\d/.test(nt[1])) patch.title = nt[1].trim();
+              if (!patch.date && !patch.start_time && !patch.title) throw { clarification: 'O que mudar? (nova data, horário ou título)' };
+              params = { event_id: one.event_id, date: one.date, patch: patch };
+              label = 'Alterar "' + one.title + '"' + (patch.date ? ' para ' + patch.date.split('-').reverse().join('/') : '') + (patch.start_time ? ' às ' + patch.start_time : '');
+            }
+          }
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -6647,7 +6789,10 @@ window.Juntos = window.Juntos || {};
         create_goal: 'Meta "' + (p.name || '') + '" de ' + DB.aiMoney(p.target_amount) + ' criada.',
         create_recurring: 'Recorrente de ' + DB.aiMoney(p.amount) + ' criada.',
         mark_invoice_paid: 'Fatura paga: ' + DB.aiMoney(p.amount) + '. O pagamento não gera nova despesa.',
-        update_transaction: 'Lançamento atualizado.'
+        update_transaction: 'Lançamento atualizado.',
+        create_agenda_event: 'Compromisso "' + (p.title || '') + '" marcado para ' + String(p.date || '').split('-').reverse().join('/') + (p.start_time ? ' às ' + p.start_time : '') + '.',
+        update_agenda_event: 'Compromisso atualizado.',
+        cancel_agenda_event: 'Compromisso cancelado.'
       };
       return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed' };
     },
@@ -6791,6 +6936,17 @@ window.Juntos = window.Juntos || {};
         if (cat14.top && cat14.top[0]) { answer += ' A maior categoria foi ' + cat14.top[0].categoryName + ' (' + M(cat14.top[0].total) + ').'; F('maior categoria', cat14.top[0].total); }
         else if (ins.length) answer += ' ' + ins[0].summary;
         else answer += ' Os dados não permitem determinar motivo além dos números.';
+      } else if (det.intent === 'agenda_query') {
+        var aqFrom = e.periodStart || DB.agendaToday(), aqTo = e.periodEnd || DB.agendaAddDays(aqFrom, 30);
+        var a15 = DB.aiRunTool(userId, 'agenda_events', { periodStart: aqFrom, periodEnd: aqTo, periodLabel: R.periodLabel, view: e.view });
+        tools.push('agenda_events'); toolOut = a15;
+        if (!a15.events.length) answer = 'Nada marcado na agenda para o período.';
+        else {
+          F('compromissos', a15.events.length);
+          answer = a15.events.slice(0, 6).map(function (o) {
+            return o.title + ' em ' + o.date.split('-').reverse().join('/') + (o.start ? ' às ' + o.start : '') + ' (' + o.who + ')';
+          }).join('; ') + '.';
+        }
       } else if (det.intent === 'openfinance_status' || det.intent === 'openfinance_reconciliation') {
         if (!DB.ofIsEnabled()) {
           tools.push('openfinance_status'); toolOut = { disabled: true };
@@ -6812,8 +6968,8 @@ window.Juntos = window.Juntos || {};
         }
         }
       } else {
-        answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos e insights. O que quer saber?';
-        follow = 'Ex: "Quanto gastamos esse mês?" ou "Quanto falta na fatura?"';
+        answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos, insights e agenda (compromissos, lembretes). O que quer saber?';
+        follow = 'Ex: "Quanto gastamos esse mês?", "O que temos amanhã?" ou "Marca dentista sábado às 10h".';
       }
       return { answer: answer, facts: facts, tools: tools, toolInput: { intent: det.intent, entities: e }, toolOutput: toolOut, follow_up: follow, intent: det.intent };
     },
@@ -7301,6 +7457,623 @@ window.Juntos = window.Juntos || {};
         throw e;
       }
     },
+    /* ============ AGENDA (compromissos pessoais + casal; sem finanças) ============
+       Fonte própria (agenda_events). Datas/horas como strings LOCAIS
+       (YYYY-MM-DD[THH:MM]) — sem conversão UTC, sem deslocamento de dia.
+       Recorrência = regra armazenada; ocorrências geradas só p/ exibição.
+       Financeiro nunca é criado/alterado aqui; calendário só agrega. */
+    AGENDA_TYPES: function () {
+      return [
+        { key: 'PERSONAL', label: 'Pessoal', icon: '👤' },
+        { key: 'COUPLE', label: 'Casal', icon: '❤️' },
+        { key: 'REMINDER', label: 'Lembrete', icon: '⏰' },
+        { key: 'APPOINTMENT', label: 'Consulta', icon: '🩺' },
+        { key: 'COMMITMENT', label: 'Compromisso', icon: '📌' },
+        { key: 'OTHER', label: 'Outro', icon: '📝' }
+      ];
+    },
+    agendaTypeDef: function (t) { return DB.AGENDA_TYPES().filter(function (x) { return x.key === t; })[0] || null; },
+    AGENDA_CATEGORIES: function () { return ['Pessoal', 'Saúde', 'Trabalho', 'Família', 'Lazer', 'Viagem', 'Casa', 'Compromisso', 'Outros']; },
+    AGENDA_REMINDER_OPTIONS: function () {
+      return [
+        { min: null, label: 'Sem lembrete' }, { min: 5, label: '5 minutos antes' },
+        { min: 15, label: '15 minutos antes' }, { min: 30, label: '30 minutos antes' },
+        { min: 60, label: '1 hora antes' }, { min: 1440, label: '1 dia antes' }
+      ];
+    },
+    AGENDA_COLORS: function () { return ['#0E8F5B', '#D4588F', '#2F6FED', '#7C5CD6', '#B97A1B', '#5B6B7B']; },
+    agendaDefaultColor: function (visibility, type) {
+      if (visibility === 'COUPLE') return '#D4588F';
+      if (type === 'REMINDER') return '#B97A1B';
+      return '#0E8F5B';
+    },
+    /* --- datas locais (sem UTC) --- */
+    agendaToday: function () { var d = new Date(); return DB.agendaFmt(d.getFullYear(), d.getMonth() + 1, d.getDate()); },
+    agendaFmt: function (y, m, d) { return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2); },
+    agendaParseDay: function (s) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+      if (!m) return null;
+      var y = +m[1], mo = +m[2], d = +m[3];
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      var dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+      return { y: y, m: mo, d: d };
+    },
+    agendaAddDays: function (dayStr, delta) {
+      var p = DB.agendaParseDay(dayStr);
+      if (!p) throw new Error('Data inválida.');
+      var dt = new Date(p.y, p.m - 1, p.d + delta);
+      return DB.agendaFmt(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+    },
+    agendaDow: function (dayStr) { var p = DB.agendaParseDay(dayStr); return new Date(p.y, p.m - 1, p.d).getDay(); },
+    agendaDim: function (y, m) { return new Date(y, m, 0).getDate(); },
+    agendaMinutes: function (dayStr, hhmm) {
+      var p = DB.agendaParseDay(dayStr), t = /^(\d{2}):(\d{2})$/.exec(String(hhmm || ''));
+      if (!p || !t || +t[1] > 23 || +t[2] > 59) return null;
+      return { day: dayStr, mins: (+t[1]) * 60 + (+t[2]) };
+    },
+    agendaShiftMinutes: function (dayStr, hhmm, deltaMin) {
+      var cur = DB.agendaMinutes(dayStr, hhmm);
+      var total = cur.mins + deltaMin, day = cur.day, guard = 0;
+      while (total < 0 && guard++ < 3) { day = DB.agendaAddDays(day, -1); total += 1440; }
+      while (total >= 1440 && guard++ < 6) { day = DB.agendaAddDays(day, 1); total -= 1440; }
+      var h = Math.floor(total / 60), m = total % 60;
+      return day + 'T' + ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+    },
+    /* --- validação server-side --- */
+    validateAgendaEvent: function (userId, data, selfId) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var db = read();
+      data = data || {};
+      var title = String(data.title || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title.length < 2) throw new Error('Dê um título ao compromisso.');
+      if (title.length > 120) throw new Error('Título muito longo (máx 120 caracteres).');
+      var date = String(data.date || data.start_date || '').slice(0, 10);
+      if (!DB.agendaParseDay(date)) throw new Error('Informe uma data válida.');
+      var allDay = !!data.all_day;
+      var st = null, en = null;
+      if (!allDay && (data.start_time || data.end_time)) {
+        if (data.start_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data.start_time)) throw new Error('Horário inicial inválido.');
+        if (data.end_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data.end_time)) throw new Error('Horário final inválido.');
+        st = data.start_time || null; en = data.end_time || null;
+        if (st && en && en <= st) throw new Error('O término precisa ser depois do início.');
+      }
+      var type = String(data.event_type || 'COMMITMENT').toUpperCase();
+      if (!DB.agendaTypeDef(type)) throw new Error('Tipo inválido.');
+      var vis = String(data.visibility || 'PRIVATE').toUpperCase();
+      if (vis !== 'PRIVATE' && vis !== 'COUPLE') throw new Error('Visibilidade inválida.');
+      var owner = vis === 'PRIVATE' ? userId : null;
+      var location = String(data.location || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      var desc = String(data.description || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var category = String(data.category || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+      var color = data.color ? String(data.color) : null;
+      if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Cor inválida.');
+      if (DB.AGENDA_COLORS().indexOf(color) < 0 && color) throw new Error('Cor inválida.');
+      var tz = data.timezone ? String(data.timezone).slice(0, 60) : null;
+      var rule = DB.validateAgendaRule(data.recurrence_rule || data.recurrence || null, date);
+      var rem = data.reminder_minutes == null || data.reminder_minutes === '' ? null : parseInt(data.reminder_minutes, 10);
+      if (rem != null && (!(rem >= 0) || rem > 43200)) throw new Error('Lembrete inválido.');
+      return { couple_id: cid, title: title, date: date, start_time: st, end_time: en, all_day: allDay, event_type: type, visibility: vis, owner_user_id: owner, location: location, description: desc, category: category, color: color || DB.agendaDefaultColor(vis, type), timezone: tz, recurrence_rule: rule, recurrence_end_at: rule ? (rule.end || null) : null, reminder_minutes: rem };
+    },
+    validateAgendaRule: function (rule, startDate) {
+      if (!rule || rule.freq == null || rule.freq === 'none' || rule.freq === '') return null;
+      var freq = String(rule.freq).toLowerCase();
+      if (['daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'custom'].indexOf(freq) < 0) throw new Error('Repetição inválida.');
+      var out = { freq: freq, interval: parseInt(rule.interval, 10) || 1 };
+      if (!(out.interval >= 1) || out.interval > 99) throw new Error('Intervalo de repetição inválido.');
+      if (freq === 'custom') {
+        var unit = String(rule.unit || 'week').toLowerCase();
+        if (['day', 'week', 'month', 'year'].indexOf(unit) < 0) throw new Error('Unidade de repetição inválida.');
+        out.unit = unit;
+      }
+      if (rule.byweekday != null) {
+        var bw = (Array.isArray(rule.byweekday) ? rule.byweekday : String(rule.byweekday).split(',')).map(function (x) { return parseInt(x, 10); });
+        if (!bw.length || bw.some(function (x) { return !(x >= 0) || !(x <= 6); })) throw new Error('Dias da semana inválidos.');
+        out.byweekday = bw.sort();
+      }
+      if (rule.bymonthday != null) {
+        var bm = parseInt(rule.bymonthday, 10);
+        if (!(bm >= 1) || !(bm <= 31)) throw new Error('Dia do mês inválido.');
+        out.bymonthday = bm;
+      }
+      if (rule.end) {
+        var e = String(rule.end).slice(0, 10);
+        if (!DB.agendaParseDay(e)) throw new Error('Data final da repetição inválida.');
+        if (e < startDate) throw new Error('A repetição termina antes de começar.');
+        out.end = e;
+      } else out.end = null;
+      return out;
+    },
+    /* --- RLS: casal + (COUPLE ou dono) --- */
+    agendaVisible: function (db, cid, userId, ev) {
+      if (!ev || ev.couple_id !== cid || ev.deleted_at) return false;
+      if (ev.visibility === 'COUPLE') return true;
+      return ev.owner_user_id === userId;
+    },
+    agendaCanEdit: function (db, cid, userId, ev) {
+      if (!ev || ev.couple_id !== cid || ev.deleted_at) return false;
+      if (ev.visibility === 'COUPLE') return true;
+      return ev.owner_user_id === userId;
+    },
+    createAgendaEvent: function (userId, data) {
+      DB.requireAuthz(userId, 'agenda_create', null);
+      var v = DB.validateAgendaEvent(userId, data, null);
+      var db = read();
+      var ev = { id: id('ag'), couple_id: v.couple_id, created_by: userId, owner_user_id: v.owner_user_id, title: v.title, description: v.description, event_type: v.event_type, visibility: v.visibility, status: 'active', start_at: v.date + (v.start_time ? 'T' + v.start_time : ''), end_at: v.date + (v.end_time ? 'T' + v.end_time : ''), all_day: v.all_day, location: v.location, color: v.color, category: v.category, recurrence_rule: v.recurrence_rule, recurrence_end_at: v.recurrence_end_at, recurrence_parent_id: null, recurrence_date: null, exceptions: [], timezone: v.timezone, reminder_enabled: v.reminder_minutes != null, reminder_minutes: v.reminder_minutes, created_at: now(), updated_at: now(), deleted_at: null };
+      db.agenda_events.push(ev);
+      logAudit(db, v.couple_id, userId, 'agenda_event', ev.id, 'created', { visibility: ev.visibility });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'agenda', { action: 'created', entity_type: 'agenda_event', entity_id: ev.id, metadata: { visibility: ev.visibility } }); } catch (e) {}
+      try { DB.agendaNotify(userId, 'created', ev.id); } catch (e2) {}
+      return ev;
+    },
+    getAgendaEvent: function (userId, eventId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid && !x.deleted_at; });
+      if (!ev || !DB.agendaVisible(db, cid, userId, ev)) {
+        try { DB.logAuthorizationFailure(userId, 'agenda_read', { entity_type: 'agenda_event', entity_id: eventId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return ev;
+    },
+    updateAgendaEvent: function (userId, eventId, data, opt) {
+      opt = opt || {};
+      DB.requireAuthz(userId, 'agenda_update', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid && !x.deleted_at; });
+      if (!ev || !DB.agendaCanEdit(db, cid, userId, ev)) {
+        try { DB.logAuthorizationFailure(userId, 'agenda_update', { entity_type: 'agenda_event', entity_id: eventId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      /* Edição de ocorrência de série: scope single|following|all. */
+      if (ev.recurrence_parent_id && !opt.scope) opt.scope = 'single';
+      if (opt.occurrence && ev.recurrence_rule && opt.scope === 'single') {
+        return DB.agendaOverrideOccurrence(userId, ev.id, opt.occurrence, data);
+      }
+      if (opt.occurrence && ev.recurrence_rule && opt.scope === 'following') {
+        return DB.agendaSplitSeries(userId, ev.id, opt.occurrence, data);
+      }
+      var prevVis = ev.visibility, prevRule = ev.recurrence_rule ? 'série' : 'único';
+      var merged = { title: ev.title, date: ev.start_at.slice(0, 10), start_time: ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : '', end_time: ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : '', all_day: ev.all_day, event_type: ev.event_type, visibility: ev.visibility, location: ev.location, description: ev.description, category: ev.category, color: ev.color, timezone: ev.timezone, recurrence_rule: ev.recurrence_rule, reminder_minutes: ev.reminder_minutes };
+      Object.keys(data || {}).forEach(function (k) { if (data[k] !== undefined) merged[k] = data[k]; });
+      if (merged.visibility !== ev.visibility && ev.visibility === 'PRIVATE' && ev.owner_user_id !== userId) throw new Error('Acesso negado.');
+      var v = DB.validateAgendaUpdateAs(userId, ev, merged);
+      ev.title = v.title; ev.description = v.description; ev.event_type = v.event_type;
+      ev.visibility = v.visibility; ev.owner_user_id = v.owner_user_id;
+      ev.start_at = v.date + (v.start_time ? 'T' + v.start_time : '');
+      ev.end_at = v.date + (v.end_time ? 'T' + v.end_time : '');
+      ev.all_day = v.all_day; ev.location = v.location; ev.category = v.category;
+      ev.color = v.color; ev.timezone = v.timezone;
+      ev.recurrence_rule = v.recurrence_rule; ev.recurrence_end_at = v.recurrence_end_at;
+      ev.reminder_enabled = v.reminder_minutes != null; ev.reminder_minutes = v.reminder_minutes;
+      ev.updated_at = now();
+      var meta = {};
+      if (prevVis !== ev.visibility) meta.visibility_changed = prevVis + '→' + ev.visibility;
+      if (prevRule !== (ev.recurrence_rule ? 'série' : 'único')) meta.recurrence_changed = prevRule + '→' + (ev.recurrence_rule ? 'série' : 'único');
+      logAudit(db, cid, userId, 'agenda_event', ev.id, 'updated', meta);
+      write(db);
+      try { DB.logSecurityEvent(userId, 'agenda', { action: 'updated', entity_type: 'agenda_event', entity_id: ev.id, metadata: meta }); } catch (e2) {}
+      try { DB.agendaCancelPending(userId, ev.id); DB.agendaNotify(userId, 'updated', ev.id); } catch (e3) {}
+      return ev;
+    },
+    /* Valida mesclagem preservando casal/dono (visibilidade só com poder). */
+    validateAgendaUpdateAs: function (userId, ev, merged) {
+      var cid = DB.myCoupleId(userId);
+      if (merged.visibility !== ev.visibility) {
+        if (ev.visibility === 'PRIVATE' && ev.owner_user_id !== userId) throw new Error('Acesso negado.');
+        if (merged.visibility !== 'PRIVATE' && merged.visibility !== 'COUPLE') throw new Error('Visibilidade inválida.');
+      }
+      merged.owner_user_id = undefined;
+      var v = DB.validateAgendaEvent(userId, merged, ev.id);
+      if (merged.visibility === ev.visibility) { v.visibility = ev.visibility; v.owner_user_id = ev.owner_user_id; }
+      return v;
+    },
+    /* scope=single: exceção/override só desta ocorrência (data YYYY-MM-DD). */
+    agendaOverrideOccurrence: function (userId, eventId, date, data) {
+      DB.requireAuthz(userId, 'agenda_update', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid && !x.deleted_at; });
+      if (!ev || !DB.agendaCanEdit(db, cid, userId, ev) || !ev.recurrence_rule) throw new Error('Acesso negado.');
+      if (!DB.agendaParseDay(date)) throw new Error('Data inválida.');
+      data = data || {};
+      if (data._delete) {
+        ev.exceptions = ev.exceptions || [];
+        if (!ev.exceptions.some(function (x) { return x.date === date; })) ev.exceptions.push({ date: date, action: 'skip' });
+        ev.updated_at = now();
+        logAudit(db, cid, userId, 'agenda_event', ev.id, 'occurrence_deleted', { date: date });
+      } else {
+        var ov = db.agenda_events.find(function (x) { return x.recurrence_parent_id === ev.id && x.recurrence_date === date && !x.deleted_at; });
+        var merged = { title: ev.title, date: date, start_time: data.start_time !== undefined ? data.start_time : (ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : ''), end_time: data.end_time !== undefined ? data.end_time : (ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : ''), all_day: data.all_day !== undefined ? !!data.all_day : ev.all_day, event_type: data.event_type || ev.event_type, visibility: ev.visibility, location: data.location !== undefined ? data.location : ev.location, description: data.description !== undefined ? data.description : ev.description, category: data.category !== undefined ? data.category : ev.category, color: data.color || ev.color, timezone: ev.timezone, recurrence_rule: null, reminder_minutes: data.reminder_minutes !== undefined ? data.reminder_minutes : ev.reminder_minutes };
+        if (data.title !== undefined) merged.title = data.title;
+        var vv = DB.validateAgendaEvent(userId, merged, null);
+        vv.visibility = ev.visibility; vv.owner_user_id = ev.owner_user_id;
+        if (ov) {
+          ov.title = vv.title; ov.description = vv.description; ov.event_type = vv.event_type;
+          ov.start_at = vv.date + (vv.start_time ? 'T' + vv.start_time : '');
+          ov.end_at = vv.date + (vv.end_time ? 'T' + vv.end_time : (vv.start_time ? 'T' + vv.start_time : ''));
+          ov.all_day = vv.all_day; ov.location = vv.location; ov.category = vv.category; ov.color = vv.color;
+          ov.reminder_enabled = vv.reminder_minutes != null; ov.reminder_minutes = vv.reminder_minutes;
+          ov.updated_at = now();
+        } else {
+          ov = { id: id('ag'), couple_id: cid, created_by: userId, owner_user_id: ev.owner_user_id, title: vv.title, description: vv.description, event_type: vv.event_type, visibility: ev.visibility, status: 'active', start_at: vv.date + (vv.start_time ? 'T' + vv.start_time : ''), end_at: vv.date + (vv.end_time ? 'T' + vv.end_time : ''), all_day: vv.all_day, location: vv.location, color: vv.color, category: vv.category, recurrence_rule: null, recurrence_end_at: null, recurrence_parent_id: ev.id, recurrence_date: date, exceptions: [], timezone: vv.timezone, reminder_enabled: vv.reminder_minutes != null, reminder_minutes: vv.reminder_minutes, created_at: now(), updated_at: now(), deleted_at: null };
+          db.agenda_events.push(ov);
+        }
+        logAudit(db, cid, userId, 'agenda_event', ev.id, 'occurrence_updated', { date: date });
+      }
+      write(db);
+      try { DB.logSecurityEvent(userId, 'agenda', { action: 'occurrence_updated', entity_type: 'agenda_event', entity_id: ev.id, metadata: { date: date } }); } catch (e2) {}
+      try { DB.agendaCancelPending(userId, ev.id); } catch (e3) {}
+      return ev;
+    },
+    /* scope=following: encerra a série no dia anterior e clona o restante. */
+    agendaSplitSeries: function (userId, eventId, date, data) {
+      DB.requireAuthz(userId, 'agenda_update', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid && !x.deleted_at; });
+      if (!ev || !DB.agendaCanEdit(db, cid, userId, ev) || !ev.recurrence_rule) throw new Error('Acesso negado.');
+      if (!DB.agendaParseDay(date) || date < ev.start_at.slice(0, 10)) throw new Error('Data inválida.');
+      data = data || {};
+      if (date <= ev.start_at.slice(0, 10)) {
+        var all = { title: ev.title, date: ev.start_at.slice(0, 10), start_time: ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : null, end_time: ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : null, all_day: ev.all_day, event_type: ev.event_type, visibility: ev.visibility, location: ev.location, description: ev.description, category: ev.category, color: ev.color, timezone: ev.timezone, recurrence_rule: ev.recurrence_rule, reminder_minutes: ev.reminder_minutes };
+        Object.keys(data).forEach(function (k) { if (data[k] !== undefined && k !== '_delete') all[k] = data[k]; });
+        return DB.updateAgendaEvent(userId, ev.id, all, {});
+      }
+      var cut = DB.agendaAddDays(date, -1);
+      var origEnd = ev.recurrence_rule.end || null;
+      if (cut >= ev.start_at.slice(0, 10)) {
+        ev.recurrence_rule.end = (!origEnd || cut < origEnd) ? cut : origEnd;
+        ev.recurrence_end_at = ev.recurrence_rule.end;
+      }
+      var nu = { id: id('ag'), couple_id: cid, created_by: userId, owner_user_id: ev.owner_user_id, title: data.title !== undefined ? String(data.title) : ev.title, description: data.description !== undefined ? String(data.description) : ev.description, event_type: data.event_type || ev.event_type, visibility: ev.visibility, status: 'active', start_at: date + 'T' + (data.start_time !== undefined ? data.start_time : (ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : '09:00')), end_at: date + 'T' + (data.end_time !== undefined ? data.end_time : (ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : '10:00')), all_day: data.all_day !== undefined ? !!data.all_day : ev.all_day, location: data.location !== undefined ? String(data.location) : ev.location, color: data.color || ev.color, category: data.category !== undefined ? String(data.category) : ev.category, recurrence_rule: (function () { var rr = JSON.parse(JSON.stringify(ev.recurrence_rule)); rr.end = origEnd; return rr; })(), recurrence_end_at: origEnd, recurrence_parent_id: null, recurrence_date: null, exceptions: [], timezone: ev.timezone, reminder_enabled: ev.reminder_enabled, reminder_minutes: ev.reminder_minutes, created_at: now(), updated_at: now(), deleted_at: null };
+      if (!nu.all_day && (!data.start_time && ev.start_at.length <= 10)) { nu.start_at = date; nu.end_at = date; }
+      db.agenda_events.push(nu);
+      ev.updated_at = now();
+      logAudit(db, cid, userId, 'agenda_event', ev.id, 'series_split', { date: date, new_series: nu.id });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'agenda', { action: 'series_split', entity_type: 'agenda_event', entity_id: ev.id, metadata: { date: date } }); } catch (e2) {}
+      try { DB.agendaCancelPending(userId, ev.id); } catch (e3) {}
+      return nu;
+    },
+    deleteAgendaEvent: function (userId, eventId, opt) {
+      opt = opt || {};
+      DB.requireAuthz(userId, 'agenda_delete', null);
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid && !x.deleted_at; });
+      if (!ev || !DB.agendaCanEdit(db, cid, userId, ev)) {
+        try { DB.logAuthorizationFailure(userId, 'agenda_delete', { entity_type: 'agenda_event', entity_id: eventId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      function soft(e2) { e2.deleted_at = now(); e2.status = 'cancelled'; e2.updated_at = now(); }
+      if (ev.recurrence_rule && opt.scope === 'single' && opt.occurrence) {
+        return DB.agendaOverrideOccurrence(userId, ev.id, opt.occurrence, { _delete: true });
+      }
+      if (ev.recurrence_rule && opt.scope === 'following' && opt.occurrence) {
+        var cut = DB.agendaAddDays(opt.occurrence, -1);
+        if (cut >= ev.start_at.slice(0, 10)) {
+          ev.recurrence_rule.end = (!ev.recurrence_rule.end || cut < ev.recurrence_rule.end) ? cut : ev.recurrence_rule.end;
+          ev.recurrence_end_at = ev.recurrence_rule.end;
+        }
+        db.agenda_events.forEach(function (x) {
+          if (x.recurrence_parent_id === ev.id && x.recurrence_date >= opt.occurrence && !x.deleted_at) soft(x);
+        });
+        ev.updated_at = now();
+        logAudit(db, cid, userId, 'agenda_event', ev.id, 'series_cancelled_from', { date: opt.occurrence });
+        write(db);
+        try { DB.logSecurityEvent(userId, 'agenda', { action: 'series_cancelled_from', entity_type: 'agenda_event', entity_id: ev.id, metadata: { date: opt.occurrence } }); } catch (e2) {}
+        try { DB.agendaCancelPending(userId, ev.id); DB.agendaNotify(userId, 'cancelled', ev.id); } catch (e3) {}
+        return ev;
+      }
+      soft(ev);
+      db.agenda_events.forEach(function (x) {
+        if (x.recurrence_parent_id === ev.id && !x.deleted_at) soft(x);
+      });
+      logAudit(db, cid, userId, 'agenda_event', ev.id, 'deleted', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'agenda', { action: 'deleted', entity_type: 'agenda_event', entity_id: ev.id }); } catch (e2) {}
+      try { DB.agendaCancelPending(userId, ev.id); DB.agendaNotify(userId, 'cancelled', ev.id); } catch (e3) {}
+      return ev;
+    },
+    /* --- listagem, expansão e consultas (só visíveis; janelas limitadas) --- */
+    listAgendaEvents: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var q = DB.aiNorm(f.search || '');
+      return db.agenda_events.filter(function (ev) {
+        if (!DB.agendaVisible(db, cid, userId, ev)) return false;
+        if (f.type && ev.event_type !== f.type) return false;
+        if (f.category && ev.category !== f.category) return false;
+        if (f.who === 'me' && !(ev.owner_user_id === userId || ev.visibility === 'COUPLE')) return false;
+        if (f.who === 'couple' && ev.visibility !== 'COUPLE') return false;
+        if (f.status && (ev.status || 'active') !== f.status) return false;
+        if (f.from && ev.start_at.slice(0, 10) < f.from) return false;
+        if (f.to && ev.start_at.slice(0, 10) > f.to) return false;
+        if (q) {
+          var hay = DB.aiNorm((ev.title || '') + ' ' + (ev.description || '') + ' ' + (ev.location || '') + ' ' + (ev.category || ''));
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      }).sort(function (a, b) { return (a.start_at + a.id).localeCompare(b.start_at + b.id); });
+    },
+    /* Expande UMA série em ocorrências dentro de [from,to] (cap 500). */
+    agendaExpandSeries: function (ev, from, to, overridesByDate, skipSet) {
+      var out = [];
+      var rule = ev.recurrence_rule;
+      var baseDay = ev.start_at.slice(0, 10);
+      var baseStart = ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : null;
+      var baseEnd = ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : baseStart;
+      if (!rule) {
+        if (baseDay >= from && baseDay <= to && !(skipSet && skipSet[baseDay])) {
+          var ov0 = overridesByDate ? overridesByDate[baseDay] : null;
+          out.push(DB.agendaOccurrence(ev, baseDay, baseStart, baseEnd, ov0));
+        }
+        return out;
+      }
+      var endCap = rule.end && rule.end < to ? rule.end : to;
+      var freq = rule.freq, interval = rule.interval || 1;
+      var unit = freq === 'custom' ? (rule.unit || 'week') : (freq === 'daily' ? 'day' : freq === 'weekly' || freq === 'biweekly' ? 'week' : freq === 'monthly' ? 'month' : 'year');
+      if (freq === 'biweekly') interval = interval * 2;
+      function at(d) {
+        if (d < from || d > endCap) return;
+        if (skipSet && skipSet[d]) return;
+        var ov = overridesByDate ? overridesByDate[d] : null;
+        out.push(DB.agendaOccurrence(ev, d, baseStart, baseEnd, ov));
+      }
+      if (unit === 'day') {
+        var cur = baseDay < from ? DB.agendaJumpTo(baseDay, from, interval, 'day') : baseDay;
+        var n = 0;
+        while (cur <= endCap && n++ < 500) { at(cur); cur = DB.agendaAddDays(cur, interval); }
+      } else if (unit === 'week') {
+        var days = (rule.byweekday && rule.byweekday.length) ? rule.byweekday.slice().sort() : [DB.agendaDow(baseDay)];
+        var weekStart = DB.agendaAddDays(baseDay, -DB.agendaDow(baseDay));
+        var anchor = weekStart < from ? DB.agendaJumpTo(weekStart, DB.agendaAddDays(from, -6), interval, 'week') : weekStart;
+        var w = 0, guard = 0;
+        while (guard++ < 500) {
+          var wk = DB.agendaAddDays(anchor, w * 7 * interval);
+          if (wk > endCap) break;
+          days.forEach(function (dow) {
+            var dd = DB.agendaAddDays(wk, dow);
+            if (dd >= baseDay) at(dd);
+          });
+          w++;
+          if (out.length > 500) break;
+        }
+      } else if (unit === 'month') {
+        var p0 = DB.agendaParseDay(baseDay);
+        var dayN = (rule.bymonthday >= 1 && rule.bymonthday <= 31) ? rule.bymonthday : p0.d;
+        var mi = 0, guard2 = 0;
+        while (guard2++ < 500) {
+          var tot = (p0.m - 1) + mi * interval;
+          var yy = p0.y + Math.floor(tot / 12), mm = (tot % 12) + 1;
+          var dim = DB.agendaDim(yy, mm);
+          var dd2 = dayN > dim ? DB.agendaFmt(yy, mm, dim) : DB.agendaFmt(yy, mm, dayN);
+          if (dd2 > endCap) break;
+          if (dd2 >= baseDay) at(dd2);
+          mi++;
+          if (out.length > 500) break;
+        }
+      } else {
+        var p1 = DB.agendaParseDay(baseDay);
+        var yi = 0, guard3 = 0;
+        while (guard3++ < 500) {
+          var y2 = p1.y + yi * interval;
+          var dim2 = DB.agendaDim(y2, p1.m);
+          var dd3 = p1.d > dim2 ? DB.agendaFmt(y2, p1.m, dim2) : DB.agendaFmt(y2, p1.m, p1.d);
+          if (dd3 > endCap) break;
+          if (dd3 >= baseDay) at(dd3);
+          yi++;
+          if (out.length > 500) break;
+        }
+      }
+      return out;
+    },
+    /* Avança âncora até >= alvo em passos de interval (dia/semana). */
+    agendaJumpTo: function (anchor, target, interval, unit) {
+      var step = unit === 'week' ? 7 * interval : interval;
+      var cur = anchor, guard = 0;
+      while (cur < target && guard++ < 5000) cur = DB.agendaAddDays(cur, step);
+      return cur;
+    },
+    agendaOccurrence: function (ev, date, startT, endT, ov) {
+      var o = {
+        key: ev.id + '@' + date, event_id: ev.id, date: date,
+        start_at: date + (startT ? 'T' + startT : ''), end_at: date + (endT ? 'T' + endT : (startT ? 'T' + startT : '')),
+        all_day: ev.all_day, title: ev.title, description: ev.description, location: ev.location,
+        category: ev.category, event_type: ev.event_type, visibility: ev.visibility,
+        owner_user_id: ev.owner_user_id, created_by: ev.created_by, color: ev.color,
+        timezone: ev.timezone, reminder_enabled: ev.reminder_enabled, reminder_minutes: ev.reminder_minutes,
+        is_recurring: !!ev.recurrence_rule, overridden: false, status: 'previsto'
+      };
+      if (ov) {
+        o.overridden = true; o.override_id = ov.id;
+        o.title = ov.title; o.description = ov.description; o.location = ov.location;
+        o.category = ov.category; o.event_type = ov.event_type; o.color = ov.color;
+        o.all_day = ov.all_day;
+        o.start_at = ov.start_at.length > 10 ? date + 'T' + ov.start_at.slice(11, 16) : date;
+        o.end_at = ov.end_at && ov.end_at.length > 10 ? date + 'T' + ov.end_at.slice(11, 16) : o.start_at;
+        o.reminder_enabled = ov.reminder_enabled; o.reminder_minutes = ov.reminder_minutes;
+      }
+      return o;
+    },
+    /* Ocorrência em formato seguro p/ IA e telas (nomes resolvidos). */
+    agendaOccurrencePublic: function (userId, o) {
+      var db = read();
+      var who = o.visibility === 'COUPLE' ? 'Casal' : (function () {
+        var u = db.users.find(function (x) { return x.id === o.owner_user_id; });
+        return u ? u.nome.split(' ')[0] : 'Você';
+      })();
+      return { key: o.key, event_id: o.event_id, date: o.date, start: o.all_day ? null : (o.start_at.length > 10 ? o.start_at.slice(11, 16) : null), end: o.all_day ? null : (o.end_at && o.end_at.length > 10 ? o.end_at.slice(11, 16) : null), all_day: o.all_day, title: o.title, who: who, visibility: o.visibility, location: o.location || null, category: o.category || null, type: o.event_type, recurring: o.is_recurring };
+    },
+    agendaGetOccurrence: function (userId, eventId, date) {      var ev = DB.getAgendaEvent(userId, eventId);
+      if (ev.recurrence_parent_id) throw new Error('Use o evento principal.');
+      var db = read();
+      var ov = db.agenda_events.filter(function (x) { return x.recurrence_parent_id === ev.id && x.recurrence_date === date && !x.deleted_at; })[0] || null;
+      if (!ev.recurrence_rule) {
+        if (ev.start_at.slice(0, 10) !== date) throw new Error('Ocorrência não encontrada.');
+        return DB.agendaOccurrence(ev, date, ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : null, ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : null, ov);
+      }
+      var skip = {};
+      (ev.exceptions || []).forEach(function (x) { if (x.action === 'skip') skip[x.date] = true; });
+      var map = {};
+      if (ov) map[date] = ov;
+      var occs = DB.agendaExpandSeries(ev, date, date, map, skip);
+      if (!occs.length) throw new Error('Ocorrência não encontrada.');
+      return occs[0];
+    },
+    /* Ocorrências visíveis em [from,to]: séries + avulsos + overrides. */
+    agendaOccurrences: function (userId, from, to, opt) {
+      opt = opt || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var vision = opt.vision || 'couple';
+      var q = DB.aiNorm(opt.search || '');
+      function visible(ev) {
+        if (!DB.agendaVisible(db, cid, userId, ev)) return false;
+        if (vision === 'me' && !(ev.owner_user_id === userId || ev.visibility === 'COUPLE')) return false;
+        if (vision === 'partner' && ev.visibility !== 'COUPLE') return false;
+        if (opt.type && ev.event_type !== opt.type) return false;
+        if (opt.category && ev.category !== opt.category) return false;
+        if (q) {
+          var hay = DB.aiNorm((ev.title || '') + ' ' + (ev.description || '') + ' ' + (ev.location || '') + ' ' + (ev.category || ''));
+          if (hay.indexOf(q) < 0) return false;
+        }
+        return true;
+      }
+      var bases = db.agenda_events.filter(function (ev) { return visible(ev) && !ev.recurrence_parent_id; });
+      var ovs = db.agenda_events.filter(function (ev) { return !ev.deleted_at && ev.recurrence_parent_id && ev.couple_id === cid; });
+      var ovByEv = {};
+      ovs.forEach(function (o) {
+        var p = db.agenda_events.find(function (x) { return x.id === o.recurrence_parent_id; });
+        if (!p || !visible(p)) return;
+        (ovByEv[o.recurrence_parent_id] = ovByEv[o.recurrence_parent_id] || {})[o.recurrence_date] = o;
+      });
+      var out = [], guard = 0;
+      bases.forEach(function (ev) {
+        if (guard > 5000) return;
+        var skip = {};
+        (ev.exceptions || []).forEach(function (x) { if (x.action === 'skip') skip[x.date] = true; });
+        var occs = DB.agendaExpandSeries(ev, from, to, ovByEv[ev.id] || {}, skip);
+        occs.forEach(function (o) { if (guard++ < 5000) out.push(o); });
+      });
+      out.sort(function (a, b) { return (a.date + (a.start_at || '') + a.key).localeCompare(b.date + (b.start_at || '') + b.key); });
+      return out;
+    },
+    agendaUpcoming: function (userId, opt) {
+      opt = opt || {};
+      var from = opt.from || DB.agendaToday();
+      var occs = DB.agendaOccurrences(userId, from, DB.agendaAddDays(from, opt.days || 60), { vision: opt.vision || 'couple' });
+      return occs.filter(function (o) { return o.date >= from; }).slice(0, opt.limit || 10);
+    },
+    agendaStats: function (userId, from, to, vision) {
+      var occs = DB.agendaOccurrences(userId, from, to, { vision: vision || 'couple' });
+      var byCat = {}, byType = {}, priv = 0, coup = 0;
+      occs.forEach(function (o) {
+        if (o.visibility === 'COUPLE') coup++; else priv++;
+        byType[o.event_type] = (byType[o.event_type] || 0) + 1;
+        var c = o.category || 'Sem categoria';
+        byCat[c] = (byCat[c] || 0) + 1;
+      });
+      return { total: occs.length, private: priv, couple: coup, byType: byType, byCategory: byCat, from: from, to: to };
+    },
+    agendaYearSummary: function (userId, year, vision) {
+      var months = [];
+      for (var m = 1; m <= 12; m++) {
+        var from = DB.agendaFmt(year, m, 1), to = DB.agendaFmt(year, m, DB.agendaDim(year, m));
+        months.push({ month: from.slice(0, 7), count: DB.agendaOccurrences(userId, from, to, { vision: vision || 'couple' }).length });
+      }
+      return { year: year, months: months, total: months.reduce(function (a, x) { return a + x.count; }, 0) };
+    },
+    agendaFindForAI: function (userId, text, dateOpt) {
+      var words = DB.aiNorm(text).split(' ').filter(function (w) { return w.length >= 4; });
+      var stop = { para: 1, com: 1, por: 1, uma: 1, esse: 1, essa: 1, este: 1, esta: 1, para2: 1, cancela: 1, cancelar: 1, desmarca: 1, desmarcar: 1, remarca: 1, remarcar: 1, reagendar: 1, muda: 1, mudar: 1, marca: 1, marcar: 1, marque: 1, agende: 1, agendar: 1, anos: 1 };
+      words = words.filter(function (w) { return !stop[w]; });
+      var from = DB.agendaAddDays(DB.agendaToday(), -60), to = DB.agendaAddDays(DB.agendaToday(), 120);
+      var occs = DB.agendaOccurrences(userId, from, to, { vision: 'couple' });
+      return occs.filter(function (o) {
+        if (dateOpt && o.date !== dateOpt) return false;
+        var t = DB.aiNorm(o.title);
+        return words.length && words.some(function (w) { return t.indexOf(w) >= 0; });
+      }).slice(0, 5);
+    },
+    /* --- lembretes: instante = início − minutos (dia inteiro = 09:00). --- */
+    agendaRemindAt: function (occ) {
+      if (occ.reminder_minutes == null) return null;
+      var base = occ.start_at && occ.start_at.length > 10 ? occ.start_at.slice(11, 16) : '09:00';
+      return DB.agendaShiftMinutes(occ.date, base, -occ.reminder_minutes);
+    },
+    /* --- notificações da agenda via NotificationEngine (sem motor próprio) --- */
+    agendaNotifyTargets: function (userId, ev) {
+      var db = read();
+      if (ev.visibility === 'COUPLE') {
+        return db.members.filter(function (m) { return m.couple_id === ev.couple_id && m.user_id !== userId; }).map(function (m) { return m.user_id; });
+      }
+      return [userId];
+    },
+    agendaNotify: function (userId, kind, eventId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var ev = db.agenda_events.find(function (x) { return x.id === eventId && x.couple_id === cid; });
+      if (!ev) throw new Error('Compromisso não encontrado.');
+      var map = {
+        created: { type: 'agenda_event_created', title: 'Novo compromisso', priority: 'info' },
+        updated: { type: 'agenda_event_updated', title: 'Compromisso atualizado', priority: 'info' },
+        cancelled: { type: 'agenda_event_cancelled', title: 'Compromisso cancelado', priority: 'attention' }
+      };
+      var def = map[kind];
+      if (!def) throw new Error('Tipo inválido.');
+      if (ev.visibility === 'PRIVATE' && kind !== 'reminder') return [];
+      var label = ev.title + ' • ' + ev.start_at.slice(0, 10).split('-').reverse().join('/') + (ev.start_at.length > 10 ? ' ' + ev.start_at.slice(11, 16) : '');
+      var made = [];
+      DB.agendaNotifyTargets(userId, ev).forEach(function (target) {
+        try {
+          var r = DB.notifCreate(target, { type: def.type, title: def.title, body: label, priority: def.priority, user_id: target, related_entity_type: 'agenda', related_entity_id: ev.id, idempotency_key: ['agenda', kind, cid, ev.id, target].join('|'), payload: { event_id: ev.id } });
+          if (r && r.id) made.push(r.id);
+        } catch (e) { /* dup/cooldown/prefs: segue */ }
+      });
+      return made;
+    },
+    agendaCancelPending: function (userId, eventId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var n = 0;
+      db.notifications.forEach(function (x) {
+        if (x.couple_id === cid && x.related_entity_type === 'agenda' && x.related_entity_id === eventId &&
+          ['pending', 'scheduled'].indexOf(x.status) >= 0) {
+          x.status = 'expired'; x.updated_at = now(); n++;
+          logAudit(db, cid, userId, 'notification', x.id, 'expired', { why: 'agenda_changed' });
+        }
+      });
+      if (n) write(db);
+      return n;
+    },
+    /* Lembretes vencidos: varredura determinística (chamada pelo notifScan). */
+    agendaProcessDue: function (userId, nowISO) {
+      var nowD = (nowISO || now()).slice(0, 10);
+      var nowT = (nowISO || now()).slice(0, 16);
+      var occs = DB.agendaOccurrences(userId, nowD, DB.agendaAddDays(nowD, 2), { vision: 'couple' });
+      var made = [];
+      occs.forEach(function (o) {
+        if (o.reminder_minutes == null) return;
+        var at = DB.agendaRemindAt(o);
+        if (!at || at > nowT) return;
+        if (o.start_at && o.start_at <= nowT && o.start_at.length > 10) return;
+        var targets = o.visibility === 'COUPLE'
+          ? DB.agendaNotifyTargets(o.owner_user_id || userId, { visibility: 'COUPLE', couple_id: DB.myCoupleId(userId) })
+          : [o.owner_user_id || userId];
+        if (o.visibility === 'COUPLE' && !o.owner_user_id) {
+          var db = read(), cid = DB.myCoupleId(userId);
+          targets = db.members.filter(function (m) { return m.couple_id === cid; }).map(function (m) { return m.user_id; });
+        }
+        targets.forEach(function (target) {
+          try {
+            var when = o.all_day ? 'hoje' : 'às ' + o.start_at.slice(11, 16);
+            var r = DB.notifCreate(target, { type: 'agenda_event_reminder', title: 'Lembrete: ' + o.title, body: o.title + ' ' + when + (o.location ? ' • ' + o.location : '') + '.', priority: 'attention', user_id: target, related_entity_type: 'agenda', related_entity_id: o.event_id, idempotency_key: ['agenda', 'reminder', DB.myCoupleId(userId), o.event_id, o.date, target].join('|'), payload: { event_id: o.event_id, date: o.date } });
+            if (r && r.id) made.push(r.id);
+          } catch (e) { /* dup/cooldown: segue */ }
+        });
+      });
+      return made;
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -7336,7 +8109,11 @@ window.Juntos = window.Juntos || {};
         { key: 'of_sync_completed', priority: 'info', channels: ['in_app'], cooldownH: 6, expiresInH: 72, retry: false, maxAttempts: 1, route: 'openfinance' },
         { key: 'of_sync_failed', priority: 'important', channels: ['in_app', 'whatsapp'], cooldownH: 6, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' },
         { key: 'of_reconciliation_pending', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' },
-        { key: 'of_connection_attention', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' }
+        { key: 'of_connection_attention', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 72, expiresInH: 168, retry: false, maxAttempts: 1, route: 'openfinance' },
+        { key: 'agenda_event_created', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
+        { key: 'agenda_event_updated', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' },
+        { key: 'agenda_event_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 48, retry: false, maxAttempts: 1, route: 'agenda' },
+        { key: 'agenda_event_cancelled', priority: 'attention', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'agenda' }
       ];
     },
     notifTypeDef: function (type) {
@@ -7684,16 +8461,21 @@ window.Juntos = window.Juntos || {};
     /* Deep link validado: entidade precisa pertencer ao casal. */
     notifDeepLink: function (userId, notifId) {
       var n = DB.notifGet(userId, notifId);
-      var routes = { invoices: '#/invoices', budget: '#/budget', installments: '#/installments', goals: '#/goals', settlements: '#/settlements', imports: '#/imports', settings: '#/settings', accounts: '#/accounts', cards: '#/cards', recurring: '#/calendar', planning: '#/planning', openfinance: '#/openfinance' };
+      var routes = { invoices: '#/invoices', budget: '#/budget', installments: '#/installments', goals: '#/goals', settlements: '#/settlements', imports: '#/imports', settings: '#/settings', accounts: '#/accounts', cards: '#/cards', recurring: '#/calendar', planning: '#/planning', openfinance: '#/openfinance', agenda: '#/agenda' };
       var def = DB.notifTypeDef(n.type);
       var base = routes[(def && def.route) || ''] || '#/dashboard';
       if (!n.related_entity_id) return base;
       var db = read(), cid = DB.myCoupleId(userId);
-      var tables = { invoice: 'invoices', import: 'import_batches', goal: 'goals', plan: 'financial_plans' };
+      var tables = { invoice: 'invoices', import: 'import_batches', goal: 'goals', plan: 'financial_plans', agenda: 'agenda_events' };
       var tname = tables[n.related_entity_type];
       if (tname) {
         var ok = (db[tname] || []).some(function (x) { return x.id === n.related_entity_id && x.couple_id === cid; });
         if (!ok) throw new Error('Acesso negado.');
+        if (n.related_entity_type === 'agenda') {
+          var agev = (db.agenda_events || []).find(function (x) { return x.id === n.related_entity_id; });
+          if (!agev || agev.deleted_at) throw new Error('Acesso negado.');
+          return '#/agenda';
+        }
         if (n.related_entity_type === 'invoice') return '#/invoices';
         if (n.related_entity_type === 'import') return '#/imports/' + n.related_entity_id;
         if (n.related_entity_type === 'goal') return '#/goals';
@@ -7795,6 +8577,12 @@ window.Juntos = window.Juntos || {};
           }
         });
       }
+      if (types.indexOf('agenda_event_reminder') >= 0) {
+        try {
+          var made2 = DB.agendaProcessDue(userId, opt.nowISO || now());
+          made2.forEach(function (id) { made.push(id); });
+        } catch (e) { /* agenda indisponível: segue */ }
+      }
       DB.notifExpireStale(userId, types, opt);
       return made;
     },
@@ -7829,6 +8617,9 @@ window.Juntos = window.Juntos || {};
         } else if (n.type === 'recurring_due') {
           var occ = db.recurring_occurrences.filter(function (x) { return x.couple_id === cid && x.status === 'pending'; });
           if (!occ.length) expire(n, 'sem pendência');
+        } else if (n.type === 'agenda_event_reminder') {
+          var agev = n.related_entity_id ? (db.agenda_events || []).find(function (x) { return x.id === n.related_entity_id; }) : null;
+          if (!agev || agev.deleted_at) expire(n, 'compromisso removido');
         }
       });
       write(db);
@@ -9169,7 +9960,7 @@ window.Juntos = window.Juntos || {};
        duplica: compra+parcela+fatura+pagamento são eventos distintos;
        pagamento/transferência/acerto nunca viram receita/despesa.
        Datas são strings YYYY-MM-DD (sem conversão de timezone). */
-    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight'],
+    CALENDAR_TYPES: ['income', 'expense', 'transfer', 'invoice', 'invoice_payment', 'installment', 'recurring', 'goal', 'budget', 'settlement', 'planning_item', 'insight', 'agenda'],
     CALENDAR_STATES: ['realizado', 'previsto', 'planejado', 'pendente', 'vencido', 'pago', 'concluído', 'cancelado', 'pulado', 'info'],
     calValidateFilters: function (userId, opt) {
       opt = opt || {};
@@ -9412,6 +10203,16 @@ window.Juntos = window.Juntos || {};
           push(mk({ id: 'ins:' + r.id, event_type: 'insight', source_type: 'insight', source_id: r.id, title: 'Contexto • ' + r.title, description: 'Contexto factual; não é recomendação.', event_date: d, amount: 0, status: 'info', related_entity_type: 'insight', related_entity_id: r.id, metadata: { severity: r.severity }, route: '#/insights' }));
         });
       } catch (e) {}
+      /* 12. Agenda: compromissos pessoais + casal (só visíveis; RLS no serviço).
+         Financeiro continua vindo das fontes acima; aqui nada é somado. */
+      try {
+        var agOcc = DB.agendaOccurrences(userId, from.slice(0, 10), to.slice(0, 10), { vision: f.vision });
+        agOcc.forEach(function (o) {
+          var who = o.visibility === 'COUPLE' ? 'Casal' : 'Pessoal';
+          var st = o.date < f.today ? 'realizado' : 'previsto';
+          push(mk({ id: 'ag:' + o.key, event_type: 'agenda', source_type: 'agenda', source_id: o.event_id, title: o.title, description: who + (o.location ? ' • ' + o.location : '') + (o.all_day ? ' • dia inteiro' : ''), event_date: o.date, due_date: o.date, amount: 0, status: st, user_id: o.owner_user_id || null, is_recurring: o.is_recurring, related_entity_type: 'agenda', related_entity_id: o.event_id, metadata: { agenda: true, visibility: o.visibility, all_day: o.all_day, start_at: o.start_at, end_at: o.end_at, occurrence_date: o.date, cash_impact: 0 }, route: '#/agenda' }));
+        });
+      } catch (e) {}
       evs.sort(function (a, b) { return (a.event_date + a.id).localeCompare(b.event_date + b.id); });
       return evs;
     },
@@ -9479,6 +10280,13 @@ window.Juntos = window.Juntos || {};
       else if (kind === 'goal-due' || kind === 'goal-done' || kind === 'goal-ev') actions = [{ label: 'Ver meta', route: '#/goals' }];
       else if (kind === 'bud') actions = [{ label: 'Ver orçamento', route: '#/budget' }];
       else if (kind === 'set') actions = [{ label: 'Ver acertos', route: '#/settlements' }];
+      else if (kind === 'ag') {
+        var agRef = ref.split('@');
+        try {
+          var occ = DB.agendaGetOccurrence(userId, agRef[0], agRef[1]);
+          return { event: ev, actions: [{ label: 'Ver na agenda', route: '#/agenda' }], occurrence: occ };
+        } catch (eag) { throw new Error('Evento não encontrado.'); }
+      }
       else if (kind === 'plan') actions = [{ label: 'Ver no planejamento', route: ev.route }, { label: 'Registrar despesa', route: '#/transactions' }];
       else actions = [{ label: 'Abrir origem', route: ev.route }];
       return { event: ev, actions: actions };
@@ -10232,7 +11040,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;

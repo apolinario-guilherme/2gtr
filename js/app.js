@@ -48,7 +48,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
+    var fn = { login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pDash;
     try { fn(v, me); } catch (e) {
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
       document.getElementById('retry').onclick = function () { render(route); };
@@ -471,6 +471,18 @@
       if (cal.overdue) s += '<p class="muted">' + cal.overdue + (cal.overdue === 1 ? ' evento atrasado.' : ' eventos atrasados.') + '</p>';
       return s + '<p><a href="#/calendar">Ver calendário ›</a> • <a href="#/calendar">Ver compromissos ›</a></p></div>';
     });
+    // 8b2. próximos compromissos da agenda (respeita visão; nunca vaza PRIVATE)
+    html += blk('Próximos compromissos', function () {
+      var up = [];
+      try { up = J.DB.agendaUpcoming(me.id, { limit: 4, days: 60, vision: dash.vision }); } catch (e) { return ''; }
+      var head = dash.vision === 'couple' ? 'Próximos compromissos do casal' : dash.vision === 'me' ? 'Seus próximos compromissos' : 'Compromissos visíveis';
+      var s = '<div class="card"><div class="row between"><b>📅 ' + head + '</b><button class="btn ghost sm" id="d-agnew" style="max-width:200px">+ Novo compromisso</button></div>';
+      if (!up.length) s += '<p class="muted">Nada marcado por aqui.</p>';
+      else s += up.map(function (o) {
+        return '<p><b>' + esc(dueLabel(o.date)) + '</b> ' + esc(agWhen(o)) + ' — <b>' + esc(o.title) + '</b> <span class="muted">• ' + (o.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Só eu') + '</span></p>';
+      }).join('');
+      return s + '<p><a href="#/agenda">Ver agenda ›</a></p></div>';
+    });
     // 8c. insights + notificações (resumos, sem segunda camada de prioridade)
     html += blk('Insights', function () {
       var ins;
@@ -534,6 +546,7 @@
     bindLink(v, 'd-paid', function () { goTx({}); });
     bindLink(v, 'd-all', function () { goTx({}); });
     bindLink(v, 'd-tr', function () { goAndOpen(me, '#/accounts', 'accounts', function () { openTransferModal(me, null, null); }); });
+    var agb = v.querySelector('#d-agnew'); if (agb) agb.onclick = function () { openAgendaModal(me, null, null); };
     bindSpend(v, avail);
     Array.prototype.forEach.call(v.querySelectorAll('[data-qa]'), function (b) {
       b.onclick = function () {
@@ -1495,6 +1508,306 @@
     };
     paintSplit();
   }
+  /* ============ AGENDA (compromissos; só apresentação sobre AgendaService) ============
+     Visões: dia/semana/mês/lista(linha do tempo curta)/longo prazo/ano.
+     Financeiro nunca é criado aqui; calendário financeiro só agrega. */
+  var ag = { view: 'day', date: '', who: 'all', type: '', cat: '', q: '', listDays: 60, tlBack: 30, tlFwd: 120 };
+  function agDate() { if (!ag.date) ag.date = todayISO(); return ag.date; }
+  function agVision() { return ag.who === 'me' ? 'me' : ag.who === 'couple' ? 'couple' : 'couple'; }
+  function agWhoLabel(o) {
+    if (o.visibility === 'COUPLE') return 'Casal';
+    return 'Só eu';
+  }
+  function agTypeMeta(t) {
+    var m = { PERSONAL: ['👤', 'Pessoal'], COUPLE: ['❤️', 'Casal'], REMINDER: ['⏰', 'Lembrete'], APPOINTMENT: ['🩺', 'Consulta'], COMMITMENT: ['📌', 'Compromisso'], OTHER: ['📝', 'Outro'] };
+    return m[t] || ['📝', t];
+  }
+  function agBadge(o) {
+    var tm = agTypeMeta(o.event_type || o.type);
+    var who = o.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Só eu';
+    return '<span class="pill">' + tm[0] + ' ' + esc(tm[1]) + '</span> <span class="pill">' + who + '</span>';
+  }
+  function agWhen(o) {
+    if (o.all_day) return 'Dia inteiro';
+    var s = (o.start_at && o.start_at.length > 10) ? o.start_at.slice(11, 16) : '';
+    var e = (o.end_at && o.end_at.length > 10) ? o.end_at.slice(11, 16) : '';
+    if (s && e && e !== s) return s + ' — ' + e;
+    return s || 'Sem horário';
+  }
+  function agRow(me, o) {
+    return '<button class="tx" data-ag="' + esc(o.key) + '" aria-label="' + esc(o.title + ', ' + dueLabel(o.date) + ', ' + agWhen(o)) + '"><span class="tx-ic">📅</span>' +
+      '<span class="tx-mid"><b>' + esc(o.title) + '</b><small>' + esc(agWhen(o)) + (o.location ? ' • 📍 ' + esc(o.location) : '') + '<br>' + agBadge(o) + '</small></span>' +
+      '<b>' + esc(dueLabel(o.date)) + '</b></button>';
+  }
+  function agDayLabel(d) {
+    var t = todayISO();
+    if (d === t) return 'Hoje';
+    if (d === J.DB.agendaAddDays(t, 1)) return 'Amanhã';
+    if (d === J.DB.agendaAddDays(t, -1)) return 'Ontem';
+    var dt = new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+    var wd = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][dt.getDay()];
+    return cap(wd) + ' • ' + dueLabel(d);
+  }
+  var AG_WD = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  function pAgenda(v, me) {
+    agDate();
+    var occs, stats = null;
+    try {
+      var from, to;
+      if (ag.view === 'day') { from = ag.date; to = ag.date; }
+      else if (ag.view === 'week') { var dw = (new Date(+ag.date.slice(0, 4), +ag.date.slice(5, 7) - 1, +ag.date.slice(8, 10)).getDay() + 6) % 7; from = J.DB.agendaAddDays(ag.date, -dw); to = J.DB.agendaAddDays(from, 6); }
+      else if (ag.view === 'month') { from = ag.date.slice(0, 7) + '-01'; to = ag.date.slice(0, 7) + '-' + J.DB.agendaDim(+ag.date.slice(0, 4), +ag.date.slice(5, 7)); }
+      else if (ag.view === 'list') { from = ag.date; to = J.DB.agendaAddDays(ag.date, ag.listDays); }
+      else if (ag.view === 'timeline') { from = J.DB.agendaAddDays(ag.date, -ag.tlBack); to = J.DB.agendaAddDays(ag.date, ag.tlFwd); }
+      else { from = ag.date.slice(0, 4) + '-01-01'; to = ag.date.slice(0, 4) + '-12-31'; }
+      occs = J.DB.agendaOccurrences(me.id, from, to, { vision: agVision(), type: ag.type || undefined, category: ag.cat || undefined, search: ag.q || '' });
+      if (ag.view === 'year') stats = J.DB.agendaYearSummary(me.id, +ag.date.slice(0, 4), agVision());
+    } catch (e) { v.innerHTML = '<div class="card"><h1>Agenda</h1></div>' + err(e); return; }
+    var html = '<div class="card"><div class="row between"><h1 style="margin:0">Agenda</h1><button class="btn" id="ag-new" style="max-width:220px">+ Novo compromisso</button></div>' +
+      '<p class="muted">Vida pessoal + casal. Compromissos não criam lançamentos financeiros.</p>' +
+      '<div class="seg" role="tablist" aria-label="Visão da agenda">' +
+      [['day', 'Dia'], ['week', 'Semana'], ['month', 'Mês'], ['list', 'Agenda'], ['timeline', 'Linha do tempo'], ['year', 'Ano']].map(function (x) {
+        return '<button data-agv="' + x[0] + '" class="' + (ag.view === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    if (ag.view === 'month' || ag.view === 'year') {
+      html += '<div class="per-row"><button class="pnav" id="ag-prev" aria-label="Anterior">‹</button><strong>' + esc(ag.view === 'month' ? monthLabel(ag.date.slice(0, 7)) : ag.date.slice(0, 4)) + '</strong><button class="pnav" id="ag-next" aria-label="Próximo">›</button><button class="btn ghost" id="ag-today" style="max-width:110px">Hoje</button></div>';
+    } else {
+      html += '<div class="per-row"><button class="pnav" id="ag-prev" aria-label="Anterior">‹</button><strong>' + esc(agDayLabel(ag.date)) + '</strong><button class="pnav" id="ag-next" aria-label="Próximo">›</button><button class="btn ghost" id="ag-today" style="max-width:110px">Hoje</button></div>';
+    }
+    html += '<div class="seg" role="group" aria-label="Quem"><button data-agw="all" class="' + (ag.who === 'all' ? 'on' : '') + '">Todos</button><button data-agw="me" class="' + (ag.who === 'me' ? 'on' : '') + '">Eu</button><button data-agw="couple" class="' + (ag.who === 'couple' ? 'on' : '') + '">Casal</button></div></div>';
+    html += '<div class="card"><div class="row"><select id="ag-type" aria-label="Tipo"><option value="">Todos os tipos</option>' + J.DB.AGENDA_TYPES().map(function (t) { return '<option value="' + t.key + '"' + (ag.type === t.key ? ' selected' : '') + '>' + t.icon + ' ' + t.label + '</option>'; }).join('') + '</select>' +
+      '<select id="ag-cat" aria-label="Categoria"><option value="">Todas categorias</option>' + J.DB.AGENDA_CATEGORIES().map(function (c) { return '<option value="' + esc(c) + '"' + (ag.cat === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="row"><input id="ag-q" placeholder="🔍 Buscar compromisso" value="' + esc(ag.q) + '" aria-label="Buscar compromisso"></div></div>';
+    html += '<div id="ag-body">' + agViewHtml(me, occs, stats) + '</div>';
+    v.innerHTML = html;
+    document.getElementById('ag-new').onclick = function () { openAgendaModal(me, null, null); };
+    var nw2 = document.getElementById('ag-new2'); if (nw2) nw2.onclick = function () { openAgendaModal(me, null, null); };
+    var pv = document.getElementById('ag-prev'), nx = document.getElementById('ag-next'), td = document.getElementById('ag-today');
+    if (pv) pv.onclick = function () { agMove(-1); render('agenda'); };
+    if (nx) nx.onclick = function () { agMove(1); render('agenda'); };
+    if (td) td.onclick = function () { ag.date = todayISO(); render('agenda'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-agv]'), function (b) { b.onclick = function () { ag.view = b.dataset.agv; render('agenda'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-agw]'), function (b) { b.onclick = function () { ag.who = b.dataset.agw; render('agenda'); }; });
+    document.getElementById('ag-type').onchange = function (e) { ag.type = e.target.value; render('agenda'); };
+    document.getElementById('ag-cat').onchange = function (e) { ag.cat = e.target.value; render('agenda'); };
+    document.getElementById('ag-q').onchange = function (e) { ag.q = e.target.value; render('agenda'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ag]'), function (b) { b.onclick = function () { openAgendaDetail(me, b.dataset.ag); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-agday]'), function (b) { b.onclick = function () { ag.date = b.dataset.agday; ag.view = 'day'; render('agenda'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-agmonth]'), function (b) { b.onclick = function () { ag.date = b.dataset.agmonth + '-01'; ag.view = 'month'; render('agenda'); }; });
+    var lm = document.getElementById('ag-more'); if (lm) lm.onclick = function () { ag.listDays += 60; render('agenda'); };
+    var tlb = document.getElementById('ag-tlback'); if (tlb) tlb.onclick = function () { ag.tlBack += 90; render('agenda'); };
+    var tlf = document.getElementById('ag-tlfwd'); if (tlf) tlf.onclick = function () { ag.tlFwd += 120; render('agenda'); };
+  }
+  function agMove(dir) {
+    if (ag.view === 'day' || ag.view === 'list' || ag.view === 'timeline') ag.date = J.DB.agendaAddDays(ag.date, dir);
+    else if (ag.view === 'week') ag.date = J.DB.agendaAddDays(ag.date, dir * 7);
+    else if (ag.view === 'month') ag.date = J.DB.shiftMonth(ag.date.slice(0, 7), dir) + '-01';
+    else if (ag.view === 'year') ag.date = (+ag.date.slice(0, 4) + dir) + '-01-01';
+  }
+  function agViewHtml(me, occs, stats) {
+    if (ag.view === 'day') return agDayHtml(me, occs);
+    if (ag.view === 'week') return agWeekHtml(me, occs);
+    if (ag.view === 'month') return agMonthHtml(me, occs);
+    if (ag.view === 'list') return agListHtml(me, occs, false);
+    if (ag.view === 'timeline') return agListHtml(me, occs, true);
+    return agYearHtml(me, stats);
+  }
+  function agEmpty() {
+    return '<div class="card empty"><div class="ico">📅</div><h2>Sua agenda está livre</h2><p class="muted">Cadastre seus primeiros compromissos e organize sua rotina pessoal e a vida a dois.</p><button class="btn" id="ag-new2" style="max-width:260px;margin:0 auto">+ Novo compromisso</button></div>';
+  }
+  function agDayHtml(me, occs) {
+    if (!occs.length) return agEmpty();
+    var all = occs.filter(function (o) { return o.all_day; });
+    var timed = occs.filter(function (o) { return !o.all_day; });
+    var s = '';
+    if (all.length) s += '<div class="card"><b>Dia inteiro</b>' + all.map(function (o) { return agRow(me, o); }).join('') + '</div>';
+    var byHour = {};
+    timed.forEach(function (o) {
+      var h = o.start_at.length > 10 ? o.start_at.slice(11, 13) : '--';
+      (byHour[h] = byHour[h] || []).push(o);
+    });
+    s += '<div class="card"><b>' + esc(agDayLabel(ag.date)) + '</b>' + Object.keys(byHour).sort().map(function (h) {
+      return '<p class="muted" style="margin:12px 0 4px"><b>' + h + ':00</b></p>' + byHour[h].map(function (o) { return agRow(me, o); }).join('');
+    }).join('') + '</div>';
+    return s;
+  }
+  function agWeekHtml(me, occs) {
+    var dw = (new Date(+ag.date.slice(0, 4), +ag.date.slice(5, 7) - 1, +ag.date.slice(8, 10)).getDay() + 6) % 7;
+    var mon = J.DB.agendaAddDays(ag.date, -dw);
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(J.DB.agendaAddDays(mon, i));
+    var byDay = {};
+    occs.forEach(function (o) { (byDay[o.date] = byDay[o.date] || []).push(o); });
+    var s = '<div class="card"><div style="overflow-x:auto"><div class="ag-week" role="grid" aria-label="Semana"><div class="ag-wh"></div>' + days.map(function (d, ix) {
+      return '<div class="ag-wh' + (d === todayISO() ? ' today' : '') + '">' + AG_WD[ix] + '<br><b>' + d.slice(8, 10) + '</b></div>';
+    }).join('') + '</div>';
+    for (var h = 6; h <= 22; h++) {
+      var hh = ('0' + h).slice(-2);
+      s += '<div class="ag-week"><div class="ag-wh">' + hh + ':00</div>' + days.map(function (d) {
+        var list = (byDay[d] || []).filter(function (o) { return !o.all_day && o.start_at.length > 10 && o.start_at.slice(11, 13) === hh; });
+        var ad = (byDay[d] || []).filter(function (o) { return o.all_day; });
+        return '<div class="ag-cell">' + list.map(function (o) {
+          return '<button class="ag-block" data-ag="' + esc(o.key) + '" aria-label="' + esc(o.title + ' ' + agWhen(o)) + '"><b>' + esc(o.start_at.slice(11, 16)) + '</b> ' + esc(o.title) + '<br><small>' + (o.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Eu') + '</small></button>';
+        }).join('') + (h === 6 && ad.length ? ad.map(function (o) { return '<button class="ag-block allday" data-ag="' + esc(o.key) + '">☀️ ' + esc(o.title) + '</button>'; }).join('') : '') + '</div>';
+      }).join('') + '</div>';
+    }
+    return s + '</div></div>';
+  }
+  function agMonthHtml(me, occs) {
+    var y = +ag.date.slice(0, 4), m = +ag.date.slice(5, 7);
+    var startDow = (new Date(y, m - 1, 1).getDay() + 6) % 7, n = J.DB.agendaDim(y, m);
+    var byDay = {};
+    occs.forEach(function (o) { var dd = +o.date.slice(8, 10); (byDay[dd] = byDay[dd] || []).push(o); });
+    var cells = '';
+    for (var i = 0; i < startDow; i++) cells += '<div class="cal-empty"></div>';
+    for (var d = 1; d <= n; d++) {
+      var list = (byDay[d] || []).slice(0, 3);
+      var extra = (byDay[d] || []).length - list.length;
+      var key = ag.date.slice(0, 7) + '-' + ('0' + d).slice(-2);
+      cells += '<div class="cal-day"><button class="cal-daynum" data-agday="' + key + '" aria-label="Ver dia ' + d + '"><b>' + d + '</b></button>' + list.map(function (o) {
+        return '<button class="cal-it" data-ag="' + esc(o.key) + '" title="' + esc(o.title) + '">' + (o.visibility === 'COUPLE' ? '❤️' : '👤') + ' ' + esc(o.title.slice(0, 12)) + '</button>';
+      }).join('') + (extra > 0 ? '<span class="muted">+' + extra + '</span>' : '') + '</div>';
+    }
+    return '<div class="card"><div class="cal-grid" role="grid" aria-label="Mês">' + AG_WD.map(function (w) { return '<div class="cal-dow">' + w + '</div>'; }).join('') + cells + '</div><p class="muted">👤 individual • ❤️ casal</p></div>';
+  }
+  function agListHtml(me, occs, grouped) {
+    if (!occs.length) return agEmpty();
+    var byDay = {}, order = [];
+    occs.forEach(function (o) {
+      if (!byDay[o.date]) { byDay[o.date] = []; order.push(o.date); }
+      byDay[o.date].push(o);
+    });
+    var lastYm = '', s = '';
+    order.forEach(function (d) {
+      if (grouped && d.slice(0, 7) !== lastYm) { lastYm = d.slice(0, 7); s += '<h2 style="margin:16px 2px 0">' + esc(monthLabel(lastYm)) + '</h2>'; }
+      s += '<div class="card"><b>' + esc(agDayLabel(d)) + '</b>' + byDay[d].map(function (o) { return agRow(me, o); }).join('') + '</div>';
+    });
+    if (ag.view === 'list') s += '<button class="btn ghost" id="ag-more">Carregar mais dias</button>';
+    else s = '<div class="row"><button class="btn ghost" id="ag-tlback">↑ Mais antigos</button><button class="btn ghost" id="ag-tlfwd">Mais futuros ↓</button></div>' + s;
+    return s;
+  }
+  function agYearHtml(me, stats) {
+    var MN = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+    var s = '<div class="card"><div class="ag-year">' + stats.months.map(function (mm, ix) {
+      return '<button class="ag-mcell" data-agmonth="' + mm.month + '" aria-label="' + MN[ix] + ': ' + mm.count + ' eventos"><b>' + MN[ix] + '</b><span class="muted">' + mm.count + (mm.count === 1 ? ' evento' : ' eventos') + '</span></button>';
+    }).join('') + '</div><p class="muted">Total no ano: <b>' + stats.total + '</b></p></div>';
+    return s;
+  }
+  function openAgendaModal(me, eventId, preset) {
+    var ev = null;
+    if (eventId) { try { ev = J.DB.getAgendaEvent(me.id, eventId); } catch (e) { toast('Compromisso não encontrado.'); return; } }
+    preset = preset || {};
+    var isSeries = !!(ev && ev.recurrence_rule && !ev.recurrence_parent_id);
+    var scope = 'all';
+    modalShell('<h2>' + (ev ? 'Editar compromisso' : 'Novo compromisso') + '</h2><div id="me"></div>' +
+      (ev && ev.recurrence_parent_id ? '<p class="muted">Editando uma ocorrência: a alteração vale só para este dia.</p>' : '') +
+      (isSeries ? '<label>Alcance da edição</label><div class="seg" id="ag-scope"><button data-s="single" class="on">Apenas este evento</button><button data-s="following">Este e os próximos</button><button data-s="all">Toda a série</button></div><div class="row"><div><label>Data da ocorrência *</label><input id="f-occ" type="date" value="' + esc(todayISO()) + '"></div></div>' : '') +
+      '<label>Título *</label><input id="f-t" maxlength="120" value="' + esc(ev ? ev.title : (preset.title || '')) + '" placeholder="Ex: Dentista">' +
+      '<label>Tipo</label><select id="f-ty">' + J.DB.AGENDA_TYPES().map(function (t) { return '<option value="' + t.key + '"' + ((ev ? ev.event_type : preset.type) === t.key ? ' selected' : '') + '>' + t.icon + ' ' + t.label + '</option>'; }).join('') + '</select>' +
+      '<label>Para quem? *</label><div class="seg" id="f-who"><button data-w="PRIVATE" class="' + ((!ev || ev.visibility !== 'COUPLE') ? 'on' : '') + '">👤 Só eu</button><button data-w="COUPLE" class="' + ((ev && ev.visibility === 'COUPLE') ? 'on' : '') + '">❤️ Nós dois</button></div>' +
+      '<div class="row"><div><label>Data *</label><input id="f-dt" type="date" value="' + esc(ev ? ev.start_at.slice(0, 10) : (preset.date || todayISO())) + '"></div></div>' +
+      '<div class="row" id="tm-row"><div><label>Horário (início)</label><input id="f-ts" type="time" value="' + esc(ev && ev.start_at.length > 10 ? ev.start_at.slice(11, 16) : (preset.start_time || '')) + '"></div><div><label>Horário (fim)</label><input id="f-te" type="time" value="' + esc(ev && ev.end_at && ev.end_at.length > 10 ? ev.end_at.slice(11, 16) : (preset.end_time || '')) + '"></div></div>' +
+      '<label class="check"><input type="checkbox" id="f-ad"' + (ev && ev.all_day ? ' checked' : '') + '> Dia inteiro <small>(sem horário específico)</small></label>' +
+      '<label>Local</label><input id="f-lo" maxlength="120" value="' + esc(ev ? (ev.location || '') : '') + '" placeholder="Ex: Consultório, restaurante">' +
+      '<label>Descrição</label><input id="f-de" maxlength="500" value="' + esc(ev ? (ev.description || '') : '') + '" placeholder="Opcional">' +
+      '<div class="row"><div><label>Categoria</label><select id="f-ca">' + [''].concat(J.DB.AGENDA_CATEGORIES()).map(function (c) { return '<option value="' + esc(c) + '"' + ((ev && ev.category) === c ? ' selected' : '') + '>' + (c || 'Sem categoria') + '</option>'; }).join('') + '</select></div>' +
+      '<div><label>Cor</label><select id="f-co">' + J.DB.AGENDA_COLORS().map(function (c) { return '<option value="' + c + '"' + ((ev && ev.color) === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div></div>' +
+      '<label>Repetição</label><select id="f-fr"><option value="none">Não se repete</option>' + [['daily', 'Todos os dias'], ['weekly', 'Toda semana'], ['biweekly', 'A cada 2 semanas'], ['monthly', 'Todo mês'], ['yearly', 'Todo ano'], ['custom', 'Personalizado']].map(function (x) { return '<option value="' + x[0] + '"' + ((ev && ev.recurrence_rule && ev.recurrence_rule.freq) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+      '<div id="fr-x" style="display:none"><div class="row"><div><label>A cada</label><input id="f-fi" type="number" min="1" max="99" value="' + esc(ev && ev.recurrence_rule ? ev.recurrence_rule.interval : 1) + '"></div><div><label>Unidade</label><select id="f-fu"><option value="day">dia(s)</option><option value="week">semana(s)</option><option value="month">mês(meses)</option><option value="year">ano(s)</option></select></div></div>' +
+      '<label>Termina em (opcional)</label><input id="f-fe" type="date" value="' + esc(ev && ev.recurrence_end_at ? ev.recurrence_end_at : '') + '"></div>' +
+      '<label>Lembrete</label><select id="f-re">' + J.DB.AGENDA_REMINDER_OPTIONS().map(function (x) { return '<option value="' + (x.min == null ? '' : x.min) + '"' + (String(ev ? (ev.reminder_minutes == null ? '' : ev.reminder_minutes) : 15) === String(x.min == null ? '' : x.min) ? ' selected' : '') + '>' + x.label + '</option>'; }).join('') + '<option value="custom">Personalizado (minutos)…</option></select>' +
+      '<div id="re-x" style="display:none"><label>Minutos antes</label><input id="f-rm" type="number" min="0" max="43200" value="60"></div>' +
+      '<button class="btn" id="sv">' + (ev ? 'Salvar alterações' : 'Salvar compromisso') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    var who = (!ev || ev.visibility !== 'COUPLE') ? 'PRIVATE' : 'COUPLE';
+    Array.prototype.forEach.call(document.querySelectorAll('#f-who button'), function (b) { b.onclick = function () { who = b.dataset.w; Array.prototype.forEach.call(document.querySelectorAll('#f-who button'), function (x) { x.className = x.dataset.w === who ? 'on' : ''; }); }; });
+    Array.prototype.forEach.call(document.querySelectorAll('#ag-scope button'), function (b) { b.onclick = function () { scope = b.dataset.s; Array.prototype.forEach.call(document.querySelectorAll('#ag-scope button'), function (x) { x.className = x.dataset.s === scope ? 'on' : ''; }); }; });
+    function paintRec() {
+      var fr = document.getElementById('f-fr').value;
+      document.getElementById('fr-x').style.display = fr === 'custom' ? '' : 'none';
+    }
+    document.getElementById('f-fr').onchange = paintRec; paintRec();
+    document.getElementById('f-ad').onchange = function () {
+      var ad = document.getElementById('f-ad').checked;
+      document.getElementById('tm-row').style.display = ad ? 'none' : '';
+    };
+    document.getElementById('tm-row').style.display = (ev && ev.all_day) ? 'none' : '';
+    document.getElementById('f-re').onchange = function () {
+      document.getElementById('re-x').style.display = document.getElementById('f-re').value === 'custom' ? '' : 'none';
+    };
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var fr = document.getElementById('f-fr').value;
+        var rule = null;
+        if (fr !== 'none') {
+          rule = fr === 'custom'
+            ? { freq: 'custom', interval: document.getElementById('f-fi').value, unit: document.getElementById('f-fu').value, end: document.getElementById('f-fe').value || null }
+            : { freq: fr, interval: 1, end: document.getElementById('f-fe').value || null };
+        }
+        var re = document.getElementById('f-re').value;
+        var data = { title: document.getElementById('f-t').value, event_type: document.getElementById('f-ty').value, visibility: who, date: document.getElementById('f-dt').value, start_time: document.getElementById('f-ts').value || null, end_time: document.getElementById('f-te').value || null, all_day: document.getElementById('f-ad').checked, location: document.getElementById('f-lo').value, description: document.getElementById('f-de').value, category: document.getElementById('f-ca').value, color: document.getElementById('f-co').value, recurrence_rule: rule, reminder_minutes: re === '' ? null : (re === 'custom' ? document.getElementById('f-rm').value : re) };
+        if (ev) {
+          if (isSeries && scope !== 'all') {
+            var occ = document.getElementById('f-occ').value;
+            if (!occ) throw new Error('Informe a data da ocorrência.');
+            J.DB.updateAgendaEvent(me.id, ev.id, data, { scope: scope, occurrence: occ });
+          } else {
+            J.DB.updateAgendaEvent(me.id, ev.id, data, {});
+          }
+          toast('Compromisso atualizado!');
+        } else {
+          J.DB.createAgendaEvent(me.id, data);
+          toast('Compromisso salvo! 📅');
+        }
+        closeModal(); render('agenda');
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openAgendaDetail(me, key) {
+    var parts = String(key || '').split('@');
+    var occ;
+    try { occ = J.DB.agendaGetOccurrence(me.id, parts[0], parts[1]); }
+    catch (e) { toast('Compromisso não encontrado.'); return; }
+    var pub = J.DB.agendaOccurrencePublic(me.id, occ);
+    var tm = agTypeMeta(occ.event_type);
+    modalShell('<span class="pill">' + tm[0] + ' ' + esc(tm[1]) + '</span> <span class="pill">' + (occ.visibility === 'COUPLE' ? '❤️ Nós dois' : '👤 Só eu') + '</span>' +
+      '<h1>' + esc(occ.title) + '</h1>' +
+      '<p class="muted">' + esc(agDayLabel(occ.date)) + '<br>' + esc(agWhen(occ)) + (occ.is_recurring ? '<br>🔁 Série recorrente' : '') + (occ.overridden ? '<br>✏️ Ocorrência ajustada' : '') + '</p>' +
+      (occ.location ? '<p>📍 <b>' + esc(occ.location) + '</b></p>' : '') +
+      (occ.description ? '<p>' + esc(occ.description) + '</p>' : '') +
+      (occ.category ? '<p class="muted">Categoria: <b>' + esc(occ.category) + '</b></p>' : '') +
+      '<p class="muted">Criado por: ' + esc(J.DB.userName(me.id, occ.created_by).replace(' (você)', '')) + (occ.reminder_minutes != null ? '<br>🔔 Lembrete: ' + esc(occ.reminder_minutes) + ' min antes' : '') + '</p>' +
+      '<div class="row"><button class="btn ghost" id="ed">Editar</button><button class="btn ghost" id="del" style="color:var(--primary-d)">Excluir</button></div><button class="btn" id="cl">Fechar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('ed').onclick = function () { openAgendaModal(me, occ.event_id, null); };
+    document.getElementById('del').onclick = function () {
+      if (!occ.is_recurring) {
+        if (!confirm('Excluir este compromisso?')) return;
+        try { J.DB.deleteAgendaEvent(me.id, occ.event_id, {}); closeModal(); toast('Compromisso excluído.'); render('agenda'); }
+        catch (e2) { toast('Não foi possível excluir.'); }
+        return;
+      }
+      modalShell('<h2>Excluir da série</h2><div id="me"></div><p class="muted">"' + esc(occ.title) + '" em ' + esc(dueLabel(occ.date)) + '</p>' +
+        '<button class="btn ghost" id="d1">Apenas este evento</button><button class="btn ghost" id="d2">Este e os próximos</button><button class="btn ghost" id="d3" style="color:var(--primary-d)">Toda a série</button><button class="btn ghost" id="cl">Cancelar</button>');
+      document.getElementById('cl').onclick = closeModal;
+      function done(msg) { return function () { closeModal(); toast(msg); render('agenda'); }; }
+      document.getElementById('d1').onclick = function () {
+        try { J.DB.deleteAgendaEvent(me.id, occ.event_id, { scope: 'single', occurrence: occ.date }); done('Ocorrência excluída.')(); }
+        catch (e2) { document.getElementById('me').innerHTML = err(e2); }
+      };
+      document.getElementById('d2').onclick = function () {
+        if (!confirm('Cancelar este e os próximos eventos da série?')) return;
+        try { J.DB.deleteAgendaEvent(me.id, occ.event_id, { scope: 'following', occurrence: occ.date }); done('Série cancelada a partir desta data.')(); }
+        catch (e2) { document.getElementById('me').innerHTML = err(e2); }
+      };
+      document.getElementById('d3').onclick = function () {
+        if (!confirm('Excluir toda a série? O histórico será preservado como cancelado.')) return;
+        try { J.DB.deleteAgendaEvent(me.id, occ.event_id, {}); done('Série excluída.')(); }
+        catch (e2) { document.getElementById('me').innerHTML = err(e2); }
+      };
+    };
+  }
   /* ============ ETAPA 6: CALENDÁRIO ============ */
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false;
   function calFilters() {
@@ -1519,7 +1832,7 @@
     return '<span class="pill ' + m[0] + '">' + esc(m[1]) + '</span>';
   }
   function calTypeIcon(t) {
-    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡' }[t] || '•';
+    return { income: '🟢', expense: '🔴', transfer: '⇄', invoice: '🧾', invoice_payment: '🧾', installment: '🗓️', recurring: '🔁', goal: '🎯', budget: '📊', settlement: '⚖️', planning_item: '✎', insight: '💡', agenda: '📅' }[t] || '•';
   }
   function occIcon(o) {
     var t = o.rec ? o.rec.type : 'expense';
@@ -1552,7 +1865,7 @@
       '<p class="muted">O que aconteceu, o que vai acontecer e o que foi planejado — projeções marcadas como tal, nunca como realizadas.</p>' +
       '<div class="per-row"><button class="pnav" id="c-prev" aria-label="Mês anterior">‹</button><strong>' + esc(monthLabel(calYM)) + '</strong><button class="pnav" id="c-next" aria-label="Próximo mês">›</button></div>' +
       '<div class="seg" role="tablist" aria-label="Visão do calendário"><button id="cv-m" class="' + (calView === 'month' ? 'on' : '') + '">Mês</button><button id="cv-w" class="' + (calView === 'week' ? 'on' : '') + '">Semana</button><button id="cv-l" class="' + (calView === 'list' ? 'on' : '') + '">Lista</button><button id="cv-u" class="' + (calView === 'upcoming' ? 'on' : '') + '">Próximos</button><button id="cv-o" class="' + (calView === 'overdue' ? 'on' : '') + '">Atrasados</button></div>' +
-      '<div class="seg" role="group" aria-label="Visão"><button data-cvv="couple" class="' + (calVision === 'couple' ? 'on' : '') + '">Casal</button><button data-cvv="me" class="' + (calVision === 'me' ? 'on' : '') + '">' + vMe + '</button><button data-cvv="partner" class="' + (calVision === 'partner' ? 'on' : '') + '">' + vPa + '</button></div></div>';
+      '<div class="seg" role="group" aria-label="Visão"><button data-cvv="couple" class="' + (calVision === 'couple' ? 'on' : '') + '">Casal</button><button data-cvv="me" class="' + (calVision === 'me' ? 'on' : '') + '">' + vMe + '</button><button data-cvv="partner" class="' + (calVision === 'partner' ? 'on' : '') + '">' + vPa + '</button></div><div class="row"><button class="btn ghost" id="c-agnew">+ Novo compromisso</button></div></div>';
     html += '<div class="card"><b>Filtros</b><div class="row">' +
       '<select id="cf-type" aria-label="Tipo"><option value="">Todos os tipos</option>' + J.DB.CALENDAR_TYPES.map(function (t) { return '<option value="' + t + '"' + (calType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>' +
       '<select id="cf-state" aria-label="Estado"><option value="">Todos os estados</option>' + J.DB.CALENDAR_STATES.map(function (t) { return '<option value="' + t + '"' + (calState === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>' +
@@ -1592,6 +1905,7 @@
     }
     v.innerHTML = html;
     document.getElementById('c-prev').onclick = function () { calYM = J.DB.shiftMonth(calYM, -1); render('calendar'); };
+    var cag = document.getElementById('c-agnew'); if (cag) cag.onclick = function () { openAgendaModal(me, null, null); };
     document.getElementById('c-next').onclick = function () { calYM = J.DB.shiftMonth(calYM, 1); render('calendar'); };
     document.getElementById('cv-m').onclick = function () { calView = 'month'; render('calendar'); };
     document.getElementById('cv-w').onclick = function () { calView = 'week'; render('calendar'); };
@@ -2932,7 +3246,7 @@
     };
   }
   function pMore(v) {
-    v.innerHTML = '<div class="menu"><a href="#/accounts">🏦 Contas <span>›</span></a><a href="#/cards">💳 Cartões <span>›</span></a><a href="#/installments">🗓️ Compras parceladas <span>›</span></a><a href="#/invoices">🧾 Faturas <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settlements">⚖️ Acertos <span>›</span></a><a href="#/recurring">🔁 Contas recorrentes <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/reports">📈 Relatórios <span>›</span></a><a href="#/planning">🗺️ Planejamento <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>';
+    v.innerHTML = '<div class="menu"><a href="#/accounts">🏦 Contas <span>›</span></a><a href="#/cards">💳 Cartões <span>›</span></a><a href="#/installments">🗓️ Compras parceladas <span>›</span></a><a href="#/invoices">🧾 Faturas <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settlements">⚖️ Acertos <span>›</span></a><a href="#/recurring">🔁 Contas recorrentes <span>›</span></a><a href="#/agenda">📅 Agenda <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/reports">📈 Relatórios <span>›</span></a><a href="#/planning">🗺️ Planejamento <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>';
   }
   /* ============ CONFIGURAÇÕES: hub + subseções ============
      Áreas principais = usar o dinheiro. Configurações = definir como o
@@ -4153,7 +4467,7 @@
   }
   /* ============ PROMPT 22: ASSISTENTE (conversa sobre dados reais) ============ */
   var asConv = null;
-  var AS_SUGGEST = ['Como estão nossas finanças este mês?', 'O que merece nossa atenção?', 'Quanto gastamos com alimentação?', 'Qual é nossa próxima fatura?', 'Quanto ainda temos de orçamento?', 'Quanto temos em parcelas?', 'Como está nossa meta?', 'Quanto está pendente de acerto?'];
+  var AS_SUGGEST = ['Como estão nossas finanças este mês?', 'O que temos amanhã?', 'O que merece nossa atenção?', 'Quanto gastamos com alimentação?', 'Qual é nossa próxima fatura?', 'Quanto ainda temos de orçamento?', 'Quanto temos em parcelas?', 'Como está nossa meta?', 'Quanto está pendente de acerto?'];
   function pAssistant(v, me) {
     try { J.DB.aiListConversations(me.id); }
     catch (e) { v.innerHTML = '<div class="card"><h1>Assistente</h1>' + err(e) + '</div>'; return; }
@@ -4502,8 +4816,10 @@
   function asActionLabel(a) {
     var p = a.request_data || {};
     var M = J.DB.aiMoney;
-    var names = { create_transaction: 'Registrar ' + (p.type === 'income' ? 'receita' : 'despesa'), create_transfer: 'Transferência', create_goal: 'Criar meta', create_recurring: 'Criar recorrente', mark_invoice_paid: 'Pagar fatura', update_transaction: 'Ajustar lançamento' };
+    var names = { create_transaction: 'Registrar ' + (p.type === 'income' ? 'receita' : 'despesa'), create_transfer: 'Transferência', create_goal: 'Criar meta', create_recurring: 'Criar recorrente', mark_invoice_paid: 'Pagar fatura', update_transaction: 'Ajustar lançamento', create_agenda_event: 'Marcar compromisso', update_agenda_event: 'Alterar compromisso', cancel_agenda_event: 'Cancelar compromisso' };
     var s = names[a.action_type] || a.action_type;
+    if (p.title) s += ' • "' + p.title + '"';
+    if (p.date) s += ' • ' + String(p.date).split('-').reverse().join('/');
     if (p.amount != null) s += ' • ' + M(p.amount);
     if (p.description || p.name) s += ' • ' + (p.description || p.name);
     if (p.date || p.payment_date) s += ' • ' + (p.date || p.payment_date).split('-').reverse().join('/');
@@ -4713,24 +5029,26 @@
   }
   /* ---------- BOOT ---------- */
   function boot() {
-    document.getElementById('btn-logout-desk').onclick = function () { J.Auth.logout(); };
-    document.getElementById('avatar-btn').onclick = function () { location.hash = '#/settings/profile'; };
-    document.getElementById('fab').onclick = function () {
+    var lo = document.getElementById('btn-logout-desk'); if (lo) lo.onclick = function () { J.Auth.logout(); };
+    var av = document.getElementById('avatar-btn'); if (av) av.onclick = function () { location.hash = '#/settings/profile'; };
+    var fab = document.getElementById('fab'); if (fab) fab.onclick = function () {
       var me = J.Auth.current();
       if (!me || !J.DB.myCoupleId(me.id)) { toast('Crie ou entre em um casal primeiro ❤️'); return; }
       modalShell('<h2>O que deseja criar?</h2><div id="me"></div>' +
         '<button class="btn" id="fb-r">+ Receita</button>' +
         '<button class="btn" id="fb-e">− Despesa</button>' +
+        '<button class="btn ghost" id="fb-a">📅 Novo compromisso</button>' +
         '<button class="btn ghost" id="fb-g">🎯 Nova meta</button>' +
         '<button class="btn ghost" id="fb-c">🔁 Nova conta recorrente</button>' +
         '<button class="btn ghost" id="cl">Cancelar</button>');
       document.getElementById('cl').onclick = closeModal;
       document.getElementById('fb-r').onclick = function () { closeModal(); openTxModal(me, null, 'income'); };
       document.getElementById('fb-e').onclick = function () { closeModal(); openTxModal(me, null, 'expense'); };
+      document.getElementById('fb-a').onclick = function () { closeModal(); openAgendaModal(me, null, null); };
       document.getElementById('fb-g').onclick = function () { closeModal(); goAndOpen(me, '#/goals', 'goals', function () { openGoalModal(me, null); }); };
       document.getElementById('fb-c').onclick = function () { closeModal(); goAndOpen(me, '#/recurring', 'recurring', function () { openRecModal(me, null); }); };
     };
-    document.getElementById('boot').classList.add('hidden');
+    var _bt = document.getElementById('boot'); if (_bt) _bt.classList.add('hidden');
     if (!location.hash) location.hash = '#/dashboard';
     J.Router.start();
   }
