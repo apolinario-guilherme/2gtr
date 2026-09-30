@@ -137,44 +137,56 @@
   function pLanding(v) {
     var rm = false;
     try { rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
-    function feat(icon, title, desc, mini, cta) {
-      return '<article class="lp-card"><div class="lp-mini" aria-hidden="true">' + mini + '</div><h3>' + icon + ' ' + title + '</h3><p>' + desc + '</p><button class="btn ghost sm lp-cta" data-lgo="#/register">' + cta + '</button></article>';
-    }
     v.innerHTML =
-    '<div class="lp">' +
-    '<header class="lp-head"><div class="lp-wrap lp-head-in">' +
+    '<div class="lp2">' +
+    '<header class="lp2-head"><div class="lp-wrap lp2-head-in">' +
       '<a class="lp-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(30) + '<strong>2gtr</strong></a>' +
-      '<nav class="lp-nav" id="lp-nav" aria-label="Navegação da página"><button data-ls="funcionalidades">Funcionalidades</button><button data-ls="como-funciona">Como funciona</button><button data-ls="para-quem">Para quem é</button></nav>' +
-      '<div class="lp-head-cta"><a class="link" href="#/login">Entrar</a><button class="btn sm lp-btn" data-lgo="#/register">Começar agora</button>' +
+      '<nav class="lp-nav" id="lp-nav" aria-label="Navegação da página"><button data-ls="como-funciona">Como funciona</button><button data-ls="funcionalidades">Recursos</button><button data-ls="para-quem">Para quem é</button></nav>' +
+      '<div class="lp-head-cta"><button class="btn sm lp2-btn-dark" data-lgo="#/login">Entrar</button>' +
       '<button class="lp-burger" id="lp-burger" aria-label="Abrir menu" aria-expanded="false" aria-controls="lp-nav">☰</button></div>' +
     '</div></header>' +
     '<main>' +
-    '<section class="lp-hero" aria-labelledby="lp-h1"><div class="lp-wrap lp-hero-in">' +
-      '<div><h1 id="lp-h1">Sua vida organizada em um só lugar.</h1>' +
-      '<p class="lp-lead">Finanças, agenda, hábitos e planejamento para você organizar sua rotina e sua vida a dois de forma simples.</p>' +
-      '<div class="lp-cta-row"><button class="btn lp-btn" data-lgo="#/register">Começar agora</button><button class="btn ghost" data-ls="funcionalidades">Conhecer o 2gtr</button></div></div>' +
-      '<div class="lp-mock" role="img" aria-label="Exemplo da Visão Geral do 2gtr com compromissos, hábitos e resumo financeiro">' +
-        '<div class="lp-mock-card"><b>Hoje</b><p>2 compromissos • 3/5 hábitos</p><p class="lp-next">19:30 • Jantar ❤️</p></div>' +
-        '<div class="lp-mock-card"><b>✓ Hábitos</b><p>✓ Ler &nbsp; ✓ Água &nbsp; ○ Exercício</p><div class="bar"><div style="width:60%"></div></div></div>' +
-        '<div class="lp-mock-card"><b>Finanças do mês</b><p>Receitas <b class="pos">R$ 4.500</b> • Despesas <b class="neg">R$ 1.850</b></p></div>' +
-        '<div class="lp-mock-card accent"><b>🎯 Viagem</b><p>R$ 3.200 de R$ 5.000</p><div class="bar"><div style="width:64%"></div></div></div>' +
+    '<section class="lp2-hero" aria-labelledby="lp-h1"><div class="lp-wrap lp2-hero-in">' +
+      '<div><p class="lp2-eyebrow">Dinheiro e rotina, juntos</p>' +
+      '<h1 id="lp-h1">Mais parceria.<br><span class="tx-terra">Menos coisas para lembrar.</span></h1>' +
+      '<p class="lp-lead">Organizem as finanças e os combinados da vida a dois em um só lugar.</p>' +
+      '<div class="lp-cta-row"><button class="btn lp2-btn-dark" data-lgo="#/register">Começar agora <span aria-hidden="true">→</span></button><button class="btn ghost lp2-btn-play" data-ls="como-funciona"><span aria-hidden="true">▷</span> Veja como funciona</button></div>' +
+      '<p class="lp2-script" aria-hidden="true">Vida a dois funciona melhor juntando. ♡</p></div>' +
+      '<div class="lp2-dash" role="img" aria-label="Exemplo da Visão do casal no 2gtr com saldo do mês, gastos e tarefas compartilhadas. Dados demonstrativos.">' +
+        '<div class="lp2-dash-top"><span></span><span></span><span></span><em>Dados demonstrativos</em></div>' +
+        '<div class="lp2-dash-body">' +
+        '<div class="lp2-dash-side"><b>2gtr</b><span class="on">Início</span><span>Finanças</span><span>Rotina</span><span>Objetivos</span><small>❤️ Vocês</small></div>' +
+        '<div class="lp2-dash-main"><div class="lp2-dash-head"><b>Visão do casal</b><span class="lp2-month">‹ Este mês ›</span></div>' +
+        '<p class="muted">Saldo do mês</p><h3>R$ 3.240</h3><p class="pos">↑ 12% em relação ao mês anterior</p>' +
+        '<div class="lp2-io"><span>↑ Entradas<br><b>R$ 7.200</b></span><span>↓ Saídas<br><b>R$ 3.960</b></span></div>' +
+        '<div class="lp2-cols"><div><b>Gastos do mês</b><div class="lp2-bars" aria-hidden="true"><i style="height:38%"></i><i style="height:62%"></i><i style="height:88%" class="t"></i><i style="height:45%"></i><i style="height:30%"></i></div></div>' +
+        '<div><b>Tarefas compartilhadas</b><p>☑ Pagar o aluguel <small>Hoje</small></p><p>☑ Comprar mercado <small>Hoje</small></p><p>☐ Lavar a roupa <small>Amanhã</small></p></div></div>' +
+        '</div></div>' +
       '</div>' +
     '</div></section>' +
-    '<section class="lp-strip" aria-label="Resumo"><div class="lp-wrap lp-strip-in">' +
-      '<div><b>🗂️ Organize</b><p>Sua rotina, compromissos e hábitos.</p></div>' +
-      '<div><b>🗺️ Planeje</b><p>Suas metas, projetos e próximos passos.</p></div>' +
-      '<div><b>💚 Cuide das finanças</b><p>Suas contas, cartões, gastos e planejamento financeiro.</p></div>' +
+    '<section class="lp2-trust" aria-label="Diferenciais"><div class="lp-wrap lp2-trust-in">' +
+      '<div><b>✔ Clareza nas finanças</b><p>Saibam para onde o dinheiro vai.</p></div>' +
+      '<div><b>✔ Combinados à vista</b><p>Menos dúvidas, mais tranquilidade.</p></div>' +
+      '<div><b>✔ Objetivos compartilhados</b><p>Alinhem o hoje e o que vem depois.</p></div>' +
     '</div></section>' +
-    '<section class="lp-sec" id="funcionalidades" aria-labelledby="lp-f"><div class="lp-wrap">' +
-      '<h2 id="lp-f">Muito mais do que controlar gastos.</h2>' +
-      '<p class="lp-sub">O 2gtr reúne as ferramentas que você precisa para organizar diferentes partes da sua vida sem precisar espalhar tudo entre vários aplicativos.</p>' +
-      '<div class="lp-grid">' +
-      feat('💰', 'Finanças sem complicação', 'Organize receitas, despesas, contas, cartões, faturas, orçamentos e metas em um só lugar.', '<p>Receitas <b class="pos">+ R$ 4.500</b></p><p>Despesas <b class="neg">− R$ 1.850</b></p><p>Saldo <b>R$ 2.650</b> • 🏦 Contas • 💳 Cartões • 🧾 Faturas</p>', 'Organizar minhas finanças') +
-      feat('📅', 'Sua agenda, do seu jeito', 'Organize compromissos pessoais e compromissos do casal em uma visão simples do seu dia, semana e mês.', '<p>09:00 Consulta <span class="pill">👤 Pessoal</span></p><p>19:30 Jantar <span class="pill">❤️ Casal</span></p><p class="muted">Próximos eventos • Calendário</p>', 'Organizar minha agenda') +
-      feat('🌱', 'Transforme planos em rotina', 'Crie hábitos, acompanhe sua evolução e mantenha uma visão clara do que você quer construir no dia a dia.', '<p>✓ Ler &nbsp; ✓ Meditar &nbsp; ○ Exercitar</p><p>🔥 7 dias • 📅 Calendário de hábitos</p>', 'Criar meus hábitos') +
-      feat('🎯', 'Saiba para onde você está indo', 'Crie metas pessoais e do casal, acompanhe o progresso e visualize o caminho até seus objetivos.', '<p><b>Viagem</b> R$ 3.200 de R$ 5.000</p><div class="bar"><div style="width:64%"></div></div>', 'Criar uma meta') +
-      feat('🔮', 'Planeje antes de acontecer', 'Visualize compromissos futuros, despesas previstas, receitas planejadas e o impacto das suas decisões.', '<p>Planejado <b>R$ 5.000</b> • Realizado <b>R$ 3.100</b></p><p class="muted">Próximos compromissos • Fluxo futuro</p>', 'Conhecer o planejamento') +
-      feat('🏠', 'Tudo começa pela sua Visão Geral', 'Uma visão simples do que está acontecendo hoje, nesta semana e neste mês.', '<p>Hoje: 2 compromissos • 3/5 hábitos</p><p>Finanças do dia • Próximos eventos • Checklist</p>', 'Ver a Visão Geral') +
+    '<section class="lp2-feats" id="funcionalidades" aria-labelledby="lp-f"><div class="lp-wrap">' +
+      '<h2 id="lp-f">Um espaço para o que vocês <span class="tx-terra">constroem juntos.</span></h2>' +
+      '<p class="lp-sub">Finanças, rotina e objetivos, tudo em sintonia para uma vida a dois mais leve.</p>' +
+      '<div class="lp2-cards">' +
+      '<article class="lp2-fcard"><div class="lp2-shot fin" role="img" aria-label="Exemplo de resumo financeiro com entradas, saídas e gastos por categoria. Dados demonstrativos.">' +
+        '<b>Resumo financeiro <span>Este mês</span></b><div class="lp2-io"><span>↑ Entradas<br><b>R$ 7.200</b></span><span>↓ Saídas<br><b>R$ 3.960</b></span></div>' +
+        '<div class="lp2-donut" aria-hidden="true"></div><ul><li>Moradia 38%</li><li>Alimentação 24%</li><li>Transporte 16%</li><li>Lazer 12%</li><li>Outros 10%</li></ul></div>' +
+        '<h3>Finanças</h3><p>Acompanhem receitas, despesas e dividam contas de forma simples e transparente.</p></article>' +
+      '<article class="lp2-fcard"><div class="lp2-shot rot" role="img" aria-label="Exemplo da rotina compartilhada com tarefas de cada um. Dados demonstrativos.">' +
+        '<b>Nossa rotina <span>+</span></b><div class="lp2-tabs" aria-hidden="true"><span class="on">Todas</span><span>Minhas</span><span>Do meu par</span></div>' +
+        '<p>☑ Comprar mercado <small>Hoje</small></p><p>☐ Lavar a roupa <small>Amanhã</small></p><p>☐ Levar o pet ao veterinário <small>Sáb, 17/08</small></p><p>☐ Limpar a casa <small>Dom, 18/08</small></p></div>' +
+        '<h3>Rotina</h3><p>Organizem as tarefas do dia a dia e mantenham os combinados sempre à vista.</p></article>' +
+      '<article class="lp2-fcard"><div class="lp2-shot obj" role="img" aria-label="Exemplo de objetivos com progresso. Dados demonstrativos.">' +
+        '<b>Nossos objetivos <span>+</span></b>' +
+        '<p><i class="th g1"></i>Viagem dos sonhos<br><small>R$ 6.800 de R$ 10.000</small></p><div class="bar"><div style="width:68%"></div></div>' +
+        '<p><i class="th g2"></i>Entrada do apê<br><small>R$ 25.000 de R$ 60.000</small></p><div class="bar"><div style="width:42%"></div></div>' +
+        '<p><i class="th g3"></i>Reserva de emergência<br><small>R$ 5.400 de R$ 20.000</small></p><div class="bar"><div style="width:27%"></div></div></div>' +
+        '<h3>Objetivos</h3><p>Planejem conquistas a curto e longo prazo e acompanhem a evolução lado a lado.</p></article>' +
       '</div></div></section>' +
     '<section class="lp-sec alt" id="para-quem" aria-labelledby="lp-pq"><div class="lp-wrap">' +
       '<h2 id="lp-pq">Sua vida. Seu relacionamento. Suas finanças.</h2>' +
@@ -199,12 +211,15 @@
         '<div class="lp-mock-card"><b>💰 Hoje</b><p>+ R$ 500 • − R$ 120</p></div>' +
       '</div>' +
     '</div></section>' +
-    '<section class="lp-sec" id="como-funciona" aria-labelledby="lp-cf"><div class="lp-wrap">' +
-      '<h2 id="lp-cf">Como funciona</h2><div class="lp-steps">' +
-      '<div><span class="lp-num" aria-hidden="true">01</span><h3>🗂️ Organize</h3><p>Cadastre suas informações, compromissos, hábitos e finanças.</p></div>' +
-      '<div><span class="lp-num" aria-hidden="true">02</span><h3>🗺️ Planeje</h3><p>Defina metas e acompanhe o que está por vir.</p></div>' +
-      '<div><span class="lp-num" aria-hidden="true">03</span><h3>🏠 Acompanhe</h3><p>Use sua Visão Geral para entender o que precisa da sua atenção.</p></div>' +
-      '</div></div></section>' +
+    '<section class="lp2-steps" id="como-funciona" aria-labelledby="lp-cf"><div class="lp-wrap lp2-steps-in">' +
+      '<div class="lp2-art" role="img" aria-label="Ilustração de um casal organizando a vida juntos"></div>' +
+      '<div><h2 id="lp-cf">Começar juntos é <span class="tx-terra">simples.</span></h2>' +
+      '<p class="lp-sub">Em poucos passos, vocês já organizam o que realmente importa.</p>' +
+      '<div class="lp2-step-row">' +
+      '<div><span class="lp2-num" aria-hidden="true">1</span><h3>Crie sua conta</h3><p>É rápido e seguro.</p></div><span class="lp2-chev" aria-hidden="true">›</span>' +
+      '<div><span class="lp2-num" aria-hidden="true">2</span><h3>Convide seu par</h3><p>Mandem o convite e conectem suas contas.</p></div><span class="lp2-chev" aria-hidden="true">›</span>' +
+      '<div><span class="lp2-num" aria-hidden="true">3</span><h3>Organizem juntos</h3><p>Personalizem, adicionem combinados e comecem a usar.</p></div>' +
+      '</div></div></div></section>' +
     '<section class="lp-sec alt" aria-labelledby="lp-fin"><div class="lp-wrap">' +
       '<h2 id="lp-fin">Tudo o que você precisa para cuidar do seu dinheiro.</h2>' +
       '<ul class="lp-tags"><li>Movimentações</li><li>Contas</li><li>Cartões</li><li>Faturas</li><li>Compras parceladas</li><li>Orçamento</li><li>Metas</li><li>Planejamento</li><li>Acertos</li><li>Relatórios</li><li>Insights</li><li>Conciliação</li></ul>' +
@@ -218,27 +233,17 @@
       '<article class="lp-card"><h3>🔒 Privacidade</h3><p>Cada informação disponível somente para quem tem permissão.</p></article>' +
       '<article class="lp-card"><h3>🌱 Evolução contínua</h3><p>Estruturado para crescer junto com as suas necessidades.</p></article>' +
       '</div></div></section>' +
-    '<section class="lp-sec alt" aria-labelledby="lp-telas"><div class="lp-wrap">' +
-      '<h2 id="lp-telas">Conheça o produto</h2>' +
-      '<p class="lp-sub">As telas que você vai usar todos os dias.</p>' +
-      '<div class="lp-shots">' +
-      '<figure class="lp-shot"><div class="lp-mock-card"><b>🏠 Visão Geral</b><p>Hoje • Hábitos 3/5</p><p>19:30 Jantar ❤️</p><p>+ R$ 500 • − R$ 120</p></div><figcaption>Visão Geral</figcaption></figure>' +
-      '<figure class="lp-shot"><div class="lp-mock-card"><b>💰 Finanças</b><p>Receitas <b class="pos">+ R$ 4.500</b></p><p>Despesas <b class="neg">− R$ 1.850</b></p><p>Resultado <b>R$ 2.650</b></p></div><figcaption>Finanças</figcaption></figure>' +
-      '<figure class="lp-shot"><div class="lp-mock-card"><b>📅 Agenda</b><p>09:00 Consulta 👤</p><p>19:30 Jantar ❤️</p><p class="muted">Dia • Semana • Mês</p></div><figcaption>Agenda</figcaption></figure>' +
-      '<figure class="lp-shot"><div class="lp-mock-card"><b>🌱 Hábitos</b><p>✓ Ler • ✓ Água • ○ Exercício</p><div class="bar"><div style="width:60%"></div></div><p>🔥 7 dias</p></div><figcaption>Hábitos</figcaption></figure>' +
-      '</div></div></section>' +
-    '<section class="lp-final" aria-labelledby="lp-cta"><div class="lp-wrap">' +
-      '<h2 id="lp-cta">Organize sua vida com mais clareza.</h2>' +
-      '<p class="lp-sub">Tenha suas finanças, seus planos, seus hábitos e sua rotina em um só lugar.</p>' +
-      '<button class="btn lp-btn" data-lgo="#/register">Começar agora</button>' +
+    '<section class="lp2-cta" aria-labelledby="lp-cta"><div class="lp-wrap">' +
+      '<p class="lp2-eyebrow light">Dinheiro e rotina, juntos</p>' +
+      '<h2 id="lp-cta">Mais espaço para o que importa.</h2>' +
+      '<p class="lp-sub">Menos preocupações no dia a dia e mais tempo para viver o que vocês constroem juntos.</p>' +
+      '<button class="btn lp2-btn-white" data-lgo="#/register">Começar agora <span aria-hidden="true">→</span></button>' +
       '<p><a href="#/login">Já tem uma conta? Entrar</a></p>' +
     '</div></section>' +
     '</main>' +
-    '<footer class="lp-foot"><div class="lp-wrap lp-foot-in">' +
-      '<div><b>2gtr</b><p class="muted">Sua vida organizada em um só lugar.</p><ul><li><button data-ls="funcionalidades">Sobre</button></li><li><button data-ls="funcionalidades">Funcionalidades</button></li><li><button data-ls="como-funciona">Como funciona</button></li></ul></div>' +
-      '<div><b>Produto</b><ul><li>Finanças</li><li>Agenda</li><li>Hábitos</li><li>Metas</li><li>Planejamento</li></ul></div>' +
-      '<div><b>Conta</b><ul><li><a href="#/login">Entrar</a></li><li><a href="#/register">Criar conta</a></li></ul></div>' +
-      '<div><b>Legal</b><ul><li><span class="muted">Privacidade <small>(em breve)</small></span></li><li><span class="muted">Termos de uso <small>(em breve)</small></span></li></ul></div>' +
+    '<footer class="lp2-foot"><div class="lp-wrap lp2-foot-in">' +
+      '<a class="lp-brand" href="#/landing" aria-label="2gtr — início">' + logoMark(26) + '<strong>2gtr</strong></a>' +
+      '<nav aria-label="Links"><button data-ls="funcionalidades">Recursos</button><a href="#/privacy">Privacidade</a><a href="#/terms">Termos</a><a href="#/login">Entrar</a></nav>' +
     '</div><p class="lp-copy">© 2gtr</p></footer>' +
     '</div>';
     Array.prototype.forEach.call(v.querySelectorAll('[data-ls]'), function (b) {

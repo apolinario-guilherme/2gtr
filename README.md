@@ -31,3 +31,6 @@
 ## Assistente WhatsApp como interface do ecossistema (mesmo nucleo)
 - Overview, agenda datada, habitos (safe-write + confirmacao), aporte em meta, planejamento, notificacoes, navegacao, modo do dinheiro e status WhatsApp via servicos oficiais; SEPARATE/JOINT respeitados; edicao de rascunho; expiracao; idempotencia; metricas; multimodal no mesmo pipeline.
 - Testes (104/104 PASS): intents novos, fluxos web e WhatsApp (criar/editar/confirmar/cancelar), privacidade entre membros, financas e regressao, seguranca (unlinked/revogado/duplicata/expirado/injecao/IDOR/arquivo/tool negada), multimodal, coerencia web x canal, OF off, diagnose. Console limpo.
+## Home v2 (estilo da referencia, conteudo honesto)
+- Hero casal + mock Visao do casal, confianca, 3 cards com mocks CSS, Minha/Nossa vida, modos neutros, planner, passos, grade financeira, CTA escuro, footer real. Sem funcionalidades inventadas.
+- Testes (43/43 PASS). Desktop/mobile (piso 492; corte do screenshot e artefato do headless). Console limpo.
