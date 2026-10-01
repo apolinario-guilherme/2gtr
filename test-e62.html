@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t62</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=908"></script>
+<script src="js/auth.js?cb=908"></script>
+<script src="js/router.js?cb=908"></script>
+<script src="js/app.js?cb=908"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana S','ana.s@t.t','senha123');
+as(A.id);
+/* --- export --- */
+var ex=DB.exportBackup(A.id);
+ok(ex.filename.indexOf('2gtr-backup-')===0,'nome do arquivo');
+var payload=JSON.parse(ex.json);
+eq(payload.app,'2gtr','marca app');
+ok(payload.db.users.some(function(u){return u.id===A.id;}),'contem usuario');
+/* --- import exige confirmacao e valida --- */
+throws(function(){DB.importBackup(A.id,ex.json,{});},'sem confirm nega');
+throws(function(){DB.importBackup(A.id,'lixo',{confirm:true});},'lixo nega');
+throws(function(){DB.importBackup(A.id,JSON.stringify({app:'x'}),{confirm:true});},'outro app nega');
+/* --- restore em aparelho vazio (sem sessao) --- */
+try{localStorage.clear();}catch(e){}
+DB._waOutbox=[];
+var r=DB.importBackup(null,ex.json,{confirm:true});
+ok(r.restored,'restaura sem sessao em aparelho vazio');
+eq(Auth.login('ana.s@t.t','senha123').id,A.id,'login funciona no aparelho novo');
+/* --- aparelho com dados exige sessao --- */
+as(null);
+throws(function(){DB.importBackup(null,ex.json,{confirm:true});},'com dados e sem sessao nega');
+as(A.id);
+var r2=DB.importBackup(A.id,ex.json,{confirm:true});
+ok(r2.restored,'com sessao restaura');
+var kept=0;
+try{for(var i=0;i<localStorage.length;i++){if(localStorage.key(i).indexOf('juntos_db_backup_')===0)kept++;}}catch(e){}
+ok(kept>=1,'copia de seguranca automatica');
+/* --- UI --- */
+App.render('login');
+shows('Restaurar backup de outro aparelho','link no login');
+as(A.id);
+DB.createCouple(A.id,'Casal S');
+App.render('settings/data');
+shows('Backup (outro aparelho)','card backup');
+shows('Exportar backup','botao exportar');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(A.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>

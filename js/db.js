@@ -18594,6 +18594,45 @@ window.Juntos = window.Juntos || {};
       }
       return { filename: 'relatorio-' + reportType + '.csv', csv: csv(rows) };
     },
+    /* ============ BACKUP (levar a conta p/ outro aparelho; sem nuvem) ============
+       Exporta o banco inteiro do navegador (só leitura). Restaurar SUBSTITUI
+       tudo neste aparelho (com cópia de segurança automática antes). */
+    exportBackup: function (userId) {
+      DB.requireAuthz(userId, 'backup_export', null);
+      var db = read();
+      var snap = JSON.parse(JSON.stringify(db));
+      var day = now().slice(0, 10);
+      logAudit(db, DB.myCoupleId(userId), userId, 'backup', 'export', 'exported', {});
+      write(db);
+      return { filename: '2gtr-backup-' + day + '.json', json: JSON.stringify({ app: '2gtr', kind: 'backup', version: 1, exported_at: now(), exported_by: userId, db: snap }) };
+    },
+    importBackup: function (userId, payload, opt) {
+      var fresh = false;
+      try { fresh = !(read().users || []).length; } catch (e0) { fresh = true; }
+      if (!fresh) DB.requireAuthz(userId, 'backup_import', null);
+      opt = opt || {};
+      if (!opt.confirm) throw new Error('Confirme que a restauração substitui tudo neste aparelho.');
+      var obj = payload;
+      if (typeof obj === 'string') {
+        try { obj = JSON.parse(obj); } catch (e) { throw new Error('Arquivo inválido. Selecione um backup .json do 2gtr.'); }
+      }
+      if (!obj || obj.app !== '2gtr' || obj.kind !== 'backup' || !obj.db || !Array.isArray(obj.db.users) || !Array.isArray(obj.db.members)) {
+        throw new Error('Arquivo inválido. Selecione um backup .json do 2gtr.');
+      }
+      try {
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('juntos_db_backup_') === 0) keys.push(k);
+        }
+        keys.sort();
+        while (keys.length >= 3) localStorage.removeItem(keys.shift());
+        localStorage.setItem('juntos_db_backup_' + Date.now().toString(36), localStorage.getItem(KEY) || '');
+      } catch (e2) {}
+      write(obj.db);
+      try { DB.logSecurityEvent(userId || null, 'security_event', { action: 'backup_imported', metadata: {} }); } catch (e3) {}
+      return { restored: true, users: obj.db.users.length, exported_at: obj.exported_at || null };
+    },
     /* ============ PROMPT 30 (V3): SEGURANÇA + AUDITORIA + INTEGRIDADE ============
        Camada transversal (não é fonte financeira). Regra: UI/IA/WhatsApp →
        contexto autenticado → Authorization → Validation → serviço financeiro

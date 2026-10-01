@@ -358,6 +358,7 @@
         '<p class="lg-forgot"><a href="#/forgot-password">Esqueci minha senha</a></p>' +
         '<button class="btn lg-enter" id="go">Entrar</button>' +
         '<p class="center muted">Ainda não tem uma conta? <a href="#/register"><b>Criar conta</b></a></p>' +
+        '<p class="center muted"><a href="#/login" id="bk-restore-link">Restaurar backup de outro aparelho</a><input id="bk-file-login" type="file" accept=".json,application/json" class="hidden" aria-label="Arquivo de backup"></p>' +
         '<p class="lg-legal"><a href="#/privacy">Privacidade</a> • <a href="#/terms">Termos</a> • <a href="#/landing">Ajuda</a></p>' +
       '</section>' +
     '</div>';
@@ -374,6 +375,19 @@
       eye.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
       eye.setAttribute('aria-pressed', show ? 'true' : 'false');
       pw.focus();
+    };
+    document.getElementById('bk-restore-link').onclick = function (e) {
+      e.preventDefault();
+      document.getElementById('bk-file-login').click();
+    };
+    document.getElementById('bk-file-login').onchange = function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      if (f.size > 25 * 1024 * 1024) { document.getElementById('e').innerHTML = err(new Error('Arquivo muito grande (máx 25 MB).')); return; }
+      var rd = new FileReader();
+      rd.onload = function () { openBackupRestore(null, String(rd.result || ''), f.name); };
+      rd.onerror = function () { document.getElementById('e').innerHTML = err(new Error('Não foi possível ler o arquivo.')); };
+      rd.readAsText(f);
     };
   }
   function pRegister(v) {
@@ -6149,9 +6163,53 @@
     var rows = [];
     try { rows = J.DB.listImportBatches(me.id, {}).slice(0, 5); } catch (e) { /* sem casal */ }
     v.innerHTML = crumb('Dados') + '<div class="card"><h1>Dados</h1><p class="muted">Importações e reconciliações. Para importar novos arquivos, abra <a href="#/imports">Importações</a>.</p></div>' +
+      '<div class="card"><b>💾 Backup (outro aparelho)</b><p class="muted">Baixe tudo deste aparelho e restaure no outro. Restaurar <b>substitui</b> o conteúdo deste aparelho (guarda cópia automática antes).</p><div id="e-bk"></div>' +
+      '<div class="row"><button class="btn ghost sm" id="bk-exp" style="max-width:200px">Exportar backup</button><label class="btn ghost sm" for="bk-file" style="max-width:200px;text-align:center;cursor:pointer">Escolher arquivo…</label><input id="bk-file" type="file" accept=".json,application/json" class="hidden" aria-label="Arquivo de backup"></div></div>' +
       '<div class="card"><b>Últimas importações</b>' + (rows.length ? rows.map(function (b) {
         return '<a class="dash-link" href="#/imports/' + b.id + '"><p><b>📄 ' + esc(b.file_name) + '</b> <span class="pill">' + esc(b.status) + '</span><br><span class="muted">Total ' + b.total_rows + ' • novos ' + b.new_rows + ' • conciliados ' + b.matched_rows + ' • importados ' + b.imported_rows + '</span></p></a>';
       }).join('') : '<p class="muted">Nenhuma importação ainda.</p>') + '</div>';
+    document.getElementById('bk-exp').onclick = function () {
+      try {
+        var f = J.DB.exportBackup(me.id);
+        var blob = new Blob([f.json], { type: 'application/json' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = f.filename; a.click();
+        setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (e2) {} }, 5000);
+        toast('Backup baixado! Leve o arquivo para o outro aparelho.');
+      } catch (e3) { document.getElementById('e-bk').innerHTML = err(e3); }
+    };
+    document.getElementById('bk-file').onchange = function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      if (f.size > 25 * 1024 * 1024) { document.getElementById('e-bk').innerHTML = err(new Error('Arquivo muito grande (máx 25 MB).')); return; }
+      var rd = new FileReader();
+      rd.onload = function () { openBackupRestore(me, String(rd.result || ''), f.name); };
+      rd.onerror = function () { document.getElementById('e-bk').innerHTML = err(new Error('Não foi possível ler o arquivo.')); };
+      rd.readAsText(f);
+    };
+  }
+  function openBackupRestore(me, text, name) {
+    var info = '';
+    try {
+      var o = JSON.parse(text);
+      if (o && o.app === '2gtr' && o.db && o.db.users) info = '<p class="muted">Arquivo: <b>' + esc(name) + '</b><br>Backup de ' + esc(String(o.exported_at || '').slice(0, 10)) + ' • ' + o.db.users.length + ' usuário(s).</p>';
+      else throw new Error('x');
+    } catch (e) { document.getElementById('e-bk').innerHTML = err(new Error('Arquivo inválido. Selecione um backup .json do 2gtr.')); return; }
+    modalShell('<h2>Restaurar backup</h2><div id="me"></div>' + info +
+      '<div class="alert">A restauração <b>substitui tudo</b> neste aparelho pelo conteúdo do arquivo. Uma cópia do estado atual é guardada automaticamente antes.</div>' +
+      '<div class="row"><button class="btn danger" id="sv">Restaurar (substituir tudo)</button><button class="btn ghost" id="cl">Cancelar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var r = J.DB.importBackup(me ? me.id : null, text, { confirm: true });
+        closeModal();
+        if (me) {
+          try { J.Auth.logout(); } catch (e2) { location.hash = '#/login'; }
+        } else if (location.hash !== '#/login') { location.hash = '#/login'; }
+        toast('Backup restaurado (' + r.users + ' usuário(s)). Entre com seu e-mail e senha.');
+      } catch (e3) { document.getElementById('me').innerHTML = err(e3); unlock(btn); }
+    };
   }
   function pSettingsCategories(v, me) {
     var tree = J.DB.getCategoryTree(me.id, '', true);

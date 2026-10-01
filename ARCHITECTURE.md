@@ -405,3 +405,7 @@ Auditoria estatica completa dos Prompts 1-55 sem reescrever modulos. Sem ciclo: 
 ## 58. Backend com nuvem (Fase 1: fundacao Supabase, app intocado).
 
 Schema Postgres em supabase/schema.sql espelhando as colecoes locais (IDs legados preservados, RLS por casal, indices das queries quentes). Nenhuma mudanca em js/ nesta fase. Fase 2 (apos provisionar): Auth + sincronismo local-first. Ver supabase/README.md.
+
+## 59. Backup exportar/restaurar (multi-aparelhos manual; sem nuvem).
+
+DB.exportBackup (leitura) gera JSON completo; DB.importBackup valida app/kind/users/members e SUBSTITUI o aparelho (copia automatica em juntos_db_backup_*, max 3). Aparelho vazio restaura sem sessao; com dados exige login. UI em #/settings/data e link no login. Uso em um aparelho por vez: sem merge; re-exportar p/ levar mudancas. Nuvem real segue na Fase 2 (supabase/).
