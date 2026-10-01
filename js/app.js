@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, week: pWeek, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -950,6 +950,7 @@
     s += blk('Listas', function () { return ovListsCard(me, day); });
     s += blk('Rotinas', function () { return ovRoutinesCard(me, day); });
     s += blk('Projetos', function () { return ovProjectsCard(me, day); });
+    s += blk('Minha Semana', function () { return ovWeekCard(me, day); });
     s += blk('Inbox', function () { return ovInboxCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
@@ -3856,6 +3857,365 @@
       '<p><b>' + ib.pending + '</b>' + (ib.pending === 1 ? ' item para organizar' : ' itens para organizar') + '</p>' +
       (ib.items || []).slice(0, 2).map(function (it) { return '<p class="muted">• ' + esc(it.content) + '</p>'; }).join('') + '</div>';
   }
+  /* ============ MINHA SEMANA (só apresentação sobre WeeklyPlanningService) ============
+     Agrega leitura dos serviços oficiais. Ações reais usam os serviços. */
+  var wk = { date: '', vis: 'PERSONAL' };
+  function wkWDays() { return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']; }
+  function wkDayName(iso) {
+    try {
+      var dt = new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+      return wkWDays()[dt.getDay()];
+    } catch (e) { return ''; }
+  }
+  function wkFmtDay(iso) { return wkDayName(iso) + ' ' + iso.slice(8, 10) + '/' + iso.slice(5, 7); }
+  function wkFmtRange(start, end) {
+    var mn = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    function p(d) { return d.slice(8, 10) + ' ' + mn[+d.slice(5, 7) - 1]; }
+    return p(start) + ' — ' + p(end);
+  }
+  function wkRange() {
+    var base = (wk.date && J.DB.agendaParseDay(wk.date)) ? wk.date : todayISO();
+    return J.DB.weekRangeOf(base);
+  }
+  function ovWeekCard(me, day) {
+    var w = (day && day.week) || { priorities_pending: 0, tasks_due: 0, next_invoice: null };
+    if (!w.priorities_pending && !w.tasks_due && !w.next_invoice) return '';
+    return '<div class="card"><div class="row between"><b>📅 Esta semana</b><a href="#/week">Ver semana ›</a></div>' +
+      '<p class="muted">' + w.priorities_pending + ' prioridades pendentes • ' + w.tasks_due + ' tarefas com prazo' +
+      (w.next_invoice ? ' • 1 fatura vence ' + esc(dueLabel(w.next_invoice.date)) : '') + '</p></div>';
+  }
+  function pWeek(v, me) {
+    var range = wkRange();
+    var ov = null, errMsg = null;
+    try { ov = J.DB.getWeekOverview(me.id, { date: range.start, visibility: wk.vis }); }
+    catch (e) { errMsg = e; }
+    if (errMsg || !ov) {
+      v.innerHTML = '<div class="card"><h1>Minha Semana</h1><div class="alert">Não foi possível carregar sua semana.</div><button class="btn ghost" data-wkretry>Tentar novamente</button></div>';
+      var rt = document.querySelector('[data-wkretry]'); if (rt) rt.onclick = function () { render('week'); };
+      return;
+    }
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><div><p class="muted" style="margin:0">Minha Semana</p>' +
+      '<h1 style="margin:4px 0">' + esc(wkFmtRange(ov.week.start, ov.week.end)) + '</h1></div>' +
+      '<span class="row" style="flex-wrap:wrap"><button class="pnav" id="wk-prev" aria-label="Semana anterior">‹</button><button class="btn ghost sm" id="wk-today" style="max-width:130px">Esta semana</button><button class="pnav" id="wk-next" aria-label="Próxima semana">›</button></span></div>' +
+      '<div class="seg" role="group" aria-label="Visão"><button data-wkvis="PERSONAL" class="' + (wk.vis !== 'COUPLE' ? 'on' : '') + '">Pessoal</button><button data-wkvis="COUPLE" class="' + (wk.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<div class="row" style="flex-wrap:wrap"><button class="btn sm" id="wk-plan" style="max-width:200px">Planejar semana</button><button class="btn ghost sm" id="wk-review" style="max-width:200px">Revisar semana</button><button class="btn ghost sm" id="wk-cap" style="max-width:170px">+ Capturar</button></div></div>';
+    html += wkPrioritiesHtml(me, ov);
+    html += '<div class="ov-grid">' + ov.days.map(function (d) { return wkDayHtml(me, d); }).join('') + '</div>';
+    html += wkTasksHtml(me, ov);
+    html += wkHabitsRoutinesHtml(me, ov);
+    html += wkProjectsHtml(me, ov);
+    html += wkFinanceHtml(me, ov);
+    v.innerHTML = html;
+    bindWeek(v, me, ov);
+  }
+  function wkPrioritiesHtml(me, ov) {
+    var prs = (ov.priorities && ov.priorities.ok && ov.priorities.data.priorities) || [];
+    var s = '<div class="card"><div class="row between"><b>Prioridades</b><button class="btn ghost sm" id="wk-prio" style="max-width:170px">Definir prioridades</button></div>';
+    if (!prs.length) return s + '<p class="muted">Você ainda não definiu prioridades para esta semana.</p></div>';
+    return s + '<ol style="margin:8px 0;padding-left:22px">' + prs.slice(0, 3).map(function (p) {
+      var link = p.linked_entity_type === 'TASK' && p.linked_entity_id ? ' <a href="#/tasks">›</a>' : p.linked_entity_type === 'PROJECT' && p.linked_entity_id ? ' <a href="#/projects/' + p.linked_entity_id + '">›</a>' : '';
+      return '<li>' + (p.done ? '<s>' + esc(p.label || p.title) + '</s> ✓' : esc(p.label || p.title)) + link + '</li>';
+    }).join('') + '</ol></div>';
+  }
+  function wkDayHtml(me, d) {
+    var todayCls = d.isToday ? ' today' : '';
+    var s = '<div class="card wk-day' + todayCls + '"><b>' + esc(wkFmtDay(d.date)) + (d.isToday ? ' • hoje' : '') + '</b>';
+    (d.agenda || []).slice(0, 4).forEach(function (o) {
+      s += '<p>📅 ' + (o.start ? esc(o.start) + ' ' : '') + esc(o.title) + '</p>';
+    });
+    var td = (d.tasks || []).filter(function (t) { return t.status !== 'COMPLETED'; }).slice(0, 4);
+    td.forEach(function (t) {
+      s += '<div class="ov-row"><button class="chk" data-wktoggle="' + esc(t.key) + '" aria-label="' + esc('Concluir ' + t.title) + '"></button><span>' + esc(t.title) + '</span></div>';
+    });
+    if (d.habits && d.habits.total) s += '<p class="muted">🌱 ' + d.habits.done + '/' + d.habits.total + ' hábitos</p>';
+    (d.routines || []).slice(0, 2).forEach(function (r) {
+      s += '<p class="muted">🔁 ' + esc(r.name) + (r.total ? ' ' + r.done + '/' + r.total : '') + '</p>';
+    });
+    (d.financial || []).slice(0, 2).forEach(function (f) {
+      s += '<p class="muted">💳 ' + esc(f.title) + (f.amount ? ' • ' + BRL(f.amount) : '') + '</p>';
+    });
+    return s + '</div>';
+  }
+  function wkTasksHtml(me, ov) {
+    var tk = (ov.tasks && ov.tasks.ok) ? ov.tasks.data : { overdue: [], today: [], upcoming: [], undated: [] };
+    function rows(list) {
+      return list.slice(0, 12).map(function (t) {
+        return '<div class="ov-row"><button class="chk' + (t.status === 'COMPLETED' ? ' done' : '') + '" data-wktoggle="' + esc(t.key) + '" aria-pressed="' + (t.status === 'COMPLETED') + '" aria-label="' + esc('Concluir ' + t.title) + '">' + (t.status === 'COMPLETED' ? '✓' : '') + '</button>' +
+          '<span style="flex:1;min-width:0"><b>' + esc(t.title) + '</b><br><span class="muted">' + (t.date ? esc(dueLabel(t.date)) + (t.due_time ? ' ' + esc(t.due_time) : '') : 'Sem prazo') + (t.overdue ? ' • <b>Atrasada</b>' : '') + (t.is_recurring ? ' • 🔁' : '') + '</span></span></div>';
+      }).join('');
+    }
+    var s = '<div class="card"><div class="row between"><b>Tarefas</b><a href="#/tasks">Ver todas ›</a></div>';
+    if (tk.overdue.length) s += '<p><b>Atrasadas</b></p>' + rows(tk.overdue);
+    if (tk.today.length) s += '<p><b>Hoje</b></p>' + rows(tk.today);
+    if (tk.upcoming.length) s += '<p><b>Próximas</b></p>' + rows(tk.upcoming);
+    if (tk.undated.length) {
+      s += '<p><b>Para considerar nesta semana</b></p>' + tk.undated.slice(0, 8).map(function (t) {
+        return '<div class="ov-row"><button class="chk" data-wktoggle="' + esc(t.key) + '" aria-label="' + esc('Concluir ' + t.title) + '"></button>' +
+          '<span style="flex:1;min-width:0"><b>' + esc(t.title) + '</b></span>' +
+          '<input type="date" data-wkdate="' + t.task_id + '" value="" aria-label="Agendar ' + esc(t.title) + '" style="max-width:150px;flex:none"></div>';
+      }).join('');
+    }
+    if (!tk.overdue.length && !tk.today.length && !tk.upcoming.length && !tk.undated.length) s += '<p class="muted">Sem tarefas nesta semana.</p>';
+    return s + '</div>';
+  }
+  function wkHabitsRoutinesHtml(me, ov) {
+    var hb = (ov.habits && ov.habits.ok) ? ov.habits.data : { habits: [] };
+    var rt = (ov.routines && ov.routines.ok) ? ov.routines.data : { routines: [] };
+    var days = (ov.week ? [ov.week.start, ov.week.end] : []);
+    var s = '<div class="card"><div class="row between"><b>Hábitos e rotinas</b><a href="#/habits">Ver hábitos ›</a></div>';
+    if (!hb.habits.length && !rt.routines.length) return s + '<p class="muted">Nada previsto por aqui.</p></div>';
+    hb.habits.slice(0, 10).forEach(function (h) {
+      s += '<div class="ov-row"><span style="flex:1;min-width:0"><b>' + esc(h.name) + '</b></span><span>';
+      Object.keys(h.days || {}).sort().forEach(function (dd) {
+        var st = h.days[dd];
+        s += '<button class="chk sm' + (st.done ? ' done' : '') + '" data-wkhb="' + h.id + '|' + dd + '" aria-pressed="' + !!st.done + '" aria-label="' + esc(h.name + ' ' + dueLabel(dd)) + '" title="' + esc(wkFmtDay(dd)) + '">' + (st.done ? '✓' : '○') + '</button>';
+      });
+      s += '</span></div>';
+    });
+    rt.routines.slice(0, 8).forEach(function (r) {
+      s += '<p>🔁 <a href="#/routines/' + r.id + '">' + esc(r.name) + '</a> <span class="muted">• ' + r.dueDates.length + ' dias' + (r.execStatus === 'COMPLETED' ? ' • ✓ hoje' : '') + '</span></p>';
+    });
+    return s + '</div>';
+  }
+  function wkProjectsHtml(me, ov) {
+    var pr = (ov.projects && ov.projects.ok) ? ov.projects.data : { projects: [] };
+    var s = '<div class="card"><div class="row between"><b>Projetos</b><a href="#/projects">Ver projetos ›</a></div>';
+    if (!pr.projects.length) return s + '<p class="muted">Nenhum projeto com atividade nesta semana.</p></div>';
+    pr.projects.slice(0, 8).forEach(function (p) {
+      s += '<p><b><a href="#/projects/' + p.id + '">' + esc(p.name) + '</a></b><br><span class="muted">' + p.tasksInWeek + ' tarefa(s) nesta semana' + (p.hasCommitment ? ' • 1+ compromisso' : '') + (p.targetInWeek ? ' • prazo nesta semana' : '') + '</span></p>';
+    });
+    return s + '</div>';
+  }
+  function wkFinanceHtml(me, ov) {
+    var fn = (ov.financial && ov.financial.ok) ? ov.financial.data : { realized: { income: 0, expense: 0, count: 0 }, upcoming: [], planned: [], settlement: null };
+    var gs = (ov.goals && ov.goals.ok) ? ov.goals.data : { goals: [] };
+    var ps = (ov.plans && ov.plans.ok) ? ov.plans.data : { plans: [] };
+    var s = '<div class="card"><b>Finanças da semana</b>';
+    s += '<p>Realizado: <b class="pos">' + BRL(fn.realized.income) + '</b> • <b class="neg">' + BRL(fn.realized.expense) + '</b></p>';
+    if (fn.upcoming.length) {
+      s += '<p><b>Previsto</b></p>' + fn.upcoming.slice(0, 8).map(function (x) {
+        return '<p>• ' + esc(x.title) + ' — <b>' + BRL(x.amount || 0) + '</b> <span class="muted">' + esc(dueLabel(x.date)) + ' • ' + esc(x.status) + '</span> <a href="' + esc(x.route || '#/calendar') + '">›</a></p>';
+      }).join('');
+    }
+    if (fn.planned.length) {
+      s += '<p><b>Planejado (não é gasto real)</b></p>' + fn.planned.slice(0, 6).map(function (x) {
+        return '<p class="muted">• ' + esc(x.title) + ' — ' + BRL(x.amount || 0) + '</p>';
+      }).join('');
+    }
+    if (fn.settlement) s += '<p>⚖️ Acerto pendente: <b>' + BRL(fn.settlement.amount) + '</b> <a href="#/settlements">Ver acertos ›</a></p>';
+    if (gs.goals.length) s += '<p><b>Metas com contexto</b></p>' + gs.goals.slice(0, 4).map(function (g) { return '<p>🎯 ' + esc(g.name) + (g.deadline ? ' <span class="muted">• ' + esc(dueLabel(g.deadline)) + '</span>' : '') + '</p>'; }).join('');
+    if (ps.plans.length) s += '<p class="muted">📊 Planejamento: ' + ps.plans.slice(0, 3).map(function (x) { return esc(x.name); }).join(', ') + '</p>';
+    if (!fn.upcoming.length && !fn.planned.length && !gs.goals.length) s += '<p class="muted">Sem compromissos financeiros nesta semana.</p>';
+    return s + '</div>';
+  }
+  function bindWeek(v, me, ov) {
+    var pv = document.getElementById('wk-prev'); if (pv) pv.onclick = function () { var r = wkRange(); wk.date = J.DB.agendaAddDays(r.start, -7); render('week'); };
+    var nx = document.getElementById('wk-next'); if (nx) nx.onclick = function () { var r = wkRange(); wk.date = J.DB.agendaAddDays(r.start, 7); render('week'); };
+    var td = document.getElementById('wk-today'); if (td) td.onclick = function () { wk.date = ''; render('week'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-wkvis]'), function (b) { b.onclick = function () { wk.vis = b.dataset.wkvis; render('week'); }; });
+    var pl = document.getElementById('wk-plan'); if (pl) pl.onclick = function () { openWeekWizard(me); };
+    var rv = document.getElementById('wk-review'); if (rv) rv.onclick = function () { openWeekReview(me); };
+    var cp = document.getElementById('wk-cap'); if (cp) cp.onclick = function () { openQuickCapture(me); };
+    var pr = document.getElementById('wk-prio'); if (pr) pr.onclick = function () { openWeekPriorities(me); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-wktoggle]'), function (b) {
+      b.onclick = function () { tkToggle(me, b.dataset.wktoggle); setTimeout(function () { render('week'); }, 50); };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-wkhb]'), function (b) {
+      b.onclick = function () {
+        var sp = b.dataset.wkhb.split('|');
+        try {
+          var st = J.DB.habitOccurrenceStatus(me.id, sp[0], sp[1]);
+          if (st.done && st.completion_id) { J.DB.removeCompletion(me.id, st.completion_id); toast('Hábito desmarcado.'); }
+          else { J.DB.recordCompletion(me.id, sp[0], { completion_date: sp[1] }); toast('Hábito concluído!'); }
+          render('week');
+        } catch (e) { toast('Não foi possível registrar.'); }
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-wkdate]'), function (inp) {
+      inp.onchange = function () {
+        if (!inp.value) return;
+        var tid = inp.dataset.wkdate, prev = null;
+        try {
+          var t0 = J.DB.getTask(me.id, tid);
+          prev = t0.due_date || null;
+          J.DB.updateTask(me.id, tid, { due_date: inp.value });
+          toast('Tarefa movida para ' + dueLabel(inp.value) + '.', { label: 'Desfazer', fn: function () { try { J.DB.updateTask(me.id, tid, { due_date: prev }); render('week'); } catch (e2) {} } });
+          render('week');
+        } catch (e3) { toast('Não foi possível reagendar.'); }
+      };
+    });
+  }
+  function openWeekWizard(me) {
+    var range = wkRange();
+    var ov = null;
+    try { ov = J.DB.getWeekOverview(me.id, { date: range.start, visibility: wk.vis }); } catch (e) { toast('Não foi possível carregar.'); return; }
+    var cands = [];
+    try { cands = J.DB.getWeekSuggestCandidates(me.id, { date: range.start }); } catch (e2) {}
+    wkMInit(ov, cands);
+    wkMRender(me, ov);
+  }
+  function wkMInit(ov, cands) {
+    var prs = (ov.priorities && ov.priorities.ok) ? ov.priorities.data.priorities : [];
+    wk.m = wk.m || {};
+    wk.m.step = 0;
+    wk.m.cands = cands.slice(0, 12);
+    wk.m.sel = prs.slice(0, 3).map(function (p, ix) { return { key: 'cur' + ix, title: p.label || p.title, ref: p.linked_entity_type ? { kind: p.linked_entity_type.toLowerCase(), id: p.linked_entity_id } : null }; });
+    wk.m.free = '';
+    wk.m.notes = '';
+  }
+  function wkMRender(me, ov) {
+    var steps = ['Visão geral', 'Agenda', 'Tarefas', 'Hábitos e rotinas', 'Projetos', 'Finanças', 'Prioridades', 'Confirmar'];
+    var st = wk.m.step, h = '<h2>Planejar minha semana</h2><div id="me"></div><p class="muted">Passo ' + (st + 1) + ' de 8 • ' + steps[st] + '</p>';
+    if (st === 0) {
+      var tk = (ov.tasks && ov.tasks.ok) ? ov.tasks.data : { overdue: [], upcoming: [] };
+      var ag = (ov.agenda && ov.agenda.ok) ? ov.agenda.data : [];
+      h += '<p>Esta semana você tem:</p><ul>' +
+        '<li><b>' + ag.length + '</b> compromissos</li>' +
+        '<li><b>' + (tk.overdue.length + tk.upcoming.length) + '</b> tarefas com prazo' + (tk.overdue.length ? ' (' + tk.overdue.length + ' atrasada(s))' : '') + '</li>' +
+        '<li><b>' + ((ov.projects && ov.projects.ok) ? ov.projects.data.projects.length : 0) + '</b> projetos com atividade</li>' +
+        '<li><b>' + ((ov.financial && ov.financial.ok) ? ov.financial.data.upcoming.length : 0) + '</b> compromissos financeiros previstos</li></ul>';
+    } else if (st === 1) {
+      var ag2 = (ov.agenda && ov.agenda.ok) ? ov.agenda.data : [];
+      var cf = (ov.conflicts && ov.conflicts.ok) ? ov.conflicts.data : [];
+      h += ag2.length ? ag2.slice(0, 10).map(function (x) { return '<p><b>' + esc(wkFmtDay(x.date)) + '</b> ' + (x.start ? esc(x.start) + ' ' : '') + esc(x.title) + '</p>'; }).join('') : '<p class="muted">Sem compromissos.</p>';
+      if (cf.length) h += '<div class="alert">Atenção: ' + cf.length + ' conflito(s) de horário: ' + cf.slice(0, 3).map(function (c) { return esc(c.a.title) + ' × ' + esc(c.b.title) + ' (' + esc(wkFmtDay(c.date)) + ')'; }).join('; ') + '.</div>';
+    } else if (st === 2) {
+      var tk2 = (ov.tasks && ov.tasks.ok) ? ov.tasks.data : { overdue: [], upcoming: [], undated: [] };
+      ['overdue', 'upcoming', 'undated'].forEach(function (k) {
+        if (!tk2[k].length) return;
+        h += '<p><b>' + ({ overdue: 'Atrasadas', upcoming: 'Com prazo', undated: 'Sem prazo' })[k] + '</b></p>' +
+          tk2[k].slice(0, 8).map(function (t) { return '<p>○ ' + esc(t.title) + (t.date ? ' <span class="muted">• ' + esc(dueLabel(t.date)) + '</span>' : '') + '</p>'; }).join('');
+      });
+      if (!tk2.overdue.length && !tk2.upcoming.length && !tk2.undated.length) h += '<p class="muted">Sem tarefas.</p>';
+    } else if (st === 3) {
+      var hb = (ov.habits && ov.habits.ok) ? ov.habits.data.habits : [];
+      var rt = (ov.routines && ov.routines.ok) ? ov.routines.data.routines : [];
+      h += '<p class="muted">' + hb.length + ' hábito(s) • ' + rt.length + ' rotina(s) previstas. Apenas revise — nada muda aqui.</p>' +
+        hb.slice(0, 6).map(function (x) { return '<p>🌱 ' + esc(x.name) + '</p>'; }).join('') +
+        rt.slice(0, 6).map(function (x) { return '<p>🔁 ' + esc(x.name) + '</p>'; }).join('');
+    } else if (st === 4) {
+      var pr = (ov.projects && ov.projects.ok) ? ov.projects.data.projects : [];
+      h += pr.length ? pr.slice(0, 6).map(function (x) { return '<p>🗂 <b>' + esc(x.name) + '</b><br><span class="muted">' + x.tasksInWeek + ' tarefa(s)' + (x.targetInWeek ? ' • prazo nesta semana' : '') + ' • <a href="#/projects/' + x.id + '">Abrir ›</a></span></p>'; }).join('') : '<p class="muted">Sem projetos com atividade.</p>';
+    } else if (st === 5) {
+      var fn = (ov.financial && ov.financial.ok) ? ov.financial.data : { realized: {}, upcoming: [], planned: [] };
+      h += '<p>Realizado: <b>' + BRL((fn.realized || {}).expense || 0) + '</b> em despesas</p>' +
+        (fn.upcoming || []).slice(0, 6).map(function (x) { return '<p>• ' + esc(x.title) + ' — <b>' + BRL(x.amount || 0) + '</b> <span class="muted">' + esc(dueLabel(x.date)) + '</span></p>'; }).join('') +
+        ((fn.planned || []).length ? '<p class="muted">Planejado (não é gasto real): ' + fn.planned.length + ' item(ns).</p>' : '');
+    } else if (st === 6) {
+      h += '<p><b>Quais até 3 coisas você quer tratar como prioridade nesta semana?</b></p><div id="e"></div>';
+      h += wk.m.cands.map(function (c, ix) {
+        var on = wk.m.sel.some(function (s) { return s.key === 'c' + ix; });
+        return '<p><label class="check"><input type="checkbox" data-wkpick="c' + ix + '"' + (on ? ' checked' : '') + '> ' + esc(c.title) + ' <span class="muted">• ' + esc(c.date || '') + '</span></label></p>';
+      }).join('');
+      h += '<label>Ou escreva uma prioridade</label><input id="wk-free" maxlength="120" value="' + esc(wk.m.free) + '">';
+      h += '<p class="muted">Selecionadas: ' + wk.m.sel.length + '/3</p>';
+    } else {
+      h += '<p><b>Sua semana</b></p><p><b>Prioridades</b></p><ol>' + (wk.m.sel.length ? wk.m.sel.map(function (s) { return '<li>' + esc(s.title) + '</li>'; }).join('') : '<li class="muted">Nenhuma definida</li>') + '</ol>' +
+        '<label>Observação (opcional)</label><input id="wk-notes" maxlength="500" value="' + esc(wk.m.notes) + '">';
+    }
+    h += '<div class="row"><button class="btn" id="sv">' + (st === 7 ? 'Começar semana' : 'Próximo') + '</button>' +
+      (st > 0 ? '<button class="btn ghost" id="bk">Voltar</button>' : '') + '<button class="btn ghost" id="cl">Fechar</button></div>';
+    if (st === 6) h += '<div class="row" style="margin-top:8px"><button class="btn ghost sm" id="wk-addfree">+ Adicionar texto livre</button><button class="btn ghost sm" id="wk-clear">Limpar</button></div>';
+    modalShell(h);
+    document.getElementById('cl').onclick = closeModal;
+    var bk = document.getElementById('bk'); if (bk) bk.onclick = function () { wk.m.step--; wkMRender(me, ov); };
+    if (st === 6) {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-wkpick]'), function (c) {
+        c.onchange = function () {
+          var ix = +c.dataset.wkpick.slice(1), cd = wk.m.cands[ix];
+          if (c.checked) {
+            if (wk.m.sel.length >= 3) { c.checked = false; toast('No máximo 3 prioridades.'); return; }
+            wk.m.sel.push({ key: 'c' + ix, title: cd.title, ref: cd.ref || null });
+          } else {
+            wk.m.sel = wk.m.sel.filter(function (s) { return s.key !== 'c' + ix; });
+          }
+          wkMRender(me, ov);
+        };
+      });
+      var af = document.getElementById('wk-addfree'); if (af) af.onclick = function () {
+        var t = document.getElementById('wk-free').value.trim().slice(0, 120);
+        wk.m.free = document.getElementById('wk-free').value;
+        if (t.length < 2) { toast('Escreva a prioridade.'); return; }
+        if (wk.m.sel.length >= 3) { toast('No máximo 3 prioridades. Limpe para trocar.'); return; }
+        wk.m.sel.push({ key: 'f' + Date.now(), title: t.charAt(0).toUpperCase() + t.slice(1), ref: null });
+        wk.m.free = '';
+        wkMRender(me, ov);
+      };
+      var cl = document.getElementById('wk-clear'); if (cl) cl.onclick = function () { wk.m.sel = []; wk.m.free = ''; wkMRender(me, ov); };
+      var fr = document.getElementById('wk-free'); if (fr) fr.onchange = function () { wk.m.free = fr.value; };
+    }
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        if (st < 7) { wk.m.step++; wkMRender(me, ov); return; }
+        var notesEl = document.getElementById('wk-notes');
+        var plan = J.DB.getOrCreateWeeklyPlan(me.id, { date: wkRange().start, visibility: wk.vis });
+        J.DB.updateWeeklyPlan(me.id, plan.id, { status: 'ACTIVE', notes: notesEl ? notesEl.value : '' }, {});
+        var existing = [];
+        try { existing = J.DB.getWeekPriorities(me.id, plan.id); } catch (e2) {}
+        var need = Math.max(0, 3 - existing.length);
+        wk.m.sel.slice(0, need).forEach(function (s) {
+          if (s.ref && s.ref.kind === 'task') J.DB.addWeeklyPriority(me.id, plan.id, { title: s.title, linked_entity_type: 'TASK', linked_entity_id: s.ref.task_id });
+          else if (s.ref && s.ref.kind === 'project') J.DB.addWeeklyPriority(me.id, plan.id, { title: s.title, linked_entity_type: 'PROJECT', linked_entity_id: s.ref.project_id });
+          else if (s.ref && s.ref.kind === 'financial') J.DB.addWeeklyPriority(me.id, plan.id, { title: s.title });
+          else J.DB.addWeeklyPriority(me.id, plan.id, { title: s.title });
+        });
+        try { J.DB.convSetContext(me.id, null, 'web', 'WEEKLY_PLAN', plan.id, 120); } catch (e3) {}
+        closeModal(); toast('Semana planejada! 🎯'); render('week');
+      } catch (e4) { var m = document.getElementById('me'); if (m) m.innerHTML = err(e4); unlock(btn); }
+    };
+  }
+  function openWeekPriorities(me) {
+    var range = wkRange();
+    var plan = null;
+    try { plan = J.DB.getOrCreateWeeklyPlan(me.id, { date: range.start, visibility: wk.vis }); }
+    catch (e) { toast('Não foi possível.'); return; }
+    var prs = [];
+    try { prs = J.DB.getWeekPriorities(me.id, plan.id); } catch (e2) {}
+    modalShell('<h2>Prioridades da semana</h2><div id="me"></div>' +
+      (prs.length ? '<ol>' + prs.map(function (p, ix) {
+        return '<li>' + (p.done ? '<s>' + esc(p.label || p.title) + '</s> ✓' : esc(p.label || p.title)) +
+          ' <button class="btn ghost sm" data-wkprm="' + p.id + '" style="max-width:44px" aria-label="Remover">✕</button></li>';
+      }).join('') + '</ol>' : '<p class="muted">Você ainda não definiu prioridades para esta semana.</p>') +
+      '<label>Nova prioridade (texto livre)</label><input id="wk-newp" maxlength="120">' +
+      '<div class="row"><button class="btn" id="sv">Adicionar</button><button class="btn ghost" id="cl">Fechar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-wkprm]'), function (b) {
+      b.onclick = function () { try { J.DB.removeWeeklyPriority(me.id, b.dataset.wkprm); openWeekPriorities(me); render('week'); } catch (e3) { toast('Não foi possível.'); } };
+    });
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var t = document.getElementById('wk-newp').value.trim().slice(0, 120);
+        J.DB.addWeeklyPriority(me.id, plan.id, { title: t });
+        openWeekPriorities(me); render('week');
+      } catch (e4) { document.getElementById('me').innerHTML = err(e4); unlock(btn); }
+    };
+  }
+  function openWeekReview(me) {
+    var range = wkRange();
+    var rev = null;
+    try { rev = J.DB.getWeeklyReview(me.id, { date: range.start }); } catch (e) { toast('Não foi possível carregar.'); return; }
+    modalShell('<h2>Revisar semana</h2><div id="me"></div>' +
+      '<p>Prioridades: <b>' + rev.priorities.done + ' de ' + rev.priorities.total + '</b> concluídas.</p>' +
+      '<p>Tarefas: <b>' + rev.tasks.done + ' de ' + rev.tasks.total + '</b> concluídas.</p>' +
+      '<p>Hábitos: <b>' + rev.habits.done + ' de ' + rev.habits.total + '</b>.</p>' +
+      (rev.tasks.pending.length ? '<p><b>Ainda pendentes:</b> ' + rev.tasks.pending.slice(0, 5).map(function (t) { return esc(t.title); }).join(', ') + '.</p>' : '<p class="muted">Nada pendente. 🎉</p>') +
+      '<div class="row"><button class="btn" id="sv">Concluir revisão</button><button class="btn ghost" id="nx">Planejar próxima semana</button><button class="btn ghost" id="cl">Fechar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('nx').onclick = function () {
+      wk.date = J.DB.agendaAddDays(range.start, 7);
+      closeModal(); render('week'); openWeekWizard(me);
+    };
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var plans = J.DB.getWeeklyPlans(me.id, {}).filter(function (p) { return p.week_start_date === range.start && p.status !== 'ARCHIVED'; });
+        plans.forEach(function (p) { try { J.DB.completeWeeklyReview(me.id, p.id); } catch (e2) {} });
+        closeModal(); toast('Revisão concluída!'); render('week');
+      } catch (e3) { document.getElementById('me').innerHTML = err(e3); unlock(btn); }
+    };
+  }
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
@@ -5323,7 +5683,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/week">📅 Minha Semana <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };

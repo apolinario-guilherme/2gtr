@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [], weekly_plans: [], weekly_priorities: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -234,6 +234,8 @@ window.Juntos = window.Juntos || {};
     if (!db.inbox_items) { db.inbox_items = []; changed = true; }
     if (!db.capture_sessions) { db.capture_sessions = []; changed = true; }
     if (!db.capture_actions) { db.capture_actions = []; changed = true; }
+    if (!db.weekly_plans) { db.weekly_plans = []; changed = true; }
+    if (!db.weekly_priorities) { db.weekly_priorities = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5978,14 +5980,21 @@ window.Juntos = window.Juntos || {};
         { key: 'project_complete', kind: 'write' }, { key: 'project_reopen', kind: 'write' },
         { key: 'project_archive', kind: 'write' },
         { key: 'capture_multi', kind: 'write' }, { key: 'capture_cancel', kind: 'write' },
-        { key: 'capture_to_inbox', kind: 'write' }, { key: 'installment_create', kind: 'write' }
+        { key: 'capture_to_inbox', kind: 'write' }, { key: 'installment_create', kind: 'write' },
+        { key: 'week_overview', kind: 'read' }, { key: 'week_plan', kind: 'read' },
+        { key: 'week_agenda', kind: 'read' }, { key: 'week_tasks', kind: 'read' },
+        { key: 'week_habits', kind: 'read' }, { key: 'week_routines', kind: 'read' },
+        { key: 'week_projects', kind: 'read' }, { key: 'week_financial_commitments', kind: 'read' },
+        { key: 'week_priorities', kind: 'read' }, { key: 'week_set_priority', kind: 'write' },
+        { key: 'week_remove_priority', kind: 'write' }, { key: 'week_review', kind: 'read' },
+        { key: 'week_next', kind: 'read' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'inbox_list', 'inbox_detail', 'capture_status', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'inbox_list', 'inbox_detail', 'capture_status', 'week_overview', 'week_plan', 'week_agenda', 'week_tasks', 'week_habits', 'week_routines', 'week_projects', 'week_financial_commitments', 'week_priorities', 'week_review', 'week_next', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_multi', 'capture_cancel', 'capture_to_inbox', 'installment_create'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_multi', 'capture_cancel', 'capture_to_inbox', 'installment_create', 'week_set_priority', 'week_remove_priority'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6330,9 +6339,23 @@ window.Juntos = window.Juntos || {};
       else if ((has(['adiciona', 'adicionar', 'adicione', 'coloca', 'colocar', 'coloque', 'inclui', 'incluir']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(adiciona|coloque|inclui) .{2,80} (na lista|no mercado|na viagem)/.test(s)) out.intent = 'list_add_item';
       else if ((has(['cria', 'criar', 'crie', 'nova lista', 'nova check']) && has(['lista', 'listas', 'mercado', 'viagem', 'checklist', 'compras'])) || /(cria|criar|crie) .{2,60} lista/.test(s)) out.intent = 'list_create';
       else if (has(['quais listas', 'minhas listas', 'lista do mercado', 'lista da viagem', 'mostra a lista', 'mostra as listas', 'tem alguma lista', 'o que falta comprar', 'o que falta na', 'quais itens faltam']) || (has(['lista', 'listas']) && has(['tenho', 'temos', 'mostra', 'mostre', 'quais', 'compartilhada', 'compartilhadas']))) out.intent = 'list_view';
+      else if ((has(['semana']) && has(['planeje', 'planejar', 'planeja'])) || /(planeje|planejar).{0,30}(minha )?semana/.test(s)) out.intent = 'week_plan';
+      else if (has(['semana']) && has(['revisar', 'revisao', 'revisão', 'como foi'])) out.intent = 'week_review';
+      else if (has(['semana']) && has(['proxima', 'próxima', 'seguinte', 'que vem'])) out.intent = 'week_next';
+      else if (has(['prioridade', 'prioridades']) && has(['coloca', 'colocar', 'coloque', 'define', 'definir', 'defini', 'adiciona', 'adicionar', 'marca', 'marcar'])) out.intent = 'week_set_priority';
+      else if (has(['prioridade', 'prioridades']) && has(['remove', 'remover', 'tira', 'tirar', 'exclui', 'excluir'])) out.intent = 'week_remove_priority';
+      else if (has(['prioridade', 'prioridades'])) out.intent = 'week_priorities';
+      else if (has(['semana']) && has(['tarefa', 'tarefas']) && has(['vencem', 'vencendo', 'vencer', 'vence'])) out.intent = 'week_tasks';
+      else if (has(['semana']) && has(['compromisso', 'compromissos']) && has(['projeto', 'projetos', 'reforma', 'viagem'])) out.intent = 'week_agenda';
+      else if (has(['semana']) && has(['habito', 'habitos', 'hábito', 'hábitos'])) out.intent = 'week_habits';
+      else if (has(['semana']) && has(['rotina', 'rotinas'])) out.intent = 'week_routines';
+      else if (has(['semana']) && has(['projeto', 'projetos'])) out.intent = 'week_projects';
+      else if (has(['semana']) && has(['fatura', 'faturas', 'parcela', 'parcelas', 'financeiro', 'financeira', 'vencendo', 'vence'])) out.intent = 'week_financial_commitments';
+      else if (has(['semana']) && has(['o que tenho', 'o que tem', 'como esta', 'resumo', 'mostra', 'mostre'])) out.intent = 'week_overview';
+      else if (/^(coloca|colocar|coloque|define|marque)\b.{0,30}(a segunda|o segundo|a primeira|segunda|primeira|terceira)\b/.test(s) && DB.convGetContext(userId, null, 'WEEK_TASKS')) out.intent = 'week_set_priority';
       else if (has(['planejado e realizado', 'quanto temos previsto', 'previsto para', 'compromissos financeiros', 'planejado para'])) out.intent = 'planning_status';
       else if (has(['notifica', 'tenho notificacao', 'minhas notificacoes', 'o que esta pendente', 'fatura perto de vencer', 'fatura vencendo', 'alguma fatura'])) out.intent = 'notification_status';
-      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente', 'projeto', 'projetos', 'lista', 'listas', 'rotina', 'rotinas'])) out.intent = 'product_navigation';
+      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente', 'projeto', 'projetos', 'lista', 'listas', 'rotina', 'rotinas', 'semana'])) out.intent = 'product_navigation';
       else if (has(['qual modo financeiro', 'modo financeiro estamos', 'modo do dinheiro', 'dinheiro separado ou tudo junto', 'como administramos'])) out.intent = 'money_mode_status';
       else if (has(['whatsapp esta conectado', 'whatsapp conectado', 'meu whatsapp'])) out.intent = 'whatsapp_status';
       else if (has(['conectar meu banco', 'conectar banco', 'ligar meu banco', 'integracao com banco', 'sincronizar banco'])) out.intent = 'openfinance_status';
@@ -6471,6 +6494,7 @@ window.Juntos = window.Juntos || {};
       if (/^list_/.test(intent)) return 'LISTS';
       if (/^routine_/.test(intent)) return 'ROUTINES';
       if (/^project_/.test(intent)) return 'PROJECTS';
+      if (/^week_/.test(intent)) return 'WEEKLY_PLANNING';
       if (/^inbox_/.test(intent)) return 'INBOX';
       if (/^capture_/.test(intent)) return 'INBOX';
       if (/^installment_/.test(intent)) return 'FINANCE';
@@ -6546,6 +6570,7 @@ window.Juntos = window.Juntos || {};
         { match: ['lista', 'listas', 'mercado', 'checklist'], label: 'Listas', route: '#/lists' },
         { match: ['rotina', 'rotinas'], label: 'Rotinas', route: '#/routines' },
         { match: ['projeto', 'projetos'], label: 'Projetos', route: '#/projects' },
+        { match: ['semana', 'minha semana', 'planejar'], label: 'Minha Semana', route: '#/week' },
         { match: ['inbox', 'caixa de entrada', 'captura'], label: 'Inbox', route: '#/inbox' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
@@ -6775,6 +6800,34 @@ window.Juntos = window.Juntos || {};
           var li = DB.getListItems(userId, out.lists[0].id, {});
           out.items = li.slice(0, 15).map(function (it) { return { title: it.title, checked: !!it.checked, quantity: it.quantity, unit: it.unit }; });
         }
+      } else if (name === 'week_overview') {
+        out = DB.getWeekOverview(userId, { date: args.date, visibility: args.visibility });
+      } else if (name === 'week_next') {
+        out = DB.getWeekOverview(userId, { date: args.date, visibility: args.visibility });
+        out.upcoming = DB.getUpcomingWeekItems(userId, { date: args.date });
+      } else if (name === 'week_plan') {
+        out = DB.getWeekOverview(userId, { date: args.date, visibility: args.visibility });
+        out.guided = true;
+      } else if (name === 'week_agenda') {
+        out = { items: DB.getWeekAgenda(userId, { date: args.date, visibility: args.visibility }) };
+      } else if (name === 'week_tasks') {
+        var wt = DB.getWeekTasks(userId, { date: args.date });
+        out = { overdue: wt.overdue, today: wt.today, upcoming: wt.upcoming, undated: wt.undated };
+      } else if (name === 'week_habits') {
+        out = DB.getWeekHabits(userId, { date: args.date });
+      } else if (name === 'week_routines') {
+        out = DB.getWeekRoutines(userId, { date: args.date, visibility: args.visibility });
+      } else if (name === 'week_projects') {
+        out = DB.getWeekProjects(userId, { date: args.date });
+      } else if (name === 'week_financial_commitments') {
+        out = DB.getWeekFinancialCommitments(userId, { date: args.date, visibility: args.visibility });
+      } else if (name === 'week_priorities') {
+        out = DB.getWeekPriorities(userId, { date: args.date, visibility: args.visibility });
+      } else if (name === 'week_review') {
+        out = DB.getWeeklyReview(userId, { date: args.date });
+      } else if (name === 'week_next') {
+        var wn = DB.weekRangeOf(args.date);
+        out = DB.getWeekOverview(userId, { date: DB.agendaAddDays(wn.start, 7), visibility: args.visibility });
       } else if (name === 'whatsapp_status') {
         var wc = DB.waMyConnection(userId);
         var wp = DB.waGetPreferences(userId);
@@ -6972,6 +7025,22 @@ window.Juntos = window.Juntos || {};
         if (!cc2) throw new Error('Captura não encontrada.');
       } else if (actionType === 'capture_to_inbox') {
         if (!String(p.text || '').trim() && !p.session_id) throw new Error('Nada para guardar.');
+      } else if (actionType === 'week_set_priority') {
+        var wsp = db.weekly_plans.find(function (x) { return x.id === p.plan_id && x.couple_id === cid && !x.deleted_at; });
+        if (!wsp || !DB.weekCanAct(db, userId, wsp)) throw new Error('Planejamento inválido.');
+        var existing = db.weekly_priorities.filter(function (x) { return x.weekly_plan_id === wsp.id && !x.deleted_at; });
+        if (existing.length >= 3 && !p.priority_id) throw new Error('No máximo 3 prioridades por semana.');
+        if (p.linked_entity_type || p.linked_entity_id) {
+          var _lt = String(p.linked_entity_type || '').toUpperCase();
+          if (['TASK', 'PROJECT', 'GOAL'].indexOf(_lt) < 0) throw new Error('Vínculo inválido.');
+          var _tgt = DB.weekPriorityTarget(userId, _lt, p.linked_entity_id);
+          if (wsp.visibility === 'COUPLE' && (_tgt.visibility === 'PERSONAL' || _tgt.visibility === 'PRIVATE')) throw new Error('Item pessoal não pode ser prioridade compartilhada.');
+        } else if (!p.title || String(p.title).trim().length < 2) throw new Error('Descreva a prioridade.');
+      } else if (actionType === 'week_remove_priority') {
+        var wrp = db.weekly_priorities.find(function (x) { return x.id === p.priority_id && !x.deleted_at; });
+        if (!wrp) throw new Error('Prioridade inválida.');
+        var wrpp = db.weekly_plans.find(function (x) { return x.id === wrp.weekly_plan_id && x.couple_id === cid && !x.deleted_at; });
+        if (!wrpp || !DB.weekCanAct(db, userId, wrpp)) throw new Error('Acesso negado.');
       } else if (actionType === 'installment_create') {
         DB.validateInstallmentPurchase(userId, { credit_card_id: p.credit_card_id, description: p.description, total_amount: p.total, count: p.count, first_installment_date: p.first_installment_date, category_id: p.category_id, payer_user_id: p.payer_user_id || userId, is_shared: !!p.is_shared });
       } else if (actionType === 'inbox_process' || actionType === 'inbox_choose_destination') {
@@ -7175,6 +7244,13 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'capture_to_inbox') {
           var cti = p.session_id ? DB.sendCaptureToInbox(userId, p.session_id, {}) : DB.captureItem(userId, { content: p.text, visibility: p.visibility || 'PERSONAL', source: r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI_ASSISTANT' }, { idempotency_key: 'ai:' + r.id });
           res = { inbox_id: cti.id };
+        } else if (r.action_type === 'week_set_priority') {
+          var wsa = DB.addWeeklyPriority(userId, p.plan_id, { title: p.title, linked_entity_type: p.linked_entity_type, linked_entity_id: p.linked_entity_id });
+          res = { plan_id: p.plan_id, priority_id: wsa.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'WEEKLY_PLAN', p.plan_id, 60); } catch (eWC) {}
+        } else if (r.action_type === 'week_remove_priority') {
+          DB.removeWeeklyPriority(userId, p.priority_id);
+          res = { priority_id: p.priority_id };
         } else if (r.action_type === 'installment_create') {
           var ipc = DB.createInstallmentPurchase(userId, { credit_card_id: p.credit_card_id, description: p.description, total_amount: p.total, count: p.count, first_installment_date: p.first_installment_date, category_id: p.category_id, payer_user_id: p.payer_user_id || userId, is_shared: !!p.is_shared });
           res = { installment_id: ipc.id };
@@ -8072,6 +8148,44 @@ window.Juntos = window.Juntos || {};
           if (!imCat) throw { clarification: 'Qual categoria da compra?' };
           params = { credit_card_id: imCards[0].id, card_name: imCards[0].name, description: imDesc.charAt(0).toUpperCase() + imDesc.slice(1), total: imTotal, count: imCount, first_installment_date: DB.agendaToday(), category_id: imCat.id, payer_user_id: userId, is_shared: false };
           label = 'Compra parcelada "' + params.description + '" de ' + DB.aiMoney(imTotal) + ' em ' + imCount + 'x no cartão ' + imCards[0].name;
+        } else if (det.intent === 'week_set_priority') {
+          var wpu = DB.aiResolveWeekPlan(userId, rawText, convId);
+          var wTitle = null, wLt = null, wLid = null;
+          var wOrd = s.match(/\b(a segunda|o segundo|a primeira|segunda|primeira|terceira)\b/);
+          if (wOrd) {
+            var wCtx = null;
+            try { wCtx = DB.convGetContext(userId, convId, 'WEEK_TASKS'); } catch (eWC2) {}
+            var wIds = wCtx && wCtx.entity_id ? String(wCtx.entity_id).split(',') : [];
+            var wIx = /segunda/.test(wOrd[0]) ? 1 : (/terceira/.test(wOrd[0]) ? 2 : 0);
+            if (!wIds[wIx]) throw { clarification: 'Qual item você quer como prioridade?' };
+            try {
+              var wT = DB.getTask(userId, wIds[wIx]);
+              wTitle = wT.title; wLt = 'TASK'; wLid = wT.id;
+            } catch (eWT) { throw { clarification: 'Não encontrei esse item. Qual tarefa?' }; }
+          } else {
+            var wCandT = DB.aiFindTask(userId, rawText);
+            var wCandP = DB.aiFindProject(userId, rawText);
+            var wCandG = DB.aiFindGoal(userId, rawText);
+            if (wCandT.length === 1 && !wCandP.length && !wCandG.length) { wTitle = wCandT[0].title; wLt = 'TASK'; wLid = wCandT[0].id; }
+            else if (wCandP.length === 1 && !wCandT.length && !wCandG.length) { wTitle = wCandP[0].name; wLt = 'PROJECT'; wLid = wCandP[0].id; }
+            else if (wCandG.length === 1 && !wCandT.length && !wCandP.length) { wTitle = wCandG[0].name; wLt = 'GOAL'; wLid = wCandG[0].id; }
+            else {
+              var wFree = rawText.replace(/(coloca|colocar|coloque|define|definir|defini|adiciona|adicionar|marca|marcar|como prioridade|prioridade|na semana|dessa semana|por favor)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+              if (wFree.length < 2) throw { clarification: 'O que você quer como prioridade? Ex: "coloca renovar passaporte como prioridade".' };
+              wTitle = wFree.charAt(0).toUpperCase() + wFree.slice(1);
+            }
+          }
+          params = { plan_id: wpu.id, title: wTitle, linked_entity_type: wLt, linked_entity_id: wLid };
+          label = 'Definir prioridade "' + wTitle + '" na semana';
+        } else if (det.intent === 'week_remove_priority') {
+          var wpr = DB.aiResolveWeekPlan(userId, rawText, convId);
+          var wAll = [];
+          try { wAll = DB.getWeekPriorities(userId, wpr.id); } catch (eWR) {}
+          var wNq = DB.aiNorm(rawText).replace(/(remove|remover|tira|tirar|exclui|excluir|prioridade|prioridades|da semana|por favor)/g, ' ').trim();
+          var wHit = wAll.filter(function (x) { var n = DB.aiNorm(x.title); return n.length >= 3 && wNq.indexOf(n) >= 0; });
+          if (wHit.length !== 1) throw { clarification: wHit.length ? 'Qual delas? ' + wHit.slice(0, 3).map(function (x) { return '"' + x.title + '"'; }).join(', ') + '?' : 'Qual prioridade remover?' };
+          params = { plan_id: wpr.id, priority_id: wHit[0].id, title: wHit[0].title };
+          label = 'Remover prioridade "' + wHit[0].title + '"';
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -8135,6 +8249,8 @@ window.Juntos = window.Juntos || {};
         capture_cancel: 'Captura cancelada. Nada foi criado.',
         capture_to_inbox: 'Captura guardada na Inbox.',
         installment_create: 'Compra parcelada registrada no cartão.',
+        week_set_priority: 'Prioridade definida para a semana.',
+        week_remove_priority: 'Prioridade removida.',
         project_create: 'Projeto "' + (p.name || '') + '" criado.',
         project_create_task: 'Tarefa "' + (p.title || '') + '" criada no projeto "' + (p.project_name || '') + '".',
         project_create_list: 'Lista "' + (p.name || '') + '" criada no projeto "' + (p.project_name || '') + '".',
@@ -8362,6 +8478,82 @@ window.Juntos = window.Juntos || {};
         tools.push('overview_upcoming'); toolOut = au;
         if (!au.items.length) answer = 'Nada importante por vir nos próximos dias.';
         else answer = 'Por vir: ' + au.items.slice(0, 5).map(function (x) { return x.title + ' em ' + x.date.split('-').reverse().join('/') + (x.time ? ' às ' + x.time : ''); }).join('; ') + '.';
+      } else if (det.intent === 'week_overview' || det.intent === 'week_plan') {
+        var wv = DB.aiRunTool(userId, det.intent === 'week_plan' ? 'week_plan' : 'week_overview', {});
+        tools.push(det.intent); toolOut = wv;
+        var wParts = [];
+        if (wv.agenda && wv.agenda.ok) wParts.push(wv.agenda.data.length + ' compromissos');
+        if (wv.tasks && wv.tasks.ok) wParts.push((wv.tasks.data.overdue.length + wv.tasks.data.upcoming.length) + ' tarefas com prazo');
+        if (wv.tasks && wv.tasks.ok && wv.tasks.data.overdue.length) wParts.push(wv.tasks.data.overdue.length + ' atrasada(s)');
+        if (wv.routines && wv.routines.ok) wParts.push(wv.routines.data.routines.length + ' rotinas previstas');
+        if (wv.projects && wv.projects.ok) wParts.push(wv.projects.data.projects.length + ' projetos com atividade');
+        if (wv.financial && wv.financial.ok) {
+          var wInv = wv.financial.data.upcoming.filter(function (x) { return x.kind === 'invoice'; });
+          if (wInv.length) wParts.push(wInv.length + ' fatura(s) vencendo');
+        }
+        F('itens', wParts.length);
+        answer = 'Sua semana tem:\n• ' + (wParts.length ? wParts.join('\n• ') : 'nada agendado — semana tranquila.');
+        if (wv.priorities && wv.priorities.ok && wv.priorities.data.priorities.length) {
+          answer += '\n\nVocê definiu ' + wv.priorities.data.priorities.length + ' prioridade(s):\n' + wv.priorities.data.priorities.map(function (p, ix) { return (ix + 1) + '. ' + (p.label || p.title) + (p.done ? ' ✓' : ''); }).join('\n');
+        }
+        if (det.intent === 'week_plan') answer += '\n\nQuer começar revisando a agenda ou as tarefas?';
+        navTarget = '#/week';
+        try { var _wconv = DB.aiListConversations(userId); if (_wconv.length) DB.convSetContext(userId, _wconv[0].id, _wconv[0].channel || 'web', 'WEEKLY_PLAN', (wv.priorities && wv.priorities.ok && wv.priorities.data.plan_id) || '', 60); } catch (eWC3) {}
+      } else if (det.intent === 'week_agenda') {
+        var wa2 = DB.aiRunTool(userId, 'week_agenda', {});
+        tools.push('week_agenda'); toolOut = wa2;
+        answer = wa2.length ? 'Compromissos da semana: ' + wa2.slice(0, 8).map(function (x) { return x.title + ' em ' + x.date.split('-').reverse().join('/') + (x.start ? ' às ' + x.start : ''); }).join('; ') + '.' : 'Sem compromissos nesta semana.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_tasks') {
+        var wt = DB.aiRunTool(userId, 'week_tasks', {});
+        tools.push('week_tasks'); toolOut = wt;
+        var wtAll = wt.overdue.concat(wt.today).concat(wt.upcoming).slice(0, 8);
+        if (!wtAll.length) answer = 'Sem tarefas nesta semana.';
+        else {
+          answer = 'Tarefas da semana: ' + wtAll.map(function (t) { return t.title + (t.date ? ' (' + t.date.split('-').reverse().join('/') + ')' : '') + (t.overdue ? ' [atrasada]' : ''); }).join('; ') + '.';
+          try { var _wconv2 = DB.aiListConversations(userId); if (_wconv2.length) DB.convSetContext(userId, _wconv2[0].id, _wconv2[0].channel || 'web', 'WEEK_TASKS', wtAll.slice(0, 8).map(function (t) { return t.task_id; }).join(','), 30); } catch (eWC4) {}
+        }
+        navTarget = '#/week';
+      } else if (det.intent === 'week_habits') {
+        var wh = DB.aiRunTool(userId, 'week_habits', {});
+        tools.push('week_habits'); toolOut = wh;
+        answer = wh.habits.length ? 'Hábitos da semana: ' + wh.habits.slice(0, 6).map(function (h) { return h.name; }).join(', ') + '.' : 'Nenhum hábito previsto para esta semana.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_routines') {
+        var wr = DB.aiRunTool(userId, 'week_routines', {});
+        tools.push('week_routines'); toolOut = wr;
+        answer = wr.routines.length ? 'Rotinas da semana: ' + wr.routines.slice(0, 6).map(function (r) { return r.name + ' (' + r.dueDates.length + ' dias)'; }).join(', ') + '.' : 'Nenhuma rotina prevista para esta semana.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_projects') {
+        var wp = DB.aiRunTool(userId, 'week_projects', {});
+        tools.push('week_projects'); toolOut = wp;
+        answer = wp.projects.length ? 'Projetos com atividade: ' + wp.projects.slice(0, 5).map(function (p) { return p.name + ' (' + p.tasksInWeek + ' tarefas)'; }).join('; ') + '.' : 'Nenhum projeto com atividade nesta semana.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_financial_commitments') {
+        var wf = DB.aiRunTool(userId, 'week_financial_commitments', {});
+        tools.push('week_financial_commitments'); toolOut = wf;
+        var wfParts = [];
+        if (wf.realized.expense || wf.realized.income) wfParts.push('realizado: ' + DB.aiMoney(wf.realized.expense) + ' gastos');
+        if (wf.upcoming.length) wfParts.push(wf.upcoming.length + ' compromisso(s) previsto(s): ' + wf.upcoming.slice(0, 4).map(function (x) { return x.title + ' ' + String(x.date).split('-').reverse().join('/'); }).join('; '));
+        answer = wfParts.length ? 'Finanças da semana — ' + wfParts.join('. ') + '.' : 'Sem compromissos financeiros nesta semana.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_priorities') {
+        var wpp = DB.aiRunTool(userId, 'week_priorities', {});
+        tools.push('week_priorities'); toolOut = wpp;
+        answer = wpp.priorities.length ? 'Suas prioridades: ' + wpp.priorities.map(function (p, ix) { return (ix + 1) + '. ' + (p.label || p.title) + (p.done ? ' ✓' : ''); }).join('; ') + '.' : 'Você ainda não definiu prioridades para esta semana. Quer escolher até 3?';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_review') {
+        var wrv = DB.aiRunTool(userId, 'week_review', {});
+        tools.push('week_review'); toolOut = wrv;
+        answer = 'Revisão da semana:\n• Prioridades: ' + wrv.priorities.done + ' de ' + wrv.priorities.total + ' concluídas.\n• Tarefas: ' + wrv.tasks.done + ' de ' + wrv.tasks.total + ' concluídas.\n• Hábitos: ' + wrv.habits.done + ' de ' + wrv.habits.total + '.';
+        if (wrv.tasks.pending.length) answer += '\nPendentes: ' + wrv.tasks.pending.slice(0, 4).map(function (t) { return t.title; }).join(', ') + '.';
+        navTarget = '#/week';
+      } else if (det.intent === 'week_next') {
+        var rnx = DB.weekRangeOf(DB.agendaToday());
+        var wn = DB.aiRunTool(userId, 'week_next', { date: DB.agendaAddDays(rnx.start, 7) });
+        tools.push('week_next'); toolOut = wn;
+        answer = 'Próxima semana (' + wn.week.start.split('-').reverse().join('/') + ' a ' + wn.week.end.split('-').reverse().join('/') + '): ' + (wn.upcoming ? wn.upcoming.length : 0) + ' itens futuros.';
+        navTarget = '#/week';
       } else if (det.intent === 'agenda_today' || det.intent === 'agenda_tomorrow' || det.intent === 'agenda_week' || det.intent === 'agenda_month' || det.intent === 'agenda_search' || det.intent === 'agenda_detail') {
         var aqD = DB.agendaToday(), aqF, aqT;
         if (det.intent === 'agenda_tomorrow') aqD = DB.agendaAddDays(aqD, 1);
@@ -8941,7 +9133,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/inbox': 'mostra minha inbox', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'o que tenho essa semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/inbox': 'mostra minha inbox', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -9790,7 +9982,7 @@ window.Juntos = window.Juntos || {};
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, inbox: ibx, next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, inbox: ibx, week: (function () { try { var w = DB.getWeekOverview(userId, { date: d, visibility: 'PERSONAL' }); var pr = (w.priorities && w.priorities.ok) ? w.priorities.data.priorities.filter(function (x) { return !x.done; }) : []; var td = (w.tasks && w.tasks.ok) ? w.tasks.data.upcoming.filter(function (x) { return x.date <= DB.agendaAddDays(d, 2); }).length : 0; var inv = (w.financial && w.financial.ok) ? w.financial.data.upcoming.filter(function (x) { return x.kind === 'invoice'; }) : []; return { priorities_pending: pr.length, tasks_due: td, next_invoice: inv[0] ? { title: inv[0].title, date: inv[0].date } : null }; } catch (eW) { return { priorities_pending: 0, tasks_due: 0, next_invoice: null }; } })(), next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -12710,6 +12902,21 @@ window.Juntos = window.Juntos || {};
       }
       try { return strong(m[0]) >= 2 && strong(m[1]) >= 2; } catch (e2) { return false; }
     },
+    aiResolveWeekPlan: function (userId, rawText, convId) {
+      var s = DB.aiNorm(rawText || '');
+      var vis = /(casal|compartilhad|nossa|nosso|juntos|do casal)\b/.test(s) ? 'COUPLE' : 'PERSONAL';
+      var ctx = null;
+      try { ctx = DB.convGetContext(userId, convId, 'WEEKLY_PLAN'); } catch (e) {}
+      if (ctx && ctx.entity_id) {
+        try {
+          var pc = DB.getWeeklyPlan(userId, ctx.entity_id);
+          if (!vis || pc.visibility === vis || vis === 'PERSONAL') return pc;
+        } catch (e2) {}
+      }
+      var found = DB.getWeeklyPlans(userId, { visibility: vis }).filter(function (p) { return p.status === 'ACTIVE' || p.status === 'DRAFT'; }).sort(function (a, b) { return (b.updated_at + b.id).localeCompare(a.updated_at + a.id); })[0] || null;
+      if (found) return found;
+      return DB.getOrCreateWeeklyPlan(userId, { visibility: vis });
+    },
     aiFindProject: function (userId, q) {
       if (!q) return [];
       var rows = DB.getProjects(userId, { limit: 100 });
@@ -13745,6 +13952,692 @@ window.Juntos = window.Juntos || {};
       return item;
     },
     getCaptureStatus: function (userId, sessionId) { return DB.getCaptureResult(userId, sessionId); },
+    /* ============ MINHA SEMANA (agregacao; fonte: WeeklyPlanningService) ============
+       Orquestra leitura via servicos oficiais sem duplicar regra de dominio.
+       weekly_plans guarda APENAS o que pertence ao planejamento (periodo,
+       visibilidade, status, notas, lembretes, prioridades por referencia).
+       Entidades seguem nos servicos oficiais; links sao referencias. */
+    WEEKLY_PLAN_STATUSES: function () { return ['DRAFT', 'ACTIVE', 'COMPLETED', 'ARCHIVED']; },
+    weekVisible: function (db, userId, p) {
+      if (!p || p.deleted_at) return false;
+      if (p.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return p.user_id === userId;
+    },
+    weekCanAct: function (db, userId, p) {
+      if (!DB.weekVisible(db, userId, p)) return false;
+      if (p.visibility === 'COUPLE') return true;
+      return p.user_id === userId;
+    },
+    weekWriteGuard: function (db, userId, planId) {
+      var cid = DB.myCoupleId(userId);
+      var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === cid && !x.deleted_at; });
+      if (!p || !DB.weekCanAct(db, userId, p)) {
+        try { DB.logAuthorizationFailure(userId, 'weekly_plan_write', { entity_type: 'weekly_plan', entity_id: planId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return p;
+    },
+    validateWeeklyPlan: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var start = data.week_start_date ? String(data.week_start_date).slice(0, 10) : DB.weekRangeOf(DB.agendaToday()).start;
+      if (!DB.agendaParseDay(start)) throw new Error('Data inválida.');
+      var range = DB.weekRangeOf(start);
+      var notes = String(data.notes || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      function hhmm(v) {
+        if (v == null || v === '') return null;
+        var t = String(v).slice(0, 5);
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw new Error('Horário inválido.');
+        return t;
+      }
+      function wday(v) {
+        if (v == null || v === '') return null;
+        var n = parseInt(v, 10);
+        if (!(n >= 0 && n <= 6)) throw new Error('Dia inválido.');
+        return n;
+      }
+      return { couple_id: cid, week_start_date: range.start, week_end_date: range.end, visibility: vis, notes: notes, plan_reminder_day: wday(data.plan_reminder_day), plan_reminder_time: hhmm(data.plan_reminder_time), review_reminder_day: wday(data.review_reminder_day), review_reminder_time: hhmm(data.review_reminder_time) };
+    },
+    getOrCreateWeeklyPlan: function (userId, opt) {
+      DB.requireAuthz(userId, 'weekly_plan_create', null);
+      opt = opt || {};
+      var v = DB.validateWeeklyPlan(userId, { week_start_date: opt.date || opt.week_start_date, visibility: opt.visibility || 'PERSONAL' });
+      var db = read();
+      var ex = db.weekly_plans.find(function (x) {
+        return x.couple_id === v.couple_id && !x.deleted_at && x.week_start_date === v.week_start_date && x.visibility === v.visibility && x.status !== 'ARCHIVED' &&
+          (v.visibility === 'COUPLE' ? true : x.user_id === userId);
+      });
+      if (ex) return ex;
+      var p = { id: id('wp'), user_id: userId, couple_id: v.couple_id, week_start_date: v.week_start_date, week_end_date: v.week_end_date, visibility: v.visibility, status: 'DRAFT', notes: '', plan_reminder_day: null, plan_reminder_time: null, review_reminder_day: null, review_reminder_time: null, version: 1, created_at: now(), updated_at: now(), completed_at: null, archived_at: null, deleted_at: null };
+      db.weekly_plans.push(p);
+      logAudit(db, v.couple_id, userId, 'weekly_plan', p.id, 'created', { week: v.week_start_date, visibility: v.visibility });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'week', { action: 'weekly_plan_created', entity_type: 'weekly_plan', entity_id: p.id }); } catch (e) {}
+      try { DB.emitWeekEvent(userId, 'weekly_plan_created', p, {}); } catch (e2) {}
+      return p;
+    },
+    getWeeklyPlan: function (userId, planId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === cid && !x.deleted_at; });
+      if (!p || !DB.weekVisible(db, userId, p)) {
+        try { DB.logAuthorizationFailure(userId, 'weekly_plan_read', { entity_type: 'weekly_plan', entity_id: planId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return p;
+    },
+    getWeeklyPlans: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.weekly_plans.filter(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return false;
+        if (!DB.weekVisible(db, userId, p)) return false;
+        if (f.status && p.status !== String(f.status).toUpperCase()) return false;
+        if (!f.include_archived && p.status === 'ARCHIVED') return false;
+        if (f.visibility && p.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.week_start && p.week_start_date !== String(f.week_start).slice(0, 10)) return false;
+        return true;
+      });
+      rows.sort(function (a, b) { return (b.week_start_date + b.id).localeCompare(a.week_start_date + a.id); });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    updateWeeklyPlan: function (userId, planId, data, opt) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      opt = opt || {};
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      if (opt.expected_version != null && p.version !== opt.expected_version) throw new Error('Planejamento alterado por outra pessoa. Recarregue para continuar.');
+      data = data || {};
+      var visBefore = p.visibility;
+      if (data.notes !== undefined) p.notes = String(data.notes).replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      ['plan_reminder_day', 'plan_reminder_time', 'review_reminder_day', 'review_reminder_time'].forEach(function (k) {
+        if (data[k] !== undefined) {
+          if (k.indexOf('_day') >= 0) p[k] = (data[k] === null || data[k] === '' ? null : Math.max(0, Math.min(6, parseInt(data[k], 10) || 0)));
+          else p[k] = (data[k] === null || data[k] === '' ? null : String(data[k]).slice(0, 5));
+        }
+      });
+      if (data.visibility && String(data.visibility).toUpperCase() !== p.visibility) {
+        var nv = String(data.visibility).toUpperCase();
+        if (['PERSONAL', 'COUPLE'].indexOf(nv) < 0) throw new Error('Visibilidade inválida.');
+        if (nv === 'COUPLE') DB.weekCheckVisibilityChange(db, userId, p);
+        p.visibility = nv;
+      }
+      if (data.status && ['DRAFT', 'ACTIVE'].indexOf(String(data.status).toUpperCase()) >= 0) p.status = String(data.status).toUpperCase();
+      p.version += 1; p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_plan', p.id, 'updated', {});
+      write(db);
+      if (visBefore !== p.visibility) {
+        try { DB.logSecurityEvent(userId, 'week', { action: p.visibility === 'COUPLE' ? 'weekly_plan_shared' : 'weekly_plan_privatized', entity_type: 'weekly_plan', entity_id: p.id, metadata: { from: visBefore, to: p.visibility } }); } catch (e) {}
+      }
+      try { DB.emitWeekEvent(userId, 'weekly_plan_updated', p, {}); } catch (e2) {}
+      return p;
+    },
+    weekCheckVisibilityChange: function (db, userId, p) {
+      var bad = db.weekly_priorities.filter(function (pr) { return pr.weekly_plan_id === p.id && !pr.deleted_at && pr.linked_entity_id; }).map(function (pr) {
+        try {
+          var e = DB.weekPriorityTarget(userId, pr.linked_entity_type, pr.linked_entity_id);
+          return (e.visibility === 'PERSONAL' || e.visibility === 'PRIVATE') ? (e.label || pr.title) : null;
+        } catch (e2) { return null; }
+      }).filter(Boolean);
+      if (bad.length) throw new Error('Há prioridades pessoais vinculadas (' + bad.slice(0, 3).join(', ') + '). Remova-as antes de compartilhar.');
+      return true;
+    },
+    completeWeeklyReview: function (userId, planId) {
+      DB.requireAuthz(userId, 'weekly_plan_complete', null);
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      p.status = 'COMPLETED'; p.completed_at = now(); p.version += 1; p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_plan', p.id, 'completed', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'week', { action: 'weekly_review_completed', entity_type: 'weekly_plan', entity_id: p.id }); } catch (e) {}
+      try { DB.emitWeekEvent(userId, 'weekly_review_completed', p, {}); } catch (e2) {}
+      return p;
+    },
+    archiveWeeklyPlan: function (userId, planId) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      p.status = 'ARCHIVED'; p.archived_at = now(); p.version += 1; p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_plan', p.id, 'archived', {});
+      write(db);
+      return p;
+    },
+    deleteWeeklyPlan: function (userId, planId) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      p.deleted_at = now(); p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_plan', p.id, 'deleted', {});
+      write(db);
+      return true;
+    },
+    weekPriorityTarget: function (userId, entityType, entityId) {
+      var t = String(entityType || '').toUpperCase();
+      if (t === 'TASK') { var tk = DB.getTask(userId, entityId); return { label: tk.title, visibility: tk.visibility }; }
+      if (t === 'PROJECT') { var pj = DB.getProject(userId, entityId); return { label: pj.name, visibility: pj.visibility }; }
+      if (t === 'GOAL') {
+        var g = DB.analyticsGoals(userId).filter(function (x) { return x.id === entityId; })[0];
+        if (!g) throw new Error('Meta não encontrada.');
+        return { label: g.name, visibility: 'COUPLE' };
+      }
+      throw new Error('Tipo de vínculo inválido.');
+    },
+    addWeeklyPriority: function (userId, planId, data) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      data = data || {};
+      var cur = db.weekly_priorities.filter(function (x) { return x.weekly_plan_id === planId && !x.deleted_at; });
+      if (cur.length >= 3) throw new Error('No máximo 3 prioridades por semana. Remova uma para adicionar outra.');
+      var title = DB.inboxClean ? DB.inboxClean(data.title, 120) : String(data.title || '').trim().slice(0, 120);
+      var lt = data.linked_entity_type ? String(data.linked_entity_type).toUpperCase() : null;
+      var lid = data.linked_entity_id ? String(data.linked_entity_id) : null;
+      if (lt && ['TASK', 'PROJECT', 'GOAL'].indexOf(lt) < 0) throw new Error('Vínculo inválido.');
+      if ((lt && !lid) || (!lt && lid)) throw new Error('Vínculo incompleto.');
+      if (lt && lid) {
+        var tgt = DB.weekPriorityTarget(userId, lt, lid);
+        if (p.visibility === 'COUPLE' && (tgt.visibility === 'PERSONAL' || tgt.visibility === 'PRIVATE')) throw new Error('Item pessoal não pode ser prioridade de um planejamento compartilhado.');
+        if (!title) title = tgt.label;
+      }
+      if (!title || title.length < 2) throw new Error('Descreva a prioridade.');
+      var max = -1;
+      cur.forEach(function (x) { if (x.position != null && x.position > max) max = x.position; });
+      var row = { id: id('wpr'), weekly_plan_id: planId, title: title.slice(0, 120), linked_entity_type: lt, linked_entity_id: lid, position: max + 1, completed_manually: false, created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      db.weekly_priorities.push(row);
+      p.version += 1; p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_priority', row.id, 'added', { title: title });
+      write(db);
+      try { DB.emitWeekEvent(userId, 'weekly_priority_added', p, { priority_id: row.id }); } catch (e) {}
+      return row;
+    },
+    removeWeeklyPriority: function (userId, priorityId) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var pr = db.weekly_priorities.find(function (x) { return x.id === priorityId && !x.deleted_at; });
+      if (!pr) throw new Error('Prioridade não encontrada.');
+      var p = DB.weekWriteGuard(db, userId, pr.weekly_plan_id);
+      pr.deleted_at = now(); pr.updated_at = now();
+      p.version += 1; p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'weekly_priority', pr.id, 'removed', {});
+      write(db);
+      try { DB.emitWeekEvent(userId, 'weekly_priority_removed', p, { priority_id: pr.id }); } catch (e) {}
+      return true;
+    },
+    reorderWeeklyPriorities: function (userId, planId, order) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      if (!Array.isArray(order) || !order.length || order.length > 3) throw new Error('Ordem inválida.');
+      var seen = {};
+      order.forEach(function (pid, ix) {
+        if (seen[pid]) throw new Error('Ordem com prioridade duplicada.');
+        seen[pid] = true;
+        var pr = db.weekly_priorities.find(function (x) { return x.id === pid && x.weekly_plan_id === planId && !x.deleted_at; });
+        if (!pr) throw new Error('Prioridade não pertence a este planejamento.');
+        pr.position = ix; pr.updated_at = now();
+      });
+      p.version += 1; p.updated_at = now();
+      write(db);
+      return true;
+    },
+    toggleWeeklyPriority: function (userId, priorityId, done) {
+      DB.requireAuthz(userId, 'weekly_plan_edit', null);
+      var db = read();
+      var pr = db.weekly_priorities.find(function (x) { return x.id === priorityId && !x.deleted_at; });
+      if (!pr) throw new Error('Prioridade não encontrada.');
+      DB.weekWriteGuard(db, userId, pr.weekly_plan_id);
+      pr.completed_manually = !!done; pr.updated_at = now();
+      write(db);
+      return pr;
+    },
+    getWeekPriorities: function (userId, planId) {
+      var db = read();
+      var p = DB.weekWriteGuard(db, userId, planId);
+      void p;
+      var rows = db.weekly_priorities.filter(function (x) { return x.weekly_plan_id === planId && !x.deleted_at; })
+        .sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)); });
+      return rows.map(function (pr) {
+        var live = { done: pr.completed_manually, label: pr.title, accessible: true };
+        if (pr.linked_entity_type === 'TASK' && pr.linked_entity_id) {
+          try {
+            var t = DB.getTask(userId, pr.linked_entity_id);
+            live.done = t.status === 'COMPLETED' || pr.completed_manually;
+            live.label = t.title;
+          } catch (e) { live.accessible = false; }
+        } else if (pr.linked_entity_type === 'GOAL' && pr.linked_entity_id) {
+          try {
+            var g = DB.analyticsGoals(userId).filter(function (x) { return x.id === pr.linked_entity_id; })[0];
+            if (g) { live.label = g.name; live.done = (g.status === 'completed' || g.status === 'concluída') || pr.completed_manually; }
+            else live.accessible = false;
+          } catch (e2) { live.accessible = false; }
+        }
+        return { id: pr.id, title: pr.title, linked_entity_type: pr.linked_entity_type, linked_entity_id: pr.linked_entity_id, position: pr.position, done: !!live.done, label: live.label, accessible: live.accessible };
+      });
+    },
+    getWeekAgenda: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var from = o.from || r.start, to = o.to || r.end;
+      var occs = [];
+      try { occs = DB.agendaOccurrences(userId, from, to, { vision: o.visibility === 'COUPLE' ? 'couple' : 'me' }); } catch (e) {}
+      return occs.map(function (x) {
+        return { key: x.key, event_id: x.event_id, title: x.title, date: x.date, start: (x.start_at && x.start_at.length > 10) ? x.start_at.slice(11, 16) : null, end: (x.end_at && x.end_at.length > 10) ? x.end_at.slice(11, 16) : null, all_day: !!x.all_day, location: x.location || null, visibility: x.visibility, is_recurring: !!x.is_recurring };
+      }).sort(function (a, b) { return (a.date + (a.start || '') + a.key).localeCompare(b.date + (b.start || '') + b.key); });
+    },
+    detectAgendaConflicts: function (userId, o) {
+      o = o || {};
+      var occs = DB.getWeekAgenda(userId, o).filter(function (x) { return x.start && x.end && x.start !== x.end; });
+      var byDay = {};
+      occs.forEach(function (x) { (byDay[x.date] = byDay[x.date] || []).push(x); });
+      var out = [];
+      Object.keys(byDay).forEach(function (d) {
+        var arr = byDay[d].sort(function (a, b) { return (a.start < b.start ? -1 : 1); });
+        for (var i = 0; i < arr.length; i++) {
+          for (var j = i + 1; j < arr.length; j++) {
+            if (arr[j].start >= arr[i].end) break;
+            out.push({ date: d, a: { event_id: arr[i].event_id, title: arr[i].title, start: arr[i].start, end: arr[i].end }, b: { event_id: arr[j].event_id, title: arr[j].title, start: arr[j].start, end: arr[j].end } });
+          }
+        }
+      });
+      return out;
+    },
+    getWeekTasks: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var from = o.from || r.start, to = o.to || r.end;
+      var today = DB.agendaToday();
+      var occs = [];
+      try { occs = DB.taskOccurrences(userId, from, to, {}); } catch (e) {}
+      var undated = [];
+      try {
+        undated = DB.getTasks(userId, { due: 'nodate', limit: 50 }).filter(function (t) { return t.status !== 'COMPLETED' && t.status !== 'CANCELLED'; });
+      } catch (e2) {}
+      var overdue = [], tdy = [], upcoming = [];
+      occs.forEach(function (x) {
+        if (x.status === 'COMPLETED' || x.status === 'CANCELLED') return;
+        var row = { key: x.key, task_id: x.task_id, title: x.title, date: x.date, due_time: x.due_time || null, status: x.status, priority: x.priority, visibility: x.visibility, assigned_to: x.assigned_to, overdue: !!x.overdue, is_recurring: !!x.is_recurring };
+        if (x.overdue || x.date < today) overdue.push(row);
+        else if (x.date === today) tdy.push(row);
+        else upcoming.push(row);
+      });
+      function byDate(a, b) { return (a.date + (a.due_time || '') + a.key).localeCompare(b.date + (b.due_time || '') + b.key); }
+      overdue.sort(byDate); tdy.sort(byDate); upcoming.sort(byDate);
+      return { from: from, to: to, overdue: overdue, today: tdy, upcoming: upcoming, undated: undated.map(function (t) { return { key: 't:' + t.id, task_id: t.id, title: t.title, date: null, due_time: null, status: t.status, priority: t.priority, visibility: t.visibility, assigned_to: t.assigned_to, overdue: false, is_recurring: false }; }) };
+    },
+    getUpcomingWeekItems: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var from = o.from || r.start, to = o.to || r.end;
+      var out = [];
+      try {
+        DB.getWeekTasks(userId, { from: from, to: to }).upcoming.forEach(function (t) {
+          out.push({ date: t.date, time: t.due_time, kind: 'task', title: t.title, ref: { task_id: t.task_id } });
+        });
+      } catch (e) {}
+      try {
+        DB.getWeekAgenda(userId, { from: from, to: to, visibility: o.visibility }).forEach(function (x) {
+          out.push({ date: x.date, time: x.start, kind: 'agenda', title: x.title, ref: { event_id: x.event_id } });
+        });
+      } catch (e2) {}
+      try {
+        DB.getWeekRoutines(userId, { date: from, visibility: o.visibility }).forEach(function (x) {
+          (x.dueDates || []).forEach(function (d) {
+            if (d >= from && d <= to) out.push({ date: d, time: x.preferred_time || null, kind: 'routine', title: x.name, ref: { routine_id: x.id } });
+          });
+        });
+      } catch (e3) {}
+      out.sort(function (a, b) { return (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')); });
+      return out.slice(0, o.limit || 20);
+    },
+    getWeekHabits: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var rows = [];
+      try {
+        DB.getHabits(userId, { active: true }).forEach(function (h) {
+          var days = {};
+          r.days.forEach(function (dd) {
+            if (!DB.habitIsOccurrenceExpected(h, dd)) return;
+            var st = { done: false };
+            try { st = DB.habitOccurrenceStatus(userId, h.id, dd); } catch (e) {}
+            days[dd] = { done: !!st.done, value: st.value != null ? st.value : null };
+          });
+          if (Object.keys(days).length) rows.push({ id: h.id, name: h.name, icon: h.icon || null, days: days });
+        });
+      } catch (e2) {}
+      return { from: r.start, to: r.end, habits: rows.slice(0, o.limit || 60) };
+    },
+    getWeekRoutines: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var db = read(), today = DB.agendaToday();
+      var out = [];
+      try {
+        DB.getRoutines(userId, { status: 'ACTIVE', limit: 100 }).forEach(function (x) {
+          var dueDates = [];
+          r.days.forEach(function (dd) { try { if (DB.routineIsDueOnDate(x, dd)) dueDates.push(dd); } catch (e) {} });
+          if (!dueDates.length) return;
+          var doneToday = 0, totalToday = 0, execStatus = null;
+          try {
+            var ex = DB.routineFindExecution(db, x.id, DB.routineScopeKey(x, userId), today);
+            if (ex) {
+              execStatus = ex.status;
+              var items = db.routine_item_executions.filter(function (e2) { return e2.routine_execution_id === ex.id; });
+              totalToday = items.length;
+              doneToday = items.filter(function (e2) { return e2.status === 'COMPLETED'; }).length;
+            }
+          } catch (e3) {}
+          out.push({ id: x.id, name: x.name, visibility: x.visibility, preferred_time: x.preferred_time || null, dueDates: dueDates, execStatus: execStatus, doneToday: doneToday, totalToday: totalToday });
+        });
+      } catch (e4) {}
+      return { from: r.start, to: r.end, routines: out.slice(0, o.limit || 60) };
+    },
+    getWeekProjects: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var out = [];
+      try {
+        DB.getProjects(userId, { limit: 60 }).filter(function (p) { return p.status === 'ACTIVE' || p.status === 'PLANNING'; }).forEach(function (p) {
+          var tasksInWeek = 0, hasCommitment = false;
+          try {
+            DB.getProjectUpcoming(userId, p.id, { days: 60, limit: 50 }).forEach(function (u) {
+              if (u.date >= r.start && u.date <= r.end) { if (u.kind === 'task') tasksInWeek++; else hasCommitment = true; }
+            });
+          } catch (e) {}
+          var targetInWeek = !!(p.target_date && p.target_date >= r.start && p.target_date <= r.end);
+          if (tasksInWeek || hasCommitment || targetInWeek) {
+            out.push({ id: p.id, name: p.name, visibility: p.visibility, status: p.status, target_date: p.target_date || null, targetInWeek: targetInWeek, tasksInWeek: tasksInWeek, hasCommitment: hasCommitment });
+          }
+        });
+      } catch (e2) {}
+      return { from: r.start, to: r.end, projects: out.slice(0, o.limit || 20) };
+    },
+    getWeekFinancialCommitments: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var from = o.from || r.start, to = o.to || r.end;
+      var vis = o.visibility === 'COUPLE' ? 'couple' : 'me';
+      var evs = [];
+      try { evs = DB.getCalendarEvents(userId, { from: from, to: to, vision: vis }); } catch (e) {}
+      var realized = { income: 0, expense: 0, count: 0 };
+      var upcoming = [], planned = [];
+      var realizedCount = 0;
+      evs.forEach(function (x) {
+        var kind = x.source_type || x.event_type;
+        var row = { id: x.id, date: x.event_date, title: x.title, amount: x.amount, kind: kind, status: x.status, route: x.route, related_entity_type: x.related_entity_type, related_entity_id: x.related_entity_id };
+        if (x.is_realized) { realizedCount++; return; }
+        if (x.is_planned) { planned.push(row); return; }
+        if (['invoice', 'installment', 'recurring', 'expense', 'income', 'planning_item', 'settlement', 'goal', 'budget'].indexOf(x.event_type) >= 0 || x.is_projected) upcoming.push(row);
+      });
+      function money(v) { return Math.round(v * 100) / 100; }
+      var exp = 0, inc = 0;
+      try {
+        DB.listTx(userId, {}).forEach(function (t) {
+          if (t.deleted_at || t.date < from || t.date > to) return;
+          if (t.credit_card_id) return;
+          if (vis === 'me' && !t.is_shared && t.payer_user_id !== userId) return;
+          if (t.type === 'income') inc = money(inc + t.amount); else exp = money(exp + t.amount);
+        });
+      } catch (e2) {}
+      realized = { income: inc, expense: exp, count: realizedCount };
+      upcoming.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+      planned.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+      var settlement = null;
+      try {
+        if (DB.moneyMode(userId) !== 'JOINT') {
+          var st = DB.settle(userId);
+          if (st && st.debt && st.debt.amount > 0) settlement = { amount: st.debt.amount, from: st.debt.from, to: st.debt.to };
+        }
+      } catch (e3) {}
+      return { from: from, to: to, realized: realized, upcoming: upcoming.slice(0, o.limit || 40), planned: planned.slice(0, o.limit || 40), settlement: settlement };
+    },
+    getWeekGoals: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var out = [];
+      try {
+        DB.analyticsGoals(userId).forEach(function (g) {
+          if (g.status === 'archived') return;
+          if (g.deadline && (g.deadline < r.start || g.deadline > r.end)) return;
+          if (!g.deadline) {
+            var linked = false;
+            try {
+              (o.priorities || []).forEach(function (pr) {
+                if (pr.linked_entity_type === 'GOAL' && pr.linked_entity_id === g.id) linked = true;
+              });
+            } catch (e) {}
+            if (!linked) return;
+          }
+          out.push({ id: g.id, name: g.name, pct: g.percentComplete != null ? g.percentComplete : null, deadline: g.deadline || null, status: g.status });
+        });
+      } catch (e2) {}
+      return { from: r.start, to: r.end, goals: out.slice(0, o.limit || 20) };
+    },
+    getWeekFinancialPlans: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var out = [];
+      try {
+        DB.listPlans(userId, {}).forEach(function (p) {
+          if (p.status === 'archived') return;
+          if (p.period_end < r.start || p.period_start > r.end) return;
+          out.push({ id: p.id, name: p.name, status: p.status, period_start: p.period_start, period_end: p.period_end });
+        });
+      } catch (e) {}
+      return { from: r.start, to: r.end, plans: out.slice(0, o.limit || 20) };
+    },
+    getWeekPriorities: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var plan = null;
+      try {
+        var vis = o.visibility || 'PERSONAL';
+        plan = DB.getWeeklyPlans(userId, { visibility: vis }).filter(function (p) { return p.week_start_date === r.start && (p.status === 'ACTIVE' || p.status === 'DRAFT'); })[0] || null;
+      } catch (e) {}
+      if (!plan) return { from: r.start, to: r.end, plan_id: null, priorities: [] };
+      return { from: r.start, to: r.end, plan_id: plan.id, status: plan.status, priorities: DB.getWeekPriorities(userId, plan.id) };
+    },
+    getWeekDaySummary: function (userId, date) {
+      var d = (date && DB.agendaParseDay(date)) ? date : DB.agendaToday();
+      var agd = [], tsk = [], hab = { done: 0, total: 0, items: [] }, rtn = [], fin = [];
+      try { agd = DB.getWeekAgenda(userId, { from: d, to: d }).filter(function (x) { return x.date === d; }); } catch (e) {}
+      try {
+        tsk = DB.taskOccurrences(userId, d, d, {}).filter(function (x) { return x.status !== 'COMPLETED' && x.status !== 'CANCELLED'; }).map(function (x) {
+          return { key: x.key, task_id: x.task_id, title: x.title, due_time: x.due_time || null, status: x.status, priority: x.priority, overdue: !!x.overdue };
+        });
+      } catch (e2) {}
+      try { hab = DB.habitTodayStatus(userId, d); } catch (e3) {}
+      try {
+        var db = read();
+        DB.getRoutines(userId, { status: 'ACTIVE', limit: 100 }).forEach(function (x) {
+          var due = false;
+          try { due = DB.routineIsDueOnDate(x, d); } catch (e4) {}
+          if (!due) return;
+          var prog = { done: 0, total: 0 };
+          try {
+            var ex = DB.routineFindExecution(db, x.id, DB.routineScopeKey(x, userId), d);
+            if (ex) {
+              var items = db.routine_item_executions.filter(function (e5) { return e5.routine_execution_id === ex.id; });
+              prog.total = items.length;
+              prog.done = items.filter(function (e5) { return e5.status === 'COMPLETED'; }).length;
+            }
+          } catch (e6) {}
+          rtn.push({ id: x.id, name: x.name, done: prog.done, total: prog.total });
+        });
+      } catch (e7) {}
+      try {
+        fin = DB.getCalendarEvents(userId, { from: d, to: d, vision: 'couple' }).filter(function (x) { return !x.is_realized; }).map(function (x) {
+          return { id: x.id, title: x.title, amount: x.amount, kind: x.source_type || x.event_type, status: x.status, route: x.route };
+        }).slice(0, 20);
+      } catch (e8) {}
+      return { date: d, isToday: d === DB.agendaToday(), agenda: agd, tasks: tsk, habits: hab, routines: rtn, financial: fin };
+    },
+    getWeekOverview: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var vis = o.visibility === 'COUPLE' ? 'COUPLE' : 'PERSONAL';
+      function sec(fn, fallback) {
+        try { return { ok: true, data: fn() }; }
+        catch (e) { return { ok: false, error: 'indisponível', data: fallback }; }
+      }
+      var days = r.days.map(function (dd) {
+        var s = null;
+        try { s = DB.getWeekDaySummary(userId, dd); } catch (e) { s = { date: dd, isToday: false, agenda: [], tasks: [], habits: { done: 0, total: 0, items: [] }, routines: [], financial: [] }; }
+        return s;
+      });
+      var priors = sec(function () { return DB.getWeekPriorities(userId, { date: r.start, visibility: vis }); }, { plan_id: null, priorities: [] });
+      return {
+        week: { start: r.start, end: r.end, visibility: vis },
+        priorities: priors,
+        today: days.filter(function (d) { return d.isToday; })[0] || days[0],
+        days: days,
+        overdueTasks: sec(function () { return DB.getWeekTasks(userId, { from: r.start, to: r.end }).overdue; }, []),
+        agenda: sec(function () { return DB.getWeekAgenda(userId, { from: r.start, to: r.end, visibility: vis }); }, []),
+        tasks: sec(function () { return DB.getWeekTasks(userId, { from: r.start, to: r.end }); }, { overdue: [], today: [], upcoming: [], undated: [] }),
+        habits: sec(function () { return DB.getWeekHabits(userId, { date: r.start }); }, { habits: [] }),
+        routines: sec(function () { return DB.getWeekRoutines(userId, { date: r.start, visibility: vis }); }, { routines: [] }),
+        projects: sec(function () { return DB.getWeekProjects(userId, { date: r.start }); }, { projects: [] }),
+        financial: sec(function () { return DB.getWeekFinancialCommitments(userId, { from: r.start, to: r.end, visibility: vis }); }, { realized: { income: 0, expense: 0, count: 0 }, upcoming: [], planned: [], settlement: null }),
+        goals: sec(function () { return DB.getWeekGoals(userId, { date: r.start, priorities: (priors.ok && priors.data.priorities) || [] }); }, { goals: [] }),
+        plans: sec(function () { return DB.getWeekFinancialPlans(userId, { date: r.start }); }, { plans: [] }),
+        inbox: sec(function () { return DB.getInboxSummary(userId); }, { pending: 0 }),
+        conflicts: sec(function () { return DB.detectAgendaConflicts(userId, { from: r.start, to: r.end, visibility: vis }); }, [])
+      };
+    },
+    getWeeklyReview: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var rev = { week: { start: r.start, end: r.end }, priorities: { total: 0, done: 0, items: [] }, tasks: { total: 0, done: 0, pending: [] }, habits: { done: 0, total: 0 }, routines: { due: 0, completedToday: 0 }, projects: 0, finance: { income: 0, expense: 0 } };
+      try {
+        var plans = DB.getWeeklyPlans(userId, {}).filter(function (p) { return p.week_start_date === r.start && p.status !== 'ARCHIVED'; });
+        var plan = plans.filter(function (p) { return p.visibility === 'COUPLE'; })[0] || plans[0] || null;
+        if (plan) {
+          var prs = DB.getWeekPriorities(userId, plan.id);
+          rev.priorities.total = prs.length;
+          rev.priorities.done = prs.filter(function (x) { return x.done; }).length;
+          rev.priorities.items = prs.map(function (x) { return { title: x.label || x.title, done: !!x.done }; });
+        }
+      } catch (e) {}
+      try {
+        var occs = DB.taskOccurrences(userId, r.start, r.end, {});
+        var seen = {};
+        occs.forEach(function (x) {
+          if (x.status === 'ARCHIVED' || x.status === 'CANCELLED') return;
+          var k = x.task_id + '|' + x.date;
+          if (seen[k]) return;
+          seen[k] = true;
+          rev.tasks.total++;
+          if (x.status === 'COMPLETED') rev.tasks.done++;
+          else if (x.date <= DB.agendaToday()) rev.tasks.pending.push({ task_id: x.task_id, title: x.title, date: x.date });
+        });
+        rev.tasks.pending = rev.tasks.pending.slice(0, 20);
+      } catch (e2) {}
+      try {
+        r.days.forEach(function (dd) {
+          var h = DB.habitTodayStatus(userId, dd);
+          rev.habits.done += h.done; rev.habits.total += h.total;
+        });
+      } catch (e3) {}
+      try {
+        var db = read();
+        DB.getRoutines(userId, { status: 'ACTIVE', limit: 100 }).forEach(function (x) {
+          r.days.forEach(function (dd) {
+            var due = false;
+            try { due = DB.routineIsDueOnDate(x, dd); } catch (e4) {}
+            if (!due) return;
+            rev.routines.due++;
+            try {
+              var ex = DB.routineFindExecution(db, x.id, DB.routineScopeKey(x, userId), dd);
+              if (ex && ex.status === 'COMPLETED') rev.routines.completedToday++;
+            } catch (e5) {}
+          });
+        });
+      } catch (e6) {}
+      try { rev.projects = DB.getWeekProjects(userId, { date: r.start }).projects.length; } catch (e7) {}
+      try {
+        var fin = DB.getWeekFinancialCommitments(userId, { from: r.start, to: r.end, visibility: 'COUPLE' });
+        rev.finance.income = fin.realized.income; rev.finance.expense = fin.realized.expense;
+      } catch (e8) {}
+      return rev;
+    },
+    getWeekSuggestCandidates: function (userId, o) {
+      o = o || {};
+      var r = DB.weekRangeOf(o.date);
+      var out = [];
+      try {
+        DB.getWeekTasks(userId, { from: r.start, to: r.end }).overdue.slice(0, 5).forEach(function (t) {
+          out.push({ kind: 'task', title: t.title, date: t.date, ref: { task_id: t.task_id }, reason: 'overdue' });
+        });
+      } catch (e) {}
+      try {
+        DB.getWeekTasks(userId, { from: r.start, to: r.end }).upcoming.slice(0, 8).forEach(function (t) {
+          out.push({ kind: 'task', title: t.title, date: t.date, ref: { task_id: t.task_id }, reason: 'due_this_week' });
+        });
+      } catch (e2) {}
+      try {
+        DB.getWeekProjects(userId, { date: r.start }).projects.slice(0, 5).forEach(function (p) {
+          out.push({ kind: 'project', title: p.name, date: p.target_date, ref: { project_id: p.id }, reason: p.targetInWeek ? 'deadline_this_week' : 'active_this_week' });
+        });
+      } catch (e3) {}
+      try {
+        DB.getWeekAgenda(userId, { from: r.start, to: r.end, visibility: 'COUPLE' }).slice(0, 5).forEach(function (x) {
+          out.push({ kind: 'agenda', title: x.title, date: x.date, ref: { event_id: x.event_id }, reason: 'upcoming' });
+        });
+      } catch (e4) {}
+      try {
+        DB.getWeekFinancialCommitments(userId, { from: r.start, to: r.end, visibility: 'COUPLE' }).upcoming.filter(function (x) { return x.kind === 'invoice' || x.kind === 'installment'; }).slice(0, 5).forEach(function (x) {
+          out.push({ kind: 'financial', title: x.title, date: x.date, ref: { route: x.route }, reason: 'due_this_week' });
+        });
+      } catch (e5) {}
+      return out.slice(0, 15);
+    },
+    weekProcessDue: function (userId, nowISO) {
+      var day = (nowISO || now()).slice(0, 10);
+      var hm = (nowISO || now()).slice(11, 16);
+      var made = [];
+      var wd = 0;
+      try { wd = new Date(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)).getDay(); } catch (e) {}
+      DB.getWeeklyPlans(userId, {}).filter(function (p) { return p.status === 'ACTIVE' || p.status === 'DRAFT'; }).forEach(function (p) {
+        function fire(type, title, body, key) {
+          try {
+            var n = DB.notifCreate(userId, { type: type, title: title, body: body, priority: 'info', user_id: userId, related_entity_type: 'weekly_plan', related_entity_id: p.id, idempotency_key: ['week', type, p.couple_id, p.id, key].join('|'), payload: { plan_id: p.id } });
+            if (n && n.id) made.push(n.id);
+          } catch (e2) {}
+        }
+        if (p.plan_reminder_day != null && p.plan_reminder_time && p.plan_reminder_day === wd && hm >= p.plan_reminder_time) {
+          fire('weekly_plan_reminder', 'Hora de planejar a semana', 'Abra a Minha Semana para organizar os próximos dias.', day);
+        }
+        if (p.review_reminder_day != null && p.review_reminder_time && p.review_reminder_day === wd && hm >= p.review_reminder_time) {
+          fire('weekly_review_reminder', 'Hora de revisar a semana', 'Veja o que foi concluído e planeje a próxima.', day);
+        }
+        try {
+          DB.getWeekPriorities(userId, p.id).forEach(function (pr) {
+            if (pr.done || !pr.linked_entity_type || pr.linked_entity_type !== 'TASK' || !pr.linked_entity_id) return;
+            var t = null;
+            try { t = DB.getTask(userId, pr.linked_entity_id); } catch (e3) { return; }
+            if (t && t.due_date === day && t.status !== 'COMPLETED') {
+              fire('weekly_priority_due', 'Prioridade vence hoje: ' + t.title, 'Uma prioridade da sua semana vence hoje.', t.id + '|' + day);
+            }
+          });
+        } catch (e4) {}
+      });
+      return made;
+    },
+    emitWeekEvent: function (userId, kind, plan, extra) {
+      extra = extra || {};
+      var allowed = ['weekly_plan_created', 'weekly_plan_updated', 'weekly_priority_added', 'weekly_priority_removed', 'weekly_review_completed'];
+      if (allowed.indexOf(kind) < 0) return null;
+      var db = read();
+      logAudit(db, plan.couple_id, userId, 'weekly_plan', plan.id, kind, { priority_id: extra.priority_id || null });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'week', { action: kind, entity_type: 'weekly_plan', entity_id: plan.id }); } catch (e) {}
+      return true;
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -13792,6 +14685,9 @@ window.Juntos = window.Juntos || {};
         { key: 'task_overdue', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
         { key: 'task_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
         { key: 'task_completed', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'tasks' },
+        { key: 'weekly_plan_reminder', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 48, retry: false, maxAttempts: 1, route: 'week' },
+        { key: 'weekly_review_reminder', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 96, retry: false, maxAttempts: 1, route: 'week' },
+        { key: 'weekly_priority_due', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'week' },
         { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' },
         { key: 'routine_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
         { key: 'routine_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
@@ -14308,6 +15204,12 @@ window.Juntos = window.Juntos || {};
           var made4 = DB.taskProcessDue(userId, opt.nowISO || now());
           made4.forEach(function (id) { made.push(id); });
         } catch (e3) { /* tarefas indisponíveis: segue */ }
+      }
+      if (types.indexOf('weekly_plan_reminder') >= 0 || types.indexOf('weekly_review_reminder') >= 0 || types.indexOf('weekly_priority_due') >= 0) {
+        try {
+          var madeW = DB.weekProcessDue(userId, opt.nowISO || now());
+          madeW.forEach(function (id) { made.push(id); });
+        } catch (eW) { /* semana indisponível: segue */ }
       }
       DB.notifExpireStale(userId, types, opt);
       return made;
@@ -16805,7 +17707,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project', 'inbox'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project', 'inbox', 'week'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;
@@ -16978,6 +17880,30 @@ window.Juntos = window.Juntos || {};
     },
     canProcessInbox: function (userId, itemId) { return DB.canEditInbox(userId, itemId); },
     canDismissInbox: function (userId, itemId) { return DB.canEditInbox(userId, itemId); },
+    canViewWeeklyPlan: function (userId, planId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!planId) return true;
+      var db = read();
+      var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!p && DB.weekVisible(db, userId, p);
+    },
+    canCreateWeeklyPlan: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditWeeklyPlan: function (userId, planId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !planId) return !!c.member;
+      var db = read();
+      var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!p && DB.weekCanAct(db, userId, p);
+    },
+    canCompleteWeeklyReview: function (userId, planId) { return DB.canEditWeeklyPlan(userId, planId); },
+    canViewCoupleWeeklyPlan: function (userId, planId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !planId) return !!c.member;
+      var db = read();
+      var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!p && p.visibility === 'COUPLE' && DB.weekVisible(db, userId, p);
+    },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
        financeira (audit_logs). Sem segredos; IP/UA só como hash. */
