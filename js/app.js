@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, week: pWeek, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, week: pWeek, 'monthly-review': function (vv, mm) { return pMonthlyReview(vv, mm, parts[1], parts[2]); }, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -951,6 +951,7 @@
     s += blk('Rotinas', function () { return ovRoutinesCard(me, day); });
     s += blk('Projetos', function () { return ovProjectsCard(me, day); });
     s += blk('Minha Semana', function () { return ovWeekCard(me, day); });
+    s += blk('Fechamento Mensal', function () { return ovMonthlyReviewCard(me, day); });
     s += blk('Inbox', function () { return ovInboxCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
@@ -4216,6 +4217,215 @@
       } catch (e3) { document.getElementById('me').innerHTML = err(e3); unlock(btn); }
     };
   }
+  /* ============ FECHAMENTO MENSAL (só apresentação sobre MonthlyReviewService) ============
+     Agrega leitura dos serviços oficiais. Ações financeiras usam os serviços. */
+  var mr = { year: '', month: '', vis: 'PERSONAL', step: 1 };
+  function mrSteps() { return ['Resumo', 'Receitas e despesas', 'Orçamento', 'Contas e faturas', 'Acertos', 'Metas', 'Projetos', 'Próximo mês', 'Conclusão']; }
+  function mrStepSection(ix) { return ['SUMMARY', 'INCOME_EXPENSE', 'BUDGET', 'ACCOUNTS_INVOICES', 'SETTLEMENTS', 'GOALS', 'PROJECTS', 'NEXT_MONTH', null][ix]; }
+  function mrDefault() {
+    try {
+      var l = J.DB.monthlyLastClosedMonth();
+      return { year: String(l.year), month: ('0' + l.month).slice(-2) };
+    } catch (e) { return { year: todayISO().slice(0, 4), month: todayISO().slice(5, 7) }; }
+  }
+  function mrCurrent() {
+    var d = mrDefault();
+    var y = mr.year || d.year, m = mr.month || d.month;
+    return { year: parseInt(y, 10), month: parseInt(m, 10) };
+  }
+  function mrShift(dir) {
+    var c = mrCurrent(), y = c.year, m = c.month + dir;
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    mr.year = String(y); mr.month = ('0' + m).slice(-2); mr.step = 1;
+  }
+  function mrIsJoint(me) { try { return J.DB.moneyMode(me.id) === 'JOINT'; } catch (e) { return false; } }
+  function ovMonthlyReviewCard(me, day) {
+    var c = (day && day.monthly_review) || null;
+    if (!c) return '';
+    if (c.status === 'COMPLETED') return '<div class="card"><div class="row between"><b>📊 ' + esc(c.month_label) + ' revisado</b><a href="#/monthly-review">Ver fechamento ›</a></div></div>';
+    if (c.status === 'IN_PROGRESS') return '<div class="card"><div class="row between"><b>📊 Fechamento mensal</b><a href="#/monthly-review">Continuar ›</a></div><p class="muted">' + esc(c.month_label) + ' • ' + c.done + ' de ' + c.total + ' etapas concluídas</p><p><a href="#/monthly-review">Continuar fechamento de ' + esc(c.month_label.split(' de ')[0]) + ' ›</a></p></div>';
+    return '<div class="card"><div class="row between"><b>📊 ' + esc(c.month_label) + ' terminou</b></div><p class="muted">Quer revisar o mês?</p><p><a class="btn sm" href="#/monthly-review" style="max-width:220px">Iniciar fechamento</a></p></div>';
+  }
+  function pMonthlyReview(v, me, year, month) {
+    if (/^\d{4}$/.test(String(year || '')) && parseInt(month, 10) >= 1 && parseInt(month, 10) <= 12) { mr.year = String(year); mr.month = ('0' + parseInt(month, 10)).slice(-2); }
+    var c = mrCurrent();
+    var rev = null, revErr = null;
+    try { rev = J.DB.getReviewByMonth(me.id, c.year, c.month, mr.vis); } catch (e) { revErr = e; }
+    var today = todayISO();
+    var isFuture = (c.year > +today.slice(0, 4) || (c.year === +today.slice(0, 4) && c.month > +today.slice(5, 7)));
+    var isCur = (c.year === +today.slice(0, 4) && c.month === +today.slice(5, 7));
+    var steps = mrSteps();
+    var mrKey = c.year + '-' + c.month + '|' + mr.vis + '|' + (rev ? rev.id : 'none');
+    if (mr._key !== mrKey) { mr._key = mrKey; mr.step = (rev && rev.current_step) || 1; }
+    var st = Math.max(1, Math.min(9, mr.step || 1));
+    mr.step = st;
+    var html = '<div class="card"><p class="muted" style="margin:0">Fechamento Mensal</p>' +
+      '<h1 style="margin:4px 0">' + esc(cap(J.DB.monthlyLabel(c.year, c.month))) + '</h1>' +
+      '<div class="per-row"><button class="pnav" id="mr-prev" aria-label="Mês anterior">‹</button><strong>' + esc(monthLabel(c.year + '-' + ('0' + c.month).slice(-2))) + '</strong><button class="pnav" id="mr-next" aria-label="Próximo mês">›</button></div>' +
+      '<div class="seg" role="group" aria-label="Visão"><button data-mrvis="PERSONAL" class="' + (mr.vis !== 'COUPLE' ? 'on' : '') + '">Pessoal</button><button data-mrvis="COUPLE" class="' + (mr.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>';
+    if (revErr) html += err(revErr);
+    if (isFuture) html += '<div class="alert">Este mês ainda não terminou para fechamento. Você pode planejar o período em <a href="#/planning">Planejamento</a>.</div>';
+    else if (isCur) html += '<p class="muted">Este mês ainda está em andamento. Você pode revisar os dados até agora, mas o período ainda não terminou.</p>';
+    if (!rev && !isFuture) html += '<div class="row" style="flex-wrap:wrap"><button class="btn sm" id="mr-start" style="max-width:240px">Iniciar fechamento</button></div>';
+    if (rev) {
+      html += '<p class="muted" role="status">Passo ' + st + ' de 9 • ' + esc(steps[st - 1]) + (rev.status === 'COMPLETED' ? ' • ✓ concluído' : '') + '</p>';
+      html += '<ol class="steps" aria-label="Etapas do fechamento">' + steps.map(function (s, ix) {
+        var cls = (ix + 1) < st ? 'done' : ((ix + 1) === st ? 'now' : 'todo');
+        var mark = (ix + 1) < st ? '✓ ' : '';
+        return '<li class="' + cls + '">' + (ix + 1 === st ? '<b>' + mark + esc(s) + '</b>' : mark + esc(s)) + '</li>';
+      }).join('') + '</ol>';
+      if (rev.status === 'COMPLETED' && rev.review_summary_snapshot) html += '<p class="muted">Dados referentes ao fechamento realizado em ' + esc(String(rev.completed_at || '').slice(0, 10)) + '.</p>';
+      try {
+        if (rev.status === 'COMPLETED') {
+          var mrsnap = J.DB.getReviewSummary(me.id, { reviewId: rev.id });
+          if (mrsnap && mrsnap.review.changed_since_close) html += '<div class="alert">Os dados atuais deste mês mudaram desde o fechamento. O registro histórico acima foi preservado. <a href="#/reports">Ver dados atuais ›</a></div>';
+        }
+      } catch (eSnap) {}
+      html += '<div id="mr-body">' + mrStepHtml(me, rev, st) + '</div>';
+      html += '<div class="row"><' + (st > 1 ? 'button class="btn ghost" id="mr-back">← Voltar' : 'span') + (st > 1 ? '</button>' : '</span>') +
+        (st < 9 ? '<button class="btn" id="mr-next2">Continuar →</button>' : '') +
+        '<button class="btn ghost" id="mr-exit">Sair</button></div>';
+      if (st === 9) html += '<div class="row"><button class="btn ghost sm" id="mr-notesv" style="max-width:200px">Observações</button>' + (rev.status === 'COMPLETED' ? '<button class="btn ghost sm" id="mr-reopen" style="max-width:200px">Reabrir fechamento</button>' : '<button class="btn sm" id="mr-finish" style="max-width:220px">Concluir fechamento</button>') + '</div>';
+    }
+    html += '</div>';
+    v.innerHTML = html;
+    bindMonthlyReview(v, me, rev, c);
+  }
+  function mrSec(fn, fallback) { try { return { ok: true, data: fn() }; } catch (e) { return { ok: false, data: fallback }; } }
+  function mrStepHtml(me, rev, st) {
+    var c = { year: rev.reference_year, month: rev.reference_month };
+    var vis = mr.vis;
+    var h = '';
+    if (st === 1) {
+      var s = mrSec(function () { return J.DB.getReviewSummary(me.id, { reviewId: rev.id }); }, null);
+      if (!s.ok || !s.data) return '<div class="alert">Não foi possível carregar o resumo.</div>';
+      var sm = s.data.summary;
+      h += '<div class="card"><b>Resumo factual</b>' +
+        '<p>Receitas<br><b class="pos">' + BRL(sm.income) + '</b></p>' +
+        '<p>Despesas<br><b class="neg">' + BRL(sm.expense) + '</b></p>' +
+        '<p>Resultado do mês (receitas − despesas)<br><b>' + BRL(sm.result) + '</b></p>' +
+        (sm.save_rate != null ? '<p>Taxa de poupança<br><b>' + String(sm.save_rate).replace('.', ',') + '%</b></p>' : '') +
+        (sm.prev_expense != null ? '<p class="muted">Despesas: ' + BRL(sm.expense) + '. Mês anterior: ' + BRL(sm.prev_expense) + '. Diferença: ' + BRL(sm.expense_diff) + ' (As despesas foram ' + BRL(Math.abs(sm.expense_diff)) + (sm.expense_diff >= 0 ? ' maiores' : ' menores') + ' que no mês anterior).</p>' : '') +
+        '<p>Orçamento: <b>' + (sm.budgets.total - sm.budgets.over) + '</b> categorias dentro do limite, <b>' + sm.budgets.over + '</b> acima.</p>' +
+        '<p>Faturas: <b>' + sm.invoices.paid + '</b> pagas, <b>' + sm.invoices.pending + '</b> pendentes.</p></div>';
+      if (s.data.review.is_partial) h += '<p class="muted">Revisão parcial: o mês ainda está em andamento.</p>';
+    } else if (st === 2) {
+      var ie = mrSec(function () { return J.DB.getIncomeExpenseSection(me.id, { reviewId: rev.id }); }, null);
+      if (!ie.ok || !ie.data) return '<div class="alert">Não foi possível carregar receitas e despesas.</div>';
+      var d = ie.data;
+      h += '<div class="card"><b>Receitas e despesas</b><p>Total de receitas: <b class="pos">' + BRL(d.income) + '</b></p><p>Total de despesas: <b class="neg">' + BRL(d.expense) + '</b></p><p>Resultado: <b>' + BRL(d.result) + '</b></p>';
+      if (d.categories.length) h += '<p><b>Por categoria</b></p>' + d.categories.slice(0, 6).map(function (x) { return '<p>' + esc(x.name) + ' — <b>' + BRL(x.value) + '</b></p>'; }).join('');
+      if (d.largest.length) h += '<p><b>Maiores despesas</b></p>' + d.largest.slice(0, 5).map(function (x) { return '<p>' + esc(x.description) + ' — <b>' + BRL(x.amount) + '</b> <span class="muted">' + esc(dueLabel(x.date)) + '</span></p>'; }).join('');
+      if (d.recurring.monthly_estimate) h += '<p class="muted">Recorrências: estimativa mensal ' + BRL(d.recurring.monthly_estimate) + '.</p>';
+      h += '</div>';
+    } else if (st === 3) {
+      var b = mrSec(function () { return J.DB.getBudgetSection(me.id, { reviewId: rev.id }); }, null);
+      if (!b.ok || !b.data) return '<div class="alert">Não foi possível carregar o orçamento.</div>';
+      var bd = b.data;
+      if (!bd.items.length) h += '<div class="card"><b>Orçamento</b><p class="muted">Você não configurou orçamento para este mês.</p><p><a class="btn ghost sm" href="#/budget" style="max-width:220px">Configurar orçamento</a> <button class="btn ghost sm" id="mr-skip" style="max-width:120px">Pular</button></p></div>';
+      else h += '<div class="card"><b>Orçamento</b>' + bd.items.slice(0, 20).map(function (x) { return '<p><b>' + esc(x.name) + '</b><br><span class="muted">Orçado ' + BRL(x.budgeted) + ' • Realizado ' + BRL(x.spent) + ' • Diferença ' + BRL(x.spent - x.budgeted) + ' • ' + esc(x.status) + '</span></p>'; }).join('') + '<p><a href="#/budget">Planejar orçamento do próximo mês ›</a></p></div>';
+    } else if (st === 4) {
+      var ac = mrSec(function () { return J.DB.getAccountsSection(me.id, {}); }, null);
+      var iv = mrSec(function () { return J.DB.getInvoiceSection(me.id, { reviewId: rev.id }); }, null);
+      h += '<div class="card"><b>Contas e faturas</b>';
+      if (ac.ok && ac.data) h += '<p>Dinheiro nas contas (saldo atual): <b>' + BRL(ac.data.total_balance) + '</b></p><p class="muted">Saldo atual — não é o resultado do mês.</p>';
+      else h += '<p class="muted">Contas indisponíveis no momento.</p>';
+      if (iv.ok && iv.data) {
+        if (!iv.data.invoices.length) h += '<p class="muted">Sem faturas neste mês.</p>';
+        else h += iv.data.invoices.slice(0, 10).map(function (x) { return '<p>🧾 Fatura ' + x.month + '/' + x.year + ' — <b>' + BRL(x.total) + '</b> <span class="pill">' + esc(x.status) + '</span> ' + (x.status !== 'paid' && x.status !== 'cancelled' ? '<a href="#/invoices">Ver fatura ›</a>' : '') + '</p>'; }).join('');
+        var pend = iv.data.invoices.filter(function (x) { return x.status !== 'paid' && x.status !== 'cancelled'; }).length;
+        if (pend) h += '<div class="alert">' + pend + ' fatura(s) do período ainda pendente(s).</div>';
+        if (iv.data.installments_next.length) h += '<p class="muted">Parcelas futuras: ' + iv.data.installments_next.slice(0, 3).map(function (x) { return esc(x.label) + ' ' + BRL(x.amount); }).join('; ') + '.</p>';
+      } else h += '<p class="muted">Faturas indisponíveis no momento.</p>';
+      h += '</div>';
+    } else if (st === 5) {
+      var stt = mrSec(function () { return J.DB.getSettlementSection(me.id, { reviewId: rev.id }); }, null);
+      if (!stt.ok || !stt.data) return '<div class="alert">Não foi possível carregar acertos.</div>';
+      var sd = stt.data;
+      h += '<div class="card"><b>Acertos</b>';
+      if (sd.mode === 'JOINT') h += '<p class="muted">Neste modo, as despesas compartilhadas não geram acertos internos automáticos.</p>';
+      else if (sd.debt) h += '<p>Acerto pendente: <b>' + BRL(sd.debt.amount) + '</b> <a href="#/settlements">Ver acertos ›</a></p>';
+      else h += '<p class="muted">Nenhum acerto pendente no momento.</p>';
+      if ((sd.history || []).length) h += '<p class="muted">Acertos realizados no mês: ' + sd.history.length + '.</p>';
+      h += '</div>';
+    } else if (st === 6) {
+      var g = mrSec(function () { return J.DB.getGoalSection(me.id, {}); }, null);
+      if (!g.ok || !g.data) return '<div class="alert">Não foi possível carregar metas.</div>';
+      if (!g.data.goals.length) h += '<div class="card"><b>Metas</b><p class="muted">Nenhuma meta ativa para revisar neste período.</p></div>';
+      else h += '<div class="card"><b>Metas</b>' + g.data.goals.slice(0, 10).map(function (x) { return '<p>🎯 <b>' + esc(x.name) + '</b><br><span class="muted">Meta ' + BRL(x.target) + ' • Acumulado ' + BRL(x.current) + (x.pct != null ? ' • Progresso ' + String(x.pct).replace('.', ',') + '%' : '') + ' • <a href="#/goals">Ver ›</a></span></p>'; }).join('') + '</div>';
+    } else if (st === 7) {
+      var pj = mrSec(function () { return J.DB.getProjectSection(me.id, { reviewId: rev.id }); }, null);
+      if (!pj.ok || !pj.data) return '<div class="alert">Não foi possível carregar projetos. As seções financeiras continuam disponíveis.</div>';
+      if (!pj.data.projects.length) h += '<div class="card"><b>Projetos</b><p class="muted">Nenhum projeto relevante neste período.</p><p><button class="btn ghost sm" id="mr-skip" style="max-width:120px">Pular</button></p></div>';
+      else h += '<div class="card"><b>Projetos</b>' + pj.data.projects.slice(0, 10).map(function (x) { return '<p><b><a href="#/projects/' + x.id + '">' + esc(x.name) + '</a></b><br><span class="muted">' + x.tasks_done + '/' + x.tasks_total + ' tarefas' + (x.upcoming_in_month ? ' • ' + x.upcoming_in_month + ' previstas no mês' : '') + '</span></p>'; }).join('') + '</div>';
+    } else if (st === 8) {
+      var nx = mrSec(function () { return J.DB.getNextMonthSection(me.id, { reviewId: rev.id }); }, null);
+      if (!nx.ok || !nx.data) return '<div class="alert">Não foi possível carregar o próximo mês.</div>';
+      var n = nx.data;
+      h += '<div class="card"><b>' + esc(cap(n.month_label)) + ' — já previsto</b>' +
+        '<p>Compromissos já registrados: <b>' + BRL(n.commitments_total) + '</b></p>' +
+        '<p class="muted">Recorrentes ' + BRL(n.by_kind.recurring) + ' • Faturas ' + BRL(n.by_kind.invoice) + ' • Parcelas ' + BRL(n.by_kind.installment) + '</p>' +
+        (n.items.length ? n.items.slice(0, 10).map(function (x) { return '<p>• ' + esc(x.label) + ' — <b>' + BRL(x.amount) + '</b> <span class="muted">' + esc(dueLabel(x.date)) + '</span></p>'; }).join('') : '<p class="muted">Nada previsto por aqui.</p>') +
+        '<p class="muted">Com base nos itens já registrados, a projeção atual ' + (n.projected_balance != null ? 'é de ' + BRL(n.projected_balance.projected != null ? n.projected_balance.projected : n.projected_balance) : 'está disponível no planejamento') + ' — não é saldo garantido.</p>' +
+        '<p>Orçamento do próximo mês: ' + (n.budgets.configured ? n.budgets.count + ' categorias configuradas' : 'ainda não configurado') + ' • <a href="#/budget">Planejar orçamento ›</a></p>' +
+        (n.goals.length ? '<p>Metas com prazo: ' + n.goals.slice(0, 4).map(function (x) { return esc(x.name); }).join(', ') + '.</p>' : '') +
+        (n.projects.length ? '<p>Projetos: ' + n.projects.slice(0, 4).map(function (x) { return esc(x.name) + ' (' + x.upcoming + ' previstas)'; }).join('; ') + '.</p>' : '') +
+        '<p><a href="#/planning">Ver planejamento ›</a> • <a href="#/week">Ver Minha Semana ›</a></p></div>';
+    } else {
+      var f = mrSec(function () { return J.DB.getReviewSummary(me.id, { reviewId: rev.id }); }, null);
+      var sm2 = (f.ok && f.data) ? f.data.summary : null;
+      var nn = mrSec(function () { return J.DB.getNextMonthSection(me.id, { reviewId: rev.id }); }, null);
+      h += '<div class="card"><b>Conclusão</b>';
+      if (sm2) h += '<p>Receitas <b class="pos">' + BRL(sm2.income) + '</b> • Despesas <b class="neg">' + BRL(sm2.expense) + '</b> • Resultado <b>' + BRL(sm2.result) + '</b></p><p class="muted">Orçamento: ' + sm2.budgets.over + ' categoria(s) acima do planejado.</p>';
+      if (nn.ok && nn.data) h += '<p class="muted">Próximo mês: ' + BRL(nn.data.commitments_total) + ' em compromissos já registrados.</p>';
+      h += '<label for="mr-notes">Observações do mês (opcional)</label><textarea id="mr-notes" maxlength="2000" rows="3" placeholder="O que quero lembrar deste mês?">' + esc(rev.notes || '') + '</textarea>';
+      if (rev.status === 'COMPLETED') h += '<p class="muted">Fechamento concluído em ' + esc(String(rev.completed_at || '').slice(0, 10)) + '. O fechamento não trava o mês: você ainda pode corrigir lançamentos.</p>';
+      h += '</div>';
+    }
+    return h;
+  }
+  function bindMonthlyReview(v, me, rev, c) {
+    var pv = document.getElementById('mr-prev'); if (pv) pv.onclick = function () { mrShift(-1); render('monthly-review'); };
+    var nx = document.getElementById('mr-next'); if (nx) nx.onclick = function () { mrShift(1); render('monthly-review'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-mrvis]'), function (b) { b.onclick = function () { mr.vis = b.dataset.mrvis; mr.step = 1; render('monthly-review'); }; });
+    var st = document.getElementById('mr-start');
+    if (st) st.onclick = function () {
+      lock(st);
+      try { var r = J.DB.startReview(me.id, { year: c.year, month: c.month, visibility: mr.vis }); mr.step = r.current_step || 1; toast('Fechamento iniciado!'); render('monthly-review'); }
+      catch (e) { v.querySelector('.card').insertAdjacentHTML('beforeend', err(e)); unlock(st); }
+    };
+    var bk = document.getElementById('mr-back'); if (bk) bk.onclick = function () { mr.step = Math.max(1, mr.step - 1); render('monthly-review'); };
+    var fw = document.getElementById('mr-next2');
+    if (fw) fw.onclick = function () {
+      var sec = mrStepSection(mr.step - 1);
+      if (sec && rev) { try { J.DB.completeSection(me.id, rev.id, sec); } catch (e) {} }
+      mr.step = Math.min(9, mr.step + 1); render('monthly-review');
+    };
+    var ex = document.getElementById('mr-exit'); if (ex) ex.onclick = function () { location.hash = '#/dashboard'; };
+    var sk = document.getElementById('mr-skip');
+    if (sk) sk.onclick = function () {
+      var sec2 = mrStepSection(mr.step - 1);
+      if (sec2 && rev) { try { J.DB.skipSection(me.id, rev.id, sec2); } catch (e2) {} }
+      mr.step = Math.min(9, mr.step + 1); render('monthly-review');
+    };
+    var fin = document.getElementById('mr-finish');
+    if (fin) fin.onclick = function () {
+      var notes = document.getElementById('mr-notes');
+      lock(fin);
+      try {
+        if (notes) J.DB.updateReviewNotes(me.id, rev.id, notes.value);
+        J.DB.completeReview(me.id, rev.id);
+        toast('Fechamento concluído!');
+        render('monthly-review');
+      } catch (e3) { toast(e3.message || 'Não foi possível concluir.'); unlock(fin); }
+    };
+    var nv = document.getElementById('mr-notesv'); if (nv) nv.onclick = function () { var t = document.getElementById('mr-notes'); if (t) t.focus(); };
+    var ro = document.getElementById('mr-reopen');
+    if (ro) ro.onclick = function () { try { J.DB.reopenReview(me.id, rev.id); toast('Fechamento reaberto para ajustes de revisão.'); render('monthly-review'); } catch (e4) { toast('Não foi possível reabrir.'); } };
+    var ta = document.getElementById('mr-notes');
+    if (ta) ta.onchange = function () { try { J.DB.updateReviewNotes(me.id, rev.id, ta.value); } catch (e5) {} };
+  }
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
@@ -5683,7 +5893,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/week">📅 Minha Semana <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/week">📅 Minha Semana <span>›</span></a><a href="#/monthly-review">📊 Fechamento Mensal <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };

@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [], weekly_plans: [], weekly_priorities: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [], weekly_plans: [], weekly_priorities: [], monthly_reviews: [], monthly_review_sections: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -236,6 +236,8 @@ window.Juntos = window.Juntos || {};
     if (!db.capture_actions) { db.capture_actions = []; changed = true; }
     if (!db.weekly_plans) { db.weekly_plans = []; changed = true; }
     if (!db.weekly_priorities) { db.weekly_priorities = []; changed = true; }
+    if (!db.monthly_reviews) { db.monthly_reviews = []; changed = true; }
+    if (!db.monthly_review_sections) { db.monthly_review_sections = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5987,14 +5989,20 @@ window.Juntos = window.Juntos || {};
         { key: 'week_projects', kind: 'read' }, { key: 'week_financial_commitments', kind: 'read' },
         { key: 'week_priorities', kind: 'read' }, { key: 'week_set_priority', kind: 'write' },
         { key: 'week_remove_priority', kind: 'write' }, { key: 'week_review', kind: 'read' },
-        { key: 'week_next', kind: 'read' }
+        { key: 'week_next', kind: 'read' },
+        { key: 'monthly_review_start', kind: 'write' }, { key: 'monthly_review_continue', kind: 'read' },
+        { key: 'monthly_review_summary', kind: 'read' }, { key: 'monthly_review_income_expense', kind: 'read' },
+        { key: 'monthly_review_budget', kind: 'read' }, { key: 'monthly_review_invoices', kind: 'read' },
+        { key: 'monthly_review_settlements', kind: 'read' }, { key: 'monthly_review_goals', kind: 'read' },
+        { key: 'monthly_review_projects', kind: 'read' }, { key: 'monthly_review_next_month', kind: 'read' },
+        { key: 'monthly_review_complete', kind: 'write' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'inbox_list', 'inbox_detail', 'capture_status', 'week_overview', 'week_plan', 'week_agenda', 'week_tasks', 'week_habits', 'week_routines', 'week_projects', 'week_financial_commitments', 'week_priorities', 'week_review', 'week_next', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'inbox_list', 'inbox_detail', 'capture_status', 'week_overview', 'week_plan', 'week_agenda', 'week_tasks', 'week_habits', 'week_routines', 'week_projects', 'week_financial_commitments', 'week_priorities', 'week_review', 'week_next', 'monthly_review_continue', 'monthly_review_summary', 'monthly_review_income_expense', 'monthly_review_budget', 'monthly_review_invoices', 'monthly_review_settlements', 'monthly_review_goals', 'monthly_review_projects', 'monthly_review_next_month', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_multi', 'capture_cancel', 'capture_to_inbox', 'installment_create', 'week_set_priority', 'week_remove_priority'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_multi', 'capture_cancel', 'capture_to_inbox', 'installment_create', 'week_set_priority', 'week_remove_priority', 'monthly_review_start', 'monthly_review_complete'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6339,6 +6347,15 @@ window.Juntos = window.Juntos || {};
       else if ((has(['adiciona', 'adicionar', 'adicione', 'coloca', 'colocar', 'coloque', 'inclui', 'incluir']) && has(['lista', 'listas', 'mercado', 'item', 'itens'])) || /(adiciona|coloque|inclui) .{2,80} (na lista|no mercado|na viagem)/.test(s)) out.intent = 'list_add_item';
       else if ((has(['cria', 'criar', 'crie', 'nova lista', 'nova check']) && has(['lista', 'listas', 'mercado', 'viagem', 'checklist', 'compras'])) || /(cria|criar|crie) .{2,60} lista/.test(s)) out.intent = 'list_create';
       else if (has(['quais listas', 'minhas listas', 'lista do mercado', 'lista da viagem', 'mostra a lista', 'mostra as listas', 'tem alguma lista', 'o que falta comprar', 'o que falta na', 'quais itens faltam']) || (has(['lista', 'listas']) && has(['tenho', 'temos', 'mostra', 'mostre', 'quais', 'compartilhada', 'compartilhadas']))) out.intent = 'list_view';
+      else if (/(concluir|conclui|finaliza|finalizar).{0,30}(fechamento)/.test(s)) out.intent = 'monthly_review_complete';
+      else if (/(vamos fechar|iniciar fechamento|comecar fechamento|continuar .*fechamento)/.test(s)) out.intent = 'monthly_review_start';
+      else if (/(o que.*previsto para|previsto para (outubro|novembro|dezembro|janeiro|proximo|próximo))/.test(s)) out.intent = 'monthly_review_next_month';
+      else if (has(['fechamento']) && has(['orcamento', 'orçamento'])) out.intent = 'monthly_review_budget';
+      else if (has(['fechamento']) && has(['fatura', 'faturas'])) out.intent = 'monthly_review_invoices';
+      else if (has(['fechamento']) && has(['meta', 'metas'])) out.intent = 'monthly_review_goals';
+      else if (has(['fechamento']) && has(['proximo mes', 'próximo mês', 'previsto', 'planejado'])) out.intent = 'monthly_review_next_month';
+      else if (has(['fechamento']) && has(['acerto', 'acertos'])) out.intent = 'monthly_review_settlements';
+      else if (has(['fechamento', 'fechar o mes', 'fecha o mes', 'revisar o mes', 'revisao do mes', 'como fechou', 'como terminou']) || /(como fechou|vamos fechar o mes|continuar meu fechamento)/.test(s)) out.intent = 'monthly_review_summary';
       else if ((has(['semana']) && has(['planeje', 'planejar', 'planeja'])) || /(planeje|planejar).{0,30}(minha )?semana/.test(s)) out.intent = 'week_plan';
       else if (has(['semana']) && has(['revisar', 'revisao', 'revisão', 'como foi'])) out.intent = 'week_review';
       else if (has(['semana']) && has(['proxima', 'próxima', 'seguinte', 'que vem'])) out.intent = 'week_next';
@@ -6352,10 +6369,20 @@ window.Juntos = window.Juntos || {};
       else if (has(['semana']) && has(['projeto', 'projetos'])) out.intent = 'week_projects';
       else if (has(['semana']) && has(['fatura', 'faturas', 'parcela', 'parcelas', 'financeiro', 'financeira', 'vencendo', 'vence'])) out.intent = 'week_financial_commitments';
       else if (has(['semana']) && has(['o que tenho', 'o que tem', 'como esta', 'resumo', 'mostra', 'mostre'])) out.intent = 'week_overview';
+      else if (/(como fechou|como ficou|como terminou).{0,30}(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|mes|mês)/.test(s)) out.intent = 'monthly_review_summary';
+      else if (/(vamos fechar|fechar o mes|fecha o mes|iniciar fechamento|comecar fechamento|continuar .*fechamento)/.test(s)) out.intent = 'monthly_review_start';
+      else if (/(o que.*previsto para|previsto para (outubro|novembro|dezembro|janeiro|proximo|próximo))/.test(s)) out.intent = 'monthly_review_next_month';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['orcamento', 'orçamento'])) out.intent = 'monthly_review_budget';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['fatura', 'faturas'])) out.intent = 'monthly_review_invoices';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['meta', 'metas'])) out.intent = 'monthly_review_goals';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['acerto', 'acertos'])) out.intent = 'monthly_review_settlements';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['projeto', 'projetos'])) out.intent = 'monthly_review_projects';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['proximo', 'próximo', 'planejado', 'previsto'])) out.intent = 'monthly_review_next_month';
+      else if (DB.convGetContext(userId, null, 'MONTHLY_REVIEW') && has(['resumo', 'mostra', 'mostre', 'gastos', 'gastamos', 'receita', 'resultado'])) out.intent = 'monthly_review_income_expense';
       else if (/^(coloca|colocar|coloque|define|marque)\b.{0,30}(a segunda|o segundo|a primeira|segunda|primeira|terceira)\b/.test(s) && DB.convGetContext(userId, null, 'WEEK_TASKS')) out.intent = 'week_set_priority';
       else if (has(['planejado e realizado', 'quanto temos previsto', 'previsto para', 'compromissos financeiros', 'planejado para'])) out.intent = 'planning_status';
       else if (has(['notifica', 'tenho notificacao', 'minhas notificacoes', 'o que esta pendente', 'fatura perto de vencer', 'fatura vencendo', 'alguma fatura'])) out.intent = 'notification_status';
-      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente', 'projeto', 'projetos', 'lista', 'listas', 'rotina', 'rotinas', 'semana'])) out.intent = 'product_navigation';
+      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente', 'projeto', 'projetos', 'lista', 'listas', 'rotina', 'rotinas', 'semana', 'fechamento', 'fechar'])) out.intent = 'product_navigation';
       else if (has(['qual modo financeiro', 'modo financeiro estamos', 'modo do dinheiro', 'dinheiro separado ou tudo junto', 'como administramos'])) out.intent = 'money_mode_status';
       else if (has(['whatsapp esta conectado', 'whatsapp conectado', 'meu whatsapp'])) out.intent = 'whatsapp_status';
       else if (has(['conectar meu banco', 'conectar banco', 'ligar meu banco', 'integracao com banco', 'sincronizar banco'])) out.intent = 'openfinance_status';
@@ -6495,6 +6522,7 @@ window.Juntos = window.Juntos || {};
       if (/^routine_/.test(intent)) return 'ROUTINES';
       if (/^project_/.test(intent)) return 'PROJECTS';
       if (/^week_/.test(intent)) return 'WEEKLY_PLANNING';
+      if (/^monthly_review_/.test(intent)) return 'MONTHLY_REVIEW';
       if (/^inbox_/.test(intent)) return 'INBOX';
       if (/^capture_/.test(intent)) return 'INBOX';
       if (/^installment_/.test(intent)) return 'FINANCE';
@@ -6571,6 +6599,7 @@ window.Juntos = window.Juntos || {};
         { match: ['rotina', 'rotinas'], label: 'Rotinas', route: '#/routines' },
         { match: ['projeto', 'projetos'], label: 'Projetos', route: '#/projects' },
         { match: ['semana', 'minha semana', 'planejar'], label: 'Minha Semana', route: '#/week' },
+        { match: ['fechamento', 'fechar o mes', 'revisao do mes'], label: 'Fechamento Mensal', route: '#/monthly-review' },
         { match: ['inbox', 'caixa de entrada', 'captura'], label: 'Inbox', route: '#/inbox' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
@@ -6828,6 +6857,22 @@ window.Juntos = window.Juntos || {};
       } else if (name === 'week_next') {
         var wn = DB.weekRangeOf(args.date);
         out = DB.getWeekOverview(userId, { date: DB.agendaAddDays(wn.start, 7), visibility: args.visibility });
+      } else if (name === 'monthly_review_summary' || name === 'monthly_review_continue') {
+        out = DB.getReviewSummary(userId, { year: args.year, month: args.month, visibility: args.visibility });
+      } else if (name === 'monthly_review_income_expense') {
+        out = DB.getIncomeExpenseSection(userId, { year: args.year, month: args.month, visibility: args.visibility });
+      } else if (name === 'monthly_review_budget') {
+        out = DB.getBudgetSection(userId, { year: args.year, month: args.month, visibility: args.visibility });
+      } else if (name === 'monthly_review_invoices') {
+        out = DB.getInvoiceSection(userId, { year: args.year, month: args.month, visibility: args.visibility });
+      } else if (name === 'monthly_review_settlements') {
+        out = DB.getSettlementSection(userId, {});
+      } else if (name === 'monthly_review_goals') {
+        out = DB.getGoalSection(userId, {});
+      } else if (name === 'monthly_review_projects') {
+        out = DB.getProjectSection(userId, { year: args.year, month: args.month });
+      } else if (name === 'monthly_review_next_month') {
+        out = DB.getNextMonthSection(userId, { year: args.year, month: args.month });
       } else if (name === 'whatsapp_status') {
         var wc = DB.waMyConnection(userId);
         var wp = DB.waGetPreferences(userId);
@@ -7041,6 +7086,11 @@ window.Juntos = window.Juntos || {};
         if (!wrp) throw new Error('Prioridade inválida.');
         var wrpp = db.weekly_plans.find(function (x) { return x.id === wrp.weekly_plan_id && x.couple_id === cid && !x.deleted_at; });
         if (!wrpp || !DB.weekCanAct(db, userId, wrpp)) throw new Error('Acesso negado.');
+      } else if (actionType === 'monthly_review_start') {
+        DB.validateMonthlyReview(userId, { reference_year: p.year || p.reference_year, reference_month: p.month || p.reference_month, visibility: p.visibility || 'PERSONAL' });
+      } else if (actionType === 'monthly_review_complete') {
+        var mr = db.monthly_reviews.find(function (x) { return x.id === p.review_id && x.couple_id === cid && !x.archived_at; });
+        if (!mr || !DB.monthlyCanAct(db, userId, mr)) throw new Error('Fechamento inválido.');
       } else if (actionType === 'installment_create') {
         DB.validateInstallmentPurchase(userId, { credit_card_id: p.credit_card_id, description: p.description, total_amount: p.total, count: p.count, first_installment_date: p.first_installment_date, category_id: p.category_id, payer_user_id: p.payer_user_id || userId, is_shared: !!p.is_shared });
       } else if (actionType === 'inbox_process' || actionType === 'inbox_choose_destination') {
@@ -7251,6 +7301,13 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'week_remove_priority') {
           DB.removeWeeklyPriority(userId, p.priority_id);
           res = { priority_id: p.priority_id };
+        } else if (r.action_type === 'monthly_review_start') {
+          var mst = DB.startReview(userId, { year: p.year || p.reference_year, month: p.month || p.reference_month, visibility: p.visibility || 'PERSONAL' });
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'MONTHLY_REVIEW', mst.id, 120); } catch (eMCx) {}
+          res = { review_id: mst.id };
+        } else if (r.action_type === 'monthly_review_complete') {
+          DB.completeReview(userId, p.review_id);
+          res = { review_id: p.review_id };
         } else if (r.action_type === 'installment_create') {
           var ipc = DB.createInstallmentPurchase(userId, { credit_card_id: p.credit_card_id, description: p.description, total_amount: p.total, count: p.count, first_installment_date: p.first_installment_date, category_id: p.category_id, payer_user_id: p.payer_user_id || userId, is_shared: !!p.is_shared });
           res = { installment_id: ipc.id };
@@ -8186,6 +8243,25 @@ window.Juntos = window.Juntos || {};
           if (wHit.length !== 1) throw { clarification: wHit.length ? 'Qual delas? ' + wHit.slice(0, 3).map(function (x) { return '"' + x.title + '"'; }).join(', ') + '?' : 'Qual prioridade remover?' };
           params = { plan_id: wpr.id, priority_id: wHit[0].id, title: wHit[0].title };
           label = 'Remover prioridade "' + wHit[0].title + '"';
+        } else if (det.intent === 'monthly_review_start') {
+          var mper2 = DB.aiParsePeriod(rawText);
+          var mpy = null, mpm = null;
+          if (mper2 && mper2.start) { mpy = +mper2.start.slice(0, 4); mpm = +mper2.start.slice(5, 7); }
+          if (!mpy || !mpm) { var ml = DB.monthlyLastClosedMonth(); mpy = ml.year; mpm = ml.month; }
+          params = { year: mpy, month: mpm, visibility: 'PERSONAL' };
+          label = 'Iniciar fechamento de ' + DB.monthlyLabel(mpy, mpm);
+        } else if (det.intent === 'monthly_review_complete') {
+          var mctx = null;
+          try { mctx = DB.convGetContext(userId, convId, 'MONTHLY_REVIEW'); } catch (eMC2) {}
+          var mrid = mctx && mctx.entity_id ? String(mctx.entity_id).split(',')[0] : null;
+          if (!mrid) {
+            var mlast = DB.monthlyLastClosedMonth();
+            var mrows = DB.getMonthlyReviews(userId, { year: mlast.year, month: mlast.month });
+            mrid = mrows.length ? mrows[0].id : null;
+          }
+          if (!mrid) throw { clarification: 'Qual fechamento concluir? Diga o mês.' };
+          params = { review_id: mrid };
+          label = 'Concluir fechamento';
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -8251,6 +8327,8 @@ window.Juntos = window.Juntos || {};
         installment_create: 'Compra parcelada registrada no cartão.',
         week_set_priority: 'Prioridade definida para a semana.',
         week_remove_priority: 'Prioridade removida.',
+        monthly_review_start: 'Fechamento iniciado. Vamos revisar o mês passo a passo.',
+        monthly_review_complete: 'Fechamento concluído.',
         project_create: 'Projeto "' + (p.name || '') + '" criado.',
         project_create_task: 'Tarefa "' + (p.title || '') + '" criada no projeto "' + (p.project_name || '') + '".',
         project_create_list: 'Lista "' + (p.name || '') + '" criada no projeto "' + (p.project_name || '') + '".',
@@ -8554,6 +8632,58 @@ window.Juntos = window.Juntos || {};
         tools.push('week_next'); toolOut = wn;
         answer = 'Próxima semana (' + wn.week.start.split('-').reverse().join('/') + ' a ' + wn.week.end.split('-').reverse().join('/') + '): ' + (wn.upcoming ? wn.upcoming.length : 0) + ' itens futuros.';
         navTarget = '#/week';
+      } else if (det.intent === 'monthly_review_summary' || det.intent === 'monthly_review_continue' || det.intent === 'monthly_review_start') {
+        var mper = DB.aiParsePeriod(rawText);
+        var my = null, mm = null;
+        if (mper && mper.start) { my = +mper.start.slice(0, 4); mm = +mper.start.slice(5, 7); }
+        var mrev = null;
+        try { mrev = DB.startReview(userId, { year: my, month: mm, visibility: 'PERSONAL' }); } catch (eM) { mrev = null; }
+        var ms = DB.aiRunTool(userId, 'monthly_review_summary', my ? { year: my, month: mm } : {});
+        tools.push('monthly_review_summary'); toolOut = ms;
+        answer = 'Vamos revisar ' + ms.summary.month_label + '.\n\nResumo:\nReceitas: ' + DB.aiMoney(ms.summary.income) + '\nDespesas: ' + DB.aiMoney(ms.summary.expense) + '\nResultado: ' + DB.aiMoney(ms.summary.result) + (ms.summary.save_rate != null ? '\nTaxa de poupança: ' + String(ms.summary.save_rate).replace('.', ',') + '%' : '') + '\n\nQuer ver primeiro:\n1. gastos e categorias;\n2. orçamento;\n3. contas e faturas?';
+        navTarget = '#/monthly-review';
+        try { var _mcv = DB.aiListConversations(userId); if (_mcv.length) DB.convSetContext(userId, _mcv[0].id, _mcv[0].channel || 'web', 'MONTHLY_REVIEW', (mrev && mrev.id) || ms.summary.month, 120); } catch (eMC) {}
+      } else if (det.intent === 'monthly_review_income_expense') {
+        var mie = DB.aiRunTool(userId, 'monthly_review_income_expense', {});
+        tools.push('monthly_review_income_expense'); toolOut = mie;
+        answer = 'Receitas: ' + DB.aiMoney(mie.income) + ', despesas: ' + DB.aiMoney(mie.expense) + ', resultado: ' + DB.aiMoney(mie.result) + '.';
+        if (mie.categories.length) answer += ' Maiores categorias: ' + mie.categories.slice(0, 3).map(function (c) { return c.name + ' ' + DB.aiMoney(c.value); }).join('; ') + '.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_budget') {
+        var mb = DB.aiRunTool(userId, 'monthly_review_budget', {});
+        tools.push('monthly_review_budget'); toolOut = mb;
+        var mbOver = mb.items.filter(function (x) { return x.status === 'excedido'; });
+        answer = mb.items.length ? 'Orçamento: ' + (mb.items.length - mbOver.length) + ' categorias dentro do limite, ' + mbOver.length + ' acima.' + (mbOver.length ? ' Acima: ' + mbOver.slice(0, 3).map(function (x) { return x.name + ' ' + DB.aiMoney(x.spent - x.budgeted) + ' acima'; }).join('; ') + '.' : '') : 'Você não configurou orçamento para este mês.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_invoices') {
+        var mi = DB.aiRunTool(userId, 'monthly_review_invoices', {});
+        tools.push('monthly_review_invoices'); toolOut = mi;
+        var miPend = mi.invoices.filter(function (x) { return x.status !== 'paid' && x.status !== 'cancelled'; });
+        answer = mi.invoices.length ? 'Faturas: ' + mi.invoices.filter(function (x) { return x.status === 'paid'; }).length + ' pagas, ' + miPend.length + ' pendentes.' + (miPend.length ? ' Pendente: ' + miPend.slice(0, 3).map(function (x) { return DB.aiMoney(x.outstanding); }).join(', ') + '.' : '') : 'Sem faturas neste mês.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_settlements') {
+        var mst = DB.aiRunTool(userId, 'monthly_review_settlements', {});
+        tools.push('monthly_review_settlements'); toolOut = mst;
+        answer = mst.mode === 'JOINT' ? 'Neste modo, as despesas compartilhadas não geram acertos internos automáticos.' : (mst.debt ? 'Acerto pendente: ' + DB.aiMoney(mst.debt.amount) + '.' : 'Nenhum acerto pendente no momento.');
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_goals') {
+        var mg = DB.aiRunTool(userId, 'monthly_review_goals', {});
+        tools.push('monthly_review_goals'); toolOut = mg;
+        answer = mg.goals.length ? 'Metas: ' + mg.goals.slice(0, 4).map(function (g) { return g.name + ' ' + (g.pct != null ? g.pct + '%' : ''); }).join('; ') + '.' : 'Nenhuma meta ativa para revisar neste período.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_projects') {
+        var mpj = DB.aiRunTool(userId, 'monthly_review_projects', {});
+        tools.push('monthly_review_projects'); toolOut = mpj;
+        answer = mpj.projects.length ? 'Projetos: ' + mpj.projects.slice(0, 4).map(function (p) { return p.name + ' (' + p.tasks_done + '/' + p.tasks_total + ' tarefas)'; }).join('; ') + '.' : 'Nenhum projeto relevante neste período.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_next_month') {
+        var mnm = DB.aiRunTool(userId, 'monthly_review_next_month', {});
+        tools.push('monthly_review_next_month'); toolOut = mnm;
+        answer = 'Para ' + mnm.month_label + ', com base nos itens já registrados: ' + mnm.items.length + ' compromissos, total ' + DB.aiMoney(mnm.commitments_total) + '. Projeção atual — não é saldo garantido.';
+        navTarget = '#/monthly-review';
+      } else if (det.intent === 'monthly_review_complete') {
+        answer = 'Para concluir, abra o fechamento e toque em Concluir fechamento. Quer que eu abra?';
+        navTarget = '#/monthly-review';
       } else if (det.intent === 'agenda_today' || det.intent === 'agenda_tomorrow' || det.intent === 'agenda_week' || det.intent === 'agenda_month' || det.intent === 'agenda_search' || det.intent === 'agenda_detail') {
         var aqD = DB.agendaToday(), aqF, aqT;
         if (det.intent === 'agenda_tomorrow') aqD = DB.agendaAddDays(aqD, 1);
@@ -8764,7 +8894,7 @@ window.Juntos = window.Juntos || {};
       } else {
         if (DB.aiNorm(rawText) === 'ajuda' || DB.aiNorm(rawText) === 'help') {
           answer = 'Você pode me perguntar coisas como: "Como está meu dia?", "Quais hábitos faltam?", "Quais tarefas tenho hoje?", "Quanto gastamos esse mês?", "Qual a próxima fatura?", "Marca um compromisso amanhã às 14h." ou "Gastei 80 no mercado".';
-          follow = 'Diga /hoje, /semana, /habitos, /tarefas ou /resumo para atalhos.';
+          follow = 'Diga /hoje, /semana, /fechamento, /habitos, /tarefas ou /resumo para atalhos.';
         } else {
           answer = 'Posso ajudar com resumo do mês, gastos por categoria, orçamento, metas, contas, cartões, faturas, parcelas, acertos, insights e agenda (compromissos, lembretes). O que quer saber?';
         }
@@ -9133,7 +9263,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'o que tenho essa semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/inbox': 'mostra minha inbox', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'o que tenho essa semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/inbox': 'mostra minha inbox', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/fechamento': 'vamos fechar o mês', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -9982,7 +10112,7 @@ window.Juntos = window.Juntos || {};
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, inbox: ibx, week: (function () { try { var w = DB.getWeekOverview(userId, { date: d, visibility: 'PERSONAL' }); var pr = (w.priorities && w.priorities.ok) ? w.priorities.data.priorities.filter(function (x) { return !x.done; }) : []; var td = (w.tasks && w.tasks.ok) ? w.tasks.data.upcoming.filter(function (x) { return x.date <= DB.agendaAddDays(d, 2); }).length : 0; var inv = (w.financial && w.financial.ok) ? w.financial.data.upcoming.filter(function (x) { return x.kind === 'invoice'; }) : []; return { priorities_pending: pr.length, tasks_due: td, next_invoice: inv[0] ? { title: inv[0].title, date: inv[0].date } : null }; } catch (eW) { return { priorities_pending: 0, tasks_due: 0, next_invoice: null }; } })(), next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, inbox: ibx, week: (function () { try { var w = DB.getWeekOverview(userId, { date: d, visibility: 'PERSONAL' }); var pr = (w.priorities && w.priorities.ok) ? w.priorities.data.priorities.filter(function (x) { return !x.done; }) : []; var td = (w.tasks && w.tasks.ok) ? w.tasks.data.upcoming.filter(function (x) { return x.date <= DB.agendaAddDays(d, 2); }).length : 0; var inv = (w.financial && w.financial.ok) ? w.financial.data.upcoming.filter(function (x) { return x.kind === 'invoice'; }) : []; return { priorities_pending: pr.length, tasks_due: td, next_invoice: inv[0] ? { title: inv[0].title, date: inv[0].date } : null }; } catch (eW) { return { priorities_pending: 0, tasks_due: 0, next_invoice: null }; } })(), monthly_review: (function () { try { return DB.getMonthlyReviewCard(userId, d); } catch (eM) { return null; } })(), next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -14638,6 +14768,480 @@ window.Juntos = window.Juntos || {};
       try { DB.logSecurityEvent(userId, 'week', { action: kind, entity_type: 'weekly_plan', entity_id: plan.id }); } catch (e) {}
       return true;
     },
+    /* ============ FECHAMENTO MENSAL (agregacao; fonte: MonthlyReviewService) ============
+       Orquestra leitura via servicos oficiais sem duplicar regra de dominio.
+       monthly_reviews guarda APENAS periodo, visibilidade, status, passo,
+       notas e snapshot minimo de conclusao. Entidades seguem nos oficiais. */
+    MONTHLY_REVIEW_STATUSES: function () { return ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED']; },
+    MONTHLY_REVIEW_SECTIONS: function () { return ['SUMMARY', 'INCOME_EXPENSE', 'BUDGET', 'ACCOUNTS_INVOICES', 'SETTLEMENTS', 'GOALS', 'PROJECTS', 'NEXT_MONTH']; },
+    MONTHLY_REVIEW_STEPS: function () { return ['Resumo', 'Receitas e despesas', 'Orçamento', 'Contas e faturas', 'Acertos', 'Metas', 'Projetos', 'Próximo mês', 'Conclusão']; },
+    monthlyMonthRange: function (year, month) {
+      var y = parseInt(year, 10), m = parseInt(month, 10);
+      if (!(y >= 2000 && y <= 2100 && m >= 1 && m <= 12)) throw new Error('Mês inválido.');
+      var ym = y + '-' + ('0' + m).slice(-2);
+      return { year: y, month: m, ym: ym, start: ym + '-01', end: ym + '-' + DB.agendaDim(y, m) };
+    },
+    monthlyLastClosedMonth: function (todayISO) {
+      var t = (todayISO && DB.agendaParseDay(String(todayISO).slice(0, 10))) ? String(todayISO).slice(0, 10) : DB.agendaToday();
+      var y = +t.slice(0, 4), m = +t.slice(5, 7);
+      m -= 1; if (m < 1) { m = 12; y -= 1; }
+      return { year: y, month: m, ym: y + '-' + ('0' + m).slice(-2) };
+    },
+    monthlyLabel: function (year, month) {
+      var mn = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+      var m = parseInt(month, 10);
+      return mn[m - 1] + ' de ' + year;
+    },
+    monthlyVisible: function (db, userId, r) {
+      if (!r || r.archived_at) return false;
+      if (r.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return r.user_id === userId;
+    },
+    monthlyCanAct: function (db, userId, r) {
+      if (!DB.monthlyVisible(db, userId, r)) return false;
+      if (r.visibility === 'COUPLE') return true;
+      return r.user_id === userId;
+    },
+    monthlyWriteGuard: function (db, userId, reviewId) {
+      var cid = DB.myCoupleId(userId);
+      var r = db.monthly_reviews.find(function (x) { return x.id === reviewId && x.couple_id === cid && !x.archived_at; });
+      if (!r || !DB.monthlyCanAct(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'monthly_review_write', { entity_type: 'monthly_review', entity_id: reviewId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return r;
+    },
+    validateMonthlyReview: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var y = parseInt(data.reference_year, 10), m = parseInt(data.reference_month, 10);
+      if (!(y >= 2000 && y <= 2100 && m >= 1 && m <= 12)) throw new Error('Mês inválido.');
+      var today = DB.agendaToday();
+      var ty = +today.slice(0, 4), tm = +today.slice(5, 7);
+      if (y > ty || (y === ty && m > tm)) throw new Error('Mês futuro não pode ser fechado. Use o planejamento financeiro.');
+      var mode = DB.moneyMode(userId);
+      return { couple_id: cid, reference_year: y, reference_month: m, visibility: vis, money_management_mode_snapshot: mode };
+    },
+    startReview: function (userId, opt) {
+      DB.requireAuthz(userId, 'monthly_review_create', null);
+      opt = opt || {};
+      var v;
+      if (opt.year || opt.reference_year || opt.month || opt.reference_month) {
+        v = DB.validateMonthlyReview(userId, { reference_year: opt.year || opt.reference_year, reference_month: opt.month || opt.reference_month, visibility: opt.visibility || 'PERSONAL' });
+      } else {
+        var last = DB.monthlyLastClosedMonth();
+        v = DB.validateMonthlyReview(userId, { reference_year: last.year, reference_month: last.month, visibility: opt.visibility || 'PERSONAL' });
+      }
+      var db = read();
+      var ex = db.monthly_reviews.find(function (x) {
+        return x.couple_id === v.couple_id && !x.archived_at && x.reference_year === v.reference_year && x.reference_month === v.reference_month && x.visibility === v.visibility &&
+          (v.visibility === 'COUPLE' ? true : x.user_id === userId);
+      });
+      if (ex) return ex;
+      var r = { id: id('mr'), user_id: userId, couple_id: v.couple_id, reference_month: v.reference_month, reference_year: v.reference_year, visibility: v.visibility, money_management_mode_snapshot: v.money_management_mode_snapshot, status: 'IN_PROGRESS', current_step: 1, notes: '', review_summary_snapshot: null, version: 1, started_at: now(), completed_at: null, created_at: now(), updated_at: now(), archived_at: null };
+      db.monthly_reviews.push(r);
+      DB.MONTHLY_REVIEW_SECTIONS().forEach(function (st) {
+        db.monthly_review_sections.push({ id: id('mrs'), monthly_review_id: r.id, section_type: st, status: 'PENDING', completed_at: null, skipped_at: null, updated_at: now() });
+      });
+      logAudit(db, v.couple_id, userId, 'monthly_review', r.id, 'created', { month: v.reference_year + '-' + v.reference_month, visibility: v.visibility });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'monthly_review', { action: 'monthly_review_created', entity_type: 'monthly_review', entity_id: r.id }); } catch (e) {}
+      try { DB.emitMonthlyEvent(userId, 'monthly_review_started', r, {}); } catch (e2) {}
+      return DB.getReview(userId, r.id);
+    },
+    getReview: function (userId, reviewId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var r = db.monthly_reviews.find(function (x) { return x.id === reviewId && x.couple_id === cid && !x.archived_at; });
+      if (!r || !DB.monthlyVisible(db, userId, r)) {
+        try { DB.logAuthorizationFailure(userId, 'monthly_review_read', { entity_type: 'monthly_review', entity_id: reviewId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      var secs = db.monthly_review_sections.filter(function (s) { return s.monthly_review_id === r.id; });
+      var out = JSON.parse(JSON.stringify(r));
+      out.sections = secs;
+      out.month_label = DB.monthlyLabel(r.reference_year, r.reference_month);
+      var today = DB.agendaToday();
+      var isCur = (r.reference_year === +today.slice(0, 4) && r.reference_month === +today.slice(5, 7));
+      out.is_current_month = isCur;
+      out.is_partial = isCur && r.status !== 'COMPLETED';
+      out.steps_total = 9;
+      return out;
+    },
+    getMonthlyReviews: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.monthly_reviews.filter(function (r) {
+        if (r.couple_id !== cid || r.archived_at) return false;
+        if (!DB.monthlyVisible(db, userId, r)) return false;
+        if (f.status && r.status !== String(f.status).toUpperCase()) return false;
+        if (f.visibility && r.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.year && r.reference_year !== parseInt(f.year, 10)) return false;
+        if (f.month && r.reference_month !== parseInt(f.month, 10)) return false;
+        return true;
+      });
+      rows.sort(function (a, b) { return ((b.reference_year * 12 + b.reference_month) - (a.reference_year * 12 + a.reference_month)) || String(b.created_at).localeCompare(String(a.created_at)); });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    getReviewByMonth: function (userId, year, month, visibility) {
+      var rows = DB.getMonthlyReviews(userId, { year: year, month: month, visibility: visibility });
+      return rows[0] || null;
+    },
+    updateReviewNotes: function (userId, reviewId, notes, opt) {
+      DB.requireAuthz(userId, 'monthly_review_edit', null);
+      opt = opt || {};
+      var db = read();
+      var r = DB.monthlyWriteGuard(db, userId, reviewId);
+      if (opt.expected_version != null && r.version !== opt.expected_version) throw new Error('Fechamento alterado por outra pessoa. Recarregue para continuar.');
+      r.notes = String(notes == null ? '' : notes).replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+      r.version += 1; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'monthly_review', r.id, 'updated', {});
+      write(db);
+      return DB.getReview(userId, r.id);
+    },
+    monthlySetSection: function (userId, reviewId, sectionType, status) {
+      DB.requireAuthz(userId, 'monthly_review_edit', null);
+      var st = String(sectionType || '').toUpperCase();
+      if (DB.MONTHLY_REVIEW_SECTIONS().indexOf(st) < 0) throw new Error('Etapa inválida.');
+      if (['COMPLETED', 'SKIPPED'].indexOf(status) < 0) throw new Error('Status inválido.');
+      var db = read();
+      var r = DB.monthlyWriteGuard(db, userId, reviewId);
+      var sec = db.monthly_review_sections.find(function (s) { return s.monthly_review_id === r.id && s.section_type === st; });
+      if (!sec) {
+        sec = { id: id('mrs'), monthly_review_id: r.id, section_type: st, status: 'PENDING', completed_at: null, skipped_at: null, updated_at: now() };
+        db.monthly_review_sections.push(sec);
+      }
+      sec.status = status; sec.updated_at = now();
+      if (status === 'COMPLETED') { sec.completed_at = now(); sec.skipped_at = null; }
+      else { sec.skipped_at = now(); sec.completed_at = null; }
+      var order = ['SUMMARY', 'INCOME_EXPENSE', 'BUDGET', 'ACCOUNTS_INVOICES', 'SETTLEMENTS', 'GOALS', 'PROJECTS', 'NEXT_MONTH'];
+      var ix = order.indexOf(st);
+      if (ix >= 0 && r.current_step < Math.min(ix + 2, 9)) r.current_step = Math.min(ix + 2, 9);
+      r.version += 1; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'monthly_review_section', sec.id, status === 'COMPLETED' ? 'completed' : 'skipped', { section: st });
+      write(db);
+      try { DB.emitMonthlyEvent(userId, 'monthly_review_section_completed', r, { section: st }); } catch (e) {}
+      return DB.getReview(userId, r.id);
+    },
+    completeSection: function (userId, reviewId, sectionType) { return DB.monthlySetSection(userId, reviewId, sectionType, 'COMPLETED'); },
+    skipSection: function (userId, reviewId, sectionType) { return DB.monthlySetSection(userId, reviewId, sectionType, 'SKIPPED'); },
+    completeReview: function (userId, reviewId) {
+      DB.requireAuthz(userId, 'monthly_review_complete', null);
+      var snap = null;
+      try { snap = DB.getReviewSummary(userId, { reviewId: reviewId }); } catch (e) { snap = null; }
+      var db = read();
+      var r = DB.monthlyWriteGuard(db, userId, reviewId);
+      if (snap && snap.summary) {
+        r.review_summary_snapshot = { income: snap.summary.income, expense: snap.summary.expense, result: snap.summary.result, save_rate: snap.summary.save_rate, budgets_over: (snap.summary.budgets && snap.summary.budgets.over) || 0, invoices_paid: (snap.summary.invoices && snap.summary.invoices.paid) || 0, invoices_pending: (snap.summary.invoices && snap.summary.invoices.pending) || 0, closed_at: now().slice(0, 10) };
+      }
+      r.status = 'COMPLETED'; r.completed_at = now(); r.current_step = 9; r.version += 1; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'monthly_review', r.id, 'completed', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'monthly_review', { action: 'monthly_review_completed', entity_type: 'monthly_review', entity_id: r.id }); } catch (e2) {}
+      try { DB.emitMonthlyEvent(userId, 'monthly_review_completed', r, {}); } catch (e3) {}
+      try { DB.notifCreate(userId, { type: 'monthly_review_completed', title: 'Fechamento concluído', body: 'O fechamento de ' + DB.monthlyLabel(r.reference_year, r.reference_month) + ' foi concluído.', related_entity_type: 'monthly_review', related_entity_id: r.id, idempotency_key: ['mr', 'completed', r.couple_id, r.id].join('|') }); } catch (e4) {}
+      return DB.getReview(userId, r.id);
+    },
+    reopenReview: function (userId, reviewId) {
+      DB.requireAuthz(userId, 'monthly_review_edit', null);
+      var db = read();
+      var r = DB.monthlyWriteGuard(db, userId, reviewId);
+      r.status = 'IN_PROGRESS'; r.completed_at = null; r.version += 1; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'monthly_review', r.id, 'reopened', {});
+      write(db);
+      try { DB.emitMonthlyEvent(userId, 'monthly_review_reopened', r, {}); } catch (e) {}
+      return DB.getReview(userId, r.id);
+    },
+    archiveMonthlyReview: function (userId, reviewId) {
+      DB.requireAuthz(userId, 'monthly_review_edit', null);
+      var db = read();
+      var r = DB.monthlyWriteGuard(db, userId, reviewId);
+      r.status = 'ARCHIVED'; r.archived_at = now(); r.version += 1; r.updated_at = now();
+      logAudit(db, r.couple_id, userId, 'monthly_review', r.id, 'archived', {});
+      write(db);
+      return true;
+    },
+    monthlyVision: function (reviewOrVis) {
+      if (!reviewOrVis) return 'couple';
+      var v = typeof reviewOrVis === 'string' ? reviewOrVis : reviewOrVis.visibility;
+      return v === 'PERSONAL' ? 'me' : 'couple';
+    },
+    getReviewSummary: function (userId, opt) {
+      opt = opt || {};
+      var r = null;
+      if (opt.reviewId) r = DB.getReview(userId, opt.reviewId);
+      else if (opt.year && opt.month) {
+        r = DB.getReviewByMonth(userId, opt.year, opt.month, opt.visibility || 'PERSONAL');
+        if (!r) {
+          var v = DB.validateMonthlyReview(userId, { reference_year: opt.year, reference_month: opt.month, visibility: opt.visibility || 'PERSONAL' });
+          r = { id: null, user_id: userId, couple_id: v.couple_id, reference_year: v.reference_year, reference_month: v.reference_month, visibility: v.visibility, money_management_mode_snapshot: v.money_management_mode_snapshot, status: 'NOT_STARTED', current_step: 1, notes: '', sections: [], month_label: DB.monthlyLabel(v.reference_year, v.reference_month), is_partial: false, is_current_month: false, steps_total: 9 };
+        }
+      } else {
+        var last = DB.monthlyLastClosedMonth();
+        return DB.getReviewSummary(userId, { year: last.year, month: last.month, visibility: opt.visibility || 'PERSONAL' });
+      }
+      var ym = r.reference_year + '-' + ('0' + r.reference_month).slice(-2);
+      var vision = DB.monthlyVision(r);
+      function sec(fn, fallback) { try { return { ok: true, data: fn() }; } catch (e) { return { ok: false, error: 'indisponível', data: fallback }; } }
+      var fin = sec(function () { return DB.dashboardCalc(userId, { from: ym, to: ym, vision: vision }); }, { income: 0, expense: 0, balance: 0, saveRate: null, byCat: [] });
+      var prev = null;
+      try {
+        var y = r.reference_year, m = r.reference_month - 1;
+        if (m < 1) { m = 12; y -= 1; }
+        var pym = y + '-' + ('0' + m).slice(-2);
+        prev = DB.dashboardCalc(userId, { from: pym, to: pym, vision: vision });
+      } catch (e2) { prev = null; }
+      var d = fin.ok ? fin.data : { income: 0, expense: 0, balance: 0, saveRate: null };
+      var summary = { month: ym, month_label: DB.monthlyLabel(r.reference_year, r.reference_month), income: d.income || 0, expense: d.expense || 0, result: (d.balance != null ? d.balance : (d.income - d.expense)) || 0, save_rate: d.saveRate != null ? d.saveRate : null, prev_income: prev ? prev.income : null, prev_expense: prev ? prev.expense : null, expense_diff: prev ? Math.round(((d.expense || 0) - (prev.expense || 0)) * 100) / 100 : null };
+      var budgets = sec(function () {
+        var bs = DB.budgetSummary(userId, ym);
+        var over = 0, near = 0;
+        (bs.items || []).forEach(function (it) {
+          var st = DB.calculateBudgetStatus(it.pct);
+          if (st === 'over') over++; else if (st === 'warn') near++;
+        });
+        return { total: (bs.items || []).length, within: (bs.items || []).length - over - near, near: near, over: over };
+      }, { total: 0, within: 0, near: 0, over: 0 });
+      summary.budgets = budgets.ok ? budgets.data : budgets.data;
+      var invs = sec(function () {
+        var rows = DB.listInvoices(userId, { year: r.reference_year, month: r.reference_month });
+        var paid = rows.filter(function (x) { return x.status === 'paid'; }).length;
+        var pending = rows.filter(function (x) { return x.status !== 'paid' && x.status !== 'cancelled'; }).length;
+        return { total: rows.length, paid: paid, pending: pending };
+      }, { total: 0, paid: 0, pending: 0 });
+      summary.invoices = invs.ok ? invs.data : invs.data;
+      var today = DB.agendaToday();
+      var isCur = (r.reference_year === +today.slice(0, 4) && r.reference_month === +today.slice(5, 7));
+      var changedSinceClose = false;
+      if (r.status === 'COMPLETED' && r.review_summary_snapshot) {
+        try {
+          var snap0 = r.review_summary_snapshot;
+          if (snap0 && (Math.abs((snap0.income || 0) - summary.income) > 0.005 || Math.abs((snap0.expense || 0) - summary.expense) > 0.005)) changedSinceClose = true;
+        } catch (e3) {}
+      }
+      return { review: { id: r.id, status: r.status, month: ym, month_label: summary.month_label, visibility: r.visibility, current_step: r.current_step, is_partial: isCur && r.status !== 'COMPLETED', is_current_month: isCur, closed_snapshot: r.review_summary_snapshot || null, changed_since_close: changedSinceClose, snapshot_note: r.status === 'COMPLETED' ? 'Dados referentes ao fechamento realizado em ' + String(r.completed_at || '').slice(0, 10) + '.' : null }, summary: summary, sections_status: r.sections || [] };
+    },
+    getFinancialSection: function (userId, opt) { return DB.getIncomeExpenseSection(userId, opt); },
+    getIncomeExpenseSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var ym = r ? (r.reference_year + '-' + ('0' + r.reference_month).slice(-2)) : (opt.year && opt.month ? (opt.year + '-' + ('0' + opt.month).slice(-2)) : DB.monthlyLastClosedMonth().ym);
+      var vision = r ? DB.monthlyVision(r) : (opt.visibility === 'COUPLE' ? 'couple' : 'me');
+      function sec(fn, fallback) { try { return { ok: true, data: fn() }; } catch (e) { return { ok: false, error: 'indisponível', data: fallback }; } }
+      var calc = sec(function () { return DB.dashboardCalc(userId, { from: ym, to: ym, vision: vision }); }, null);
+      var analytics = sec(function () { return DB.analyzeFinancialPeriod(userId, { periodStart: ym + '-01', periodEnd: ym + '-' + DB.agendaDim(+ym.slice(0, 4), +ym.slice(5, 7)), view: vision }); }, null);
+      var d = (calc.ok && calc.data) || { income: 0, expense: 0, balance: 0, saveRate: null, byCat: [], incomeByCat: [], topCat: null };
+      var top = (d.byCat || []).slice(0, 8).map(function (c) { return { id: c.id, name: c.name, icon: c.icon, value: c.value, pct: c.pct }; });
+      var largest = [];
+      try {
+        largest = DB.listTx(userId, { from: ym, to: ym, type: 'expense' }).filter(function (t) { return !t.credit_card_id || true; }).slice(0, 50).sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5).map(function (t) { return { id: t.id, description: t.description, amount: t.amount, date: t.date, category_id: t.category_id }; });
+      } catch (e) {}
+      var recurring = { count: 0, monthly_estimate: 0 };
+      try {
+        var rr = DB.recurringSummary ? DB.recurringSummary(userId, {}) : null;
+        if (rr) recurring = { count: rr.activeTemplates || 0, monthly_estimate: rr.monthlyEstimate || 0 };
+      } catch (e2) {}
+      return { month: ym, income: d.income || 0, expense: d.expense || 0, result: (d.balance != null ? d.balance : 0), save_rate: d.saveRate != null ? d.saveRate : null, categories: top, largest: largest, recurring: recurring, comparison: (analytics.ok && analytics.data && analytics.data.comparison) || null, calc_ok: calc.ok, analytics_ok: analytics.ok };
+    },
+    getBudgetSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var ym = r ? (r.reference_year + '-' + ('0' + r.reference_month).slice(-2)) : (opt.year && opt.month ? (opt.year + '-' + ('0' + opt.month).slice(-2)) : DB.monthlyLastClosedMonth().ym);
+      var out = { month: ym, items: [], total_budgeted: 0, total_spent: 0 };
+      try {
+        var bs = DB.budgetSummary(userId, ym);
+        out.total_budgeted = bs.total || 0; out.total_spent = bs.spent || 0;
+        out.items = (bs.items || []).map(function (it) {
+          var st = DB.calculateBudgetStatus(it.pct);
+          return { category_id: it.category_id, name: it.name, budgeted: it.budgeted, spent: it.spent, remaining: it.remaining, pct: it.pct, status: st === 'over' ? 'excedido' : (st === 'warn' ? 'próximo' : 'dentro') };
+        });
+      } catch (e) { out.error = 'indisponível'; }
+      try {
+        var ny = r ? r.reference_year : +ym.slice(0, 4), nm = r ? r.reference_month + 1 : (+ym.slice(5, 7) + 1);
+        if (nm > 12) { nm = 1; ny += 1; }
+        var nym = ny + '-' + ('0' + nm).slice(-2);
+        var nb = DB.budgetSummary(userId, nym);
+        out.next_month = { month: nym, configured: ((nb.items || []).length > 0), count: (nb.items || []).length };
+      } catch (e2) { out.next_month = { configured: false, count: 0 }; }
+      return out;
+    },
+    getAccountsSection: function (userId, opt) {
+      opt = opt || {};
+      var out = { accounts: [], total_balance: 0, cards: [] };
+      try {
+        var s = DB.calculateAccountsSummary(userId);
+        out.total_balance = s.totalBalance || 0;
+        out.accounts = (s.accounts || []).map(function (a) { return { id: a.id, name: a.name, balance: a.balance, type: a.type || null }; });
+      } catch (e) { out.error = 'indisponível'; }
+      try {
+        var db = read(), cid = DB.myCoupleId(userId);
+        out.cards = db.credit_cards.filter(function (c) { return c.couple_id === cid && c.active; }).slice(0, 20).map(function (c) {
+          var used = 0, avail = null;
+          try { used = DB.calculateCardOutstandingCommitment ? DB.calculateCardOutstandingCommitment(userId, c.id) : 0; } catch (e2) {}
+          try { avail = DB.calculateCardAvailableLimit ? DB.calculateCardAvailableLimit(userId, c.id) : null; } catch (e3) {}
+          return { id: c.id, name: c.name, used: used, available_limit: avail };
+        });
+      } catch (e4) {}
+      return out;
+    },
+    getInvoiceSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var year = r ? r.reference_year : opt.year, month = r ? r.reference_month : opt.month;
+      if (!year || !month) { var last = DB.monthlyLastClosedMonth(); year = last.year; month = last.month; }
+      var out = { month: year + '-' + ('0' + month).slice(-2), invoices: [], installments_next: [] };
+      try {
+        out.invoices = DB.listInvoices(userId, { year: year, month: month }).map(function (i) {
+          var total = 0, outstanding = 0;
+          try { total = DB.calculateInvoiceTotal(userId, i.id); } catch (e) { total = i.total_amount || 0; }
+          try { outstanding = DB.calculateInvoiceOutstanding(userId, i.id); } catch (e2) { outstanding = total - (i.paid_amount || 0); }
+          return { id: i.id, card_id: i.credit_card_id, month: i.reference_month, year: i.reference_year, total: total, outstanding: outstanding, status: i.status, due_date: i.due_date || null };
+        });
+      } catch (e3) { out.error = 'indisponível'; }
+      try {
+        var from = year + '-' + ('0' + month).slice(-2) + '-01';
+        var fc = DB.calculateFutureCommitments(userId, { from: from, to: from.slice(0, 7) + '-' + DB.agendaDim(+from.slice(0, 4), +from.slice(5, 7)) });
+        out.installments_next = (fc.items || []).filter(function (x) { return x.kind === 'installment'; }).slice(0, 10);
+      } catch (e4) {}
+      return out;
+    },
+    getSettlementSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var mode = r ? (r.money_management_mode_snapshot || DB.moneyMode(userId)) : DB.moneyMode(userId);
+      var out = { mode: mode, debt: null, history: [] };
+      try {
+        if (mode === 'JOINT') { out.debt = null; out.note = 'Neste modo, as despesas compartilhadas não geram acertos internos automáticos.'; }
+        else {
+          var st = DB.calculateSettlementBalance(userId);
+          out.debt = (st && st.debt && st.debt.amount > 0) ? { amount: st.debt.amount, from: st.debt.from, to: st.debt.to } : null;
+          if (!out.debt) out.note = 'Nenhum acerto pendente no momento.';
+        }
+      } catch (e) { out.error = 'indisponível'; }
+      try {
+        var ym = r ? (r.reference_year + '-' + ('0' + r.reference_month).slice(-2)) : DB.monthlyLastClosedMonth().ym;
+        var db = read(), cid = DB.myCoupleId(userId);
+        out.history = db.settlements.filter(function (s) { return s.couple_id === cid && String(s.created_at || '').slice(0, 7) === ym; }).slice(0, 20).map(function (s) { return { id: s.id, amount: s.amount, from: s.from_user_id || s.payer_user_id || null, to: s.to_user_id || s.receiver_user_id || null, date: String(s.created_at || '').slice(0, 10) }; });
+      } catch (e2) {}
+      return out;
+    },
+    getGoalSection: function (userId, opt) {
+      opt = opt || {};
+      var out = { goals: [] };
+      try {
+        var goals = DB.analyticsGoals(userId);
+        out.goals = goals.filter(function (g) { return g.status !== 'archived'; }).slice(0, 30).map(function (g) {
+          var pct = g.percentComplete != null ? g.percentComplete : (g.target_amount ? Math.round((g.current_amount || 0) / g.target_amount * 1000) / 10 : null);
+          return { id: g.id, name: g.name, target: g.target_amount, current: g.current_amount, pct: pct, deadline: g.deadline || null, status: g.status };
+        });
+        if (!out.goals.length) out.note = 'Nenhuma meta ativa para revisar neste período.';
+      } catch (e) { out.error = 'indisponível'; }
+      return out;
+    },
+    getProjectSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var ym = r ? (r.reference_year + '-' + ('0' + r.reference_month).slice(-2)) : DB.monthlyLastClosedMonth().ym;
+      var out = { month: ym, projects: [] };
+      try {
+        var rows = DB.getProjects(userId, { limit: 60 });
+        var first = ym + '-01', last = ym + '-' + DB.agendaDim(+ym.slice(0, 4), +ym.slice(5, 7));
+        rows.forEach(function (p) {
+          if (p.status === 'ARCHIVED') return;
+          var relevant = false, tasksDone = 0, tasksTotal = 0, upcoming = 0;
+          try {
+            var sum = DB.getProjectSummary(userId, p.id);
+            tasksDone = sum.tasks_done != null ? sum.tasks_done : (sum.done || 0);
+            tasksTotal = sum.tasks_total != null ? sum.tasks_total : (sum.total || 0);
+          } catch (e) {}
+          try {
+            var ups = DB.getProjectUpcoming(userId, p.id, { days: 90, limit: 50 });
+            ups.forEach(function (u) { if (u.date >= first && u.date <= last) { relevant = true; if (u.kind === 'task') upcoming++; } });
+          } catch (e2) {}
+          if (p.target_date && p.target_date >= first && p.target_date <= last) relevant = true;
+          if (p.status === 'COMPLETED' && String(p.updated_at || p.completed_at || '').slice(0, 7) === ym) relevant = true;
+          if (!relevant) return;
+          out.projects.push({ id: p.id, name: p.name, status: p.status, visibility: p.visibility, tasks_done: tasksDone, tasks_total: tasksTotal, upcoming_in_month: upcoming, target_date: p.target_date || null });
+        });
+        out.projects = out.projects.slice(0, 20);
+        if (!out.projects.length) out.note = 'Nenhum projeto relevante neste período.';
+      } catch (e3) { out.error = 'indisponível'; }
+      return out;
+    },
+    getNextMonthSection: function (userId, opt) {
+      opt = opt || {};
+      var r = opt.reviewId ? DB.getReview(userId, opt.reviewId) : null;
+      var y = r ? r.reference_year : opt.year, m = r ? r.reference_month : opt.month;
+      if (!y || !m) { var last = DB.monthlyLastClosedMonth(); y = last.year; m = last.month; }
+      m += 1; if (m > 12) { m = 1; y += 1; }
+      var nym = y + '-' + ('0' + m).slice(-2);
+      var first = nym + '-01', lastD = nym + '-' + DB.agendaDim(y, m);
+      function sec(fn, fallback) { try { return { ok: true, data: fn() }; } catch (e) { return { ok: false, error: 'indisponível', data: fallback }; } }
+      var commitments = sec(function () { return DB.calculateFutureCommitments(userId, { from: first, to: lastD }); }, { items: [], total: 0 });
+      var projected = sec(function () { return DB.calculateProjectedBalance(userId, nym); }, null);
+      var planned = sec(function () { return DB.getCalendarEvents(userId, { from: first, to: lastD, vision: 'couple' }).filter(function (x) { return x.is_planned; }).slice(0, 30); }, []);
+      var budgets = sec(function () { var b = DB.budgetSummary(userId, nym); return { configured: ((b.items || []).length > 0), count: (b.items || []).length }; }, { configured: false, count: 0 });
+      var goals = sec(function () {
+        return DB.analyticsGoals(userId).filter(function (g) { return g.status !== 'archived' && g.deadline && g.deadline >= first && g.deadline <= DB.agendaAddDays(lastD, 60); }).slice(0, 10).map(function (g) { return { id: g.id, name: g.name, deadline: g.deadline }; });
+      }, []);
+      var projects = sec(function () {
+        var out = [];
+        DB.getProjects(userId, { limit: 60 }).forEach(function (p) {
+          if (p.status === 'ARCHIVED') return;
+          var n = 0;
+          try { DB.getProjectUpcoming(userId, p.id, { days: 90, limit: 50 }).forEach(function (u) { if (u.date >= first && u.date <= lastD) n++; }); } catch (e) {}
+          if (n) out.push({ id: p.id, name: p.name, upcoming: n });
+        });
+        return out.slice(0, 10);
+      }, []);
+      var its = (commitments.ok && commitments.data.items) || [];
+      function sumKind(k) { return Math.round(its.filter(function (x) { return x.kind === k; }).reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0) * 100) / 100; }
+      return { month: nym, month_label: DB.monthlyLabel(y, m), commitments_total: (commitments.ok && commitments.data.total) || 0, by_kind: { recurring: sumKind('recurring'), invoice: sumKind('invoice'), installment: sumKind('installment'), settlement: sumKind('settlement') }, items: its.slice(0, 40), projected_balance: (projected.ok ? projected.data : null), planned_items: (planned.ok ? planned.data : []), budgets: (budgets.ok ? budgets.data : budgets.data), goals: (goals.ok ? goals.data : []), projects: (projects.ok ? projects.data : []), note: 'Com base nos itens já registrados, os valores são uma projeção atual — não um saldo garantido.' };
+    },
+    getMonthlyReviewCard: function (userId, todayISO) {
+      var last = DB.monthlyLastClosedMonth(todayISO);
+      var rows = DB.getMonthlyReviews(userId, { year: last.year, month: last.month });
+      var cur = rows.filter(function (x) { return x.status === 'IN_PROGRESS'; })[0] || rows[0] || null;
+      if (cur) {
+        var done = 0;
+        try {
+          var db = read();
+          done = db.monthly_review_sections.filter(function (s) { return s.monthly_review_id === cur.id && s.status === 'COMPLETED'; }).length;
+        } catch (e) {}
+        return { month: last.ym, month_label: DB.monthlyLabel(last.year, last.month), status: cur.status, review_id: cur.id, done: done, total: 8 };
+      }
+      return { month: last.ym, month_label: DB.monthlyLabel(last.year, last.month), status: 'NOT_STARTED', review_id: null, done: 0, total: 8 };
+    },
+    emitMonthlyEvent: function (userId, kind, review, extra) {
+      extra = extra || {};
+      var allowed = ['monthly_review_started', 'monthly_review_section_completed', 'monthly_review_completed', 'monthly_review_reopened'];
+      if (allowed.indexOf(kind) < 0) return null;
+      var db = read();
+      logAudit(db, review.couple_id, userId, 'monthly_review', review.id, kind, { section: extra.section || null });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'monthly_review', { action: kind, entity_type: 'monthly_review', entity_id: review.id }); } catch (e) {}
+      return true;
+    },
+    monthlyProcessDue: function (userId, nowISO) {
+      var made = [];
+      try {
+        var today = (nowISO || now()).slice(0, 10);
+        if (today.slice(8, 10) !== '01' && today.slice(8, 10) !== '02' && today.slice(8, 10) !== '03') return made;
+        var last = DB.monthlyLastClosedMonth(today);
+        var rows = DB.getMonthlyReviews(userId, { year: last.year, month: last.month });
+        var done = rows.some(function (x) { return x.status === 'COMPLETED'; });
+        if (!done) {
+          var n = DB.notifCreate(userId, { type: 'monthly_review_available', title: DB.monthlyLabel(last.year, last.month) + ' terminou. Quer revisar o mês?', body: 'Veja como terminou o mês e o que já está previsto para o próximo.', related_entity_type: 'monthly_review', related_entity_id: last.ym, idempotency_key: ['mr', 'available', DB.myCoupleId(userId), last.ym, today.slice(0, 7)].join('|') });
+          if (n && n.id) made.push(n.id);
+        }
+      } catch (e) {}
+      return made;
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -14688,6 +15292,9 @@ window.Juntos = window.Juntos || {};
         { key: 'weekly_plan_reminder', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 48, retry: false, maxAttempts: 1, route: 'week' },
         { key: 'weekly_review_reminder', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 96, retry: false, maxAttempts: 1, route: 'week' },
         { key: 'weekly_priority_due', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'week' },
+        { key: 'monthly_review_available', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 168, retry: false, maxAttempts: 1, route: 'monthly-review' },
+        { key: 'monthly_review_reminder', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 140, expiresInH: 168, retry: false, maxAttempts: 1, route: 'monthly-review' },
+        { key: 'monthly_review_completed', priority: 'info', channels: ['in_app'], cooldownH: 140, expiresInH: 168, retry: false, maxAttempts: 1, route: 'monthly-review' },
         { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' },
         { key: 'routine_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
         { key: 'routine_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
@@ -17707,7 +18314,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project', 'inbox', 'week'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project', 'inbox', 'week', 'monthly_review'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;
@@ -17903,6 +18510,30 @@ window.Juntos = window.Juntos || {};
       var db = read();
       var p = db.weekly_plans.find(function (x) { return x.id === planId && x.couple_id === c.couple_id && !x.deleted_at; });
       return !!p && p.visibility === 'COUPLE' && DB.weekVisible(db, userId, p);
+    },
+    canViewMonthlyReview: function (userId, reviewId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!reviewId) return true;
+      var db = read();
+      var r = db.monthly_reviews.find(function (x) { return x.id === reviewId && x.couple_id === c.couple_id && !x.archived_at; });
+      return !!r && DB.monthlyVisible(db, userId, r);
+    },
+    canStartMonthlyReview: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditMonthlyReview: function (userId, reviewId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !reviewId) return !!c.member;
+      var db = read();
+      var r = db.monthly_reviews.find(function (x) { return x.id === reviewId && x.couple_id === c.couple_id && !x.archived_at; });
+      return !!r && DB.monthlyCanAct(db, userId, r);
+    },
+    canCompleteMonthlyReview: function (userId, reviewId) { return DB.canEditMonthlyReview(userId, reviewId); },
+    canViewCoupleMonthlyReview: function (userId, reviewId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !reviewId) return !!c.member;
+      var db = read();
+      var r = db.monthly_reviews.find(function (x) { return x.id === reviewId && x.couple_id === c.couple_id && !x.archived_at; });
+      return !!r && r.visibility === 'COUPLE' && DB.monthlyVisible(db, userId, r);
     },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
