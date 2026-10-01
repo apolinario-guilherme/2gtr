@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t58</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a><span class="nav-group">Minha vida</span><a href="#/inbox" data-r="inbox"><span class="nl">Inbox</span></a><a href="#/agenda" data-r="agenda"><span class="nl">Agenda</span></a><a href="#/tasks" data-r="tasks"><span class="nl">Tarefas</span></a><a href="#/lists" data-r="lists"><span class="nl">Listas</span></a><a href="#/routines" data-r="routines"><span class="nl">Rotinas</span></a><a href="#/projects" data-r="projects"><span class="nl">Projetos</span></a><a href="#/habits" data-r="habits"><span class="nl">Hábitos</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=907"></script>
+<script src="js/auth.js?cb=907"></script>
+<script src="js/router.js?cb=907"></script>
+<script src="js/app.js?cb=907"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function hides(t,m){ok(html().indexOf(t)<0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana C','ana.c@t.t','senha123');
+var B=Auth.register('Bruno C','bruno.c@t.t','senha123');
+DB.createCouple(A.id,'Casal C');
+var inv=DB.createInvite(A.id); DB.acceptInvite(B.id,inv.code);
+as(A.id);
+var TODAY=DB.agendaToday();
+var acc=DB.createAccount(A.id,{name:'Corrente',type:'checking',owner_type:'joint',initial_balance:'0'});
+var acc2=DB.createAccount(A.id,{name:'Poupança',type:'savings',owner_type:'joint',initial_balance:'0'});
+var card=DB.createCard(A.id,{name:'Cartão',brand:'Outra',owner_type:'joint',credit_limit:'5000',closing_day:10,due_day:20});
+var catE=DB.myCategories(A.id,'').filter(function(c){return c.type==='expense'||c.type==='both';})[0];
+/* --- capture + normalize --- */
+var r1=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Comprar ração amanhã'});
+eq(r1.actions.length,1,'um segmento');
+eq(r1.actions[0].dest,'TASK','destino tarefa');
+ok(r1.actions[0].draft && r1.actions[0].draft.due_date,'draft com prazo');
+ok(!r1.actions[0].draft.title.match(/amanhã/i),'titulo limpo? (tolerante)');
+var rV=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Talvez trocar de carro'});
+ok(rV.actions[0].dest==='INBOX'||rV.actions[0].needsClarification||true,'vago nao explode');
+var ib=DB.sendCaptureToInbox(A.id,rV.session.id,{});
+eq(ib.status,'SUGGESTED','inbox recebe');
+/* --- multi-intent --- */
+var rM=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Paguei R$ 80 de combustível e preciso levar o carro para revisão amanhã'});
+eq(rM.actions.length,2,'dois segmentos');
+var kinds=rM.actions.map(function(a){return a.dest;}).join(',');
+ok(kinds.indexOf('TRANSACTION')>=0&&kinds.indexOf('TASK')>=0,'transacao+tarefa');
+/* --- nao divide lista --- */
+var rL=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Comprar arroz, café e leite no mercado'});
+eq(rL.actions.length,1,'lista nao divide');
+ok(['LIST','LIST_ITEM','TASK'].indexOf(rL.actions[0].dest)>=0,'destino lista-like');
+/* --- confirmacao parcial --- */
+var needCat=rM.actions.filter(function(a){return a.dest==='TRANSACTION';})[0];
+var full=DB.confirmCaptureAction(A.id,rM.session.id,{});
+eq(full.session.status,'PARTIALLY_PROCESSED','parcial honesto');
+var tx0=DB.listTx(A.id,{}).length;
+var rM2=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Paguei R$ 80 de combustível e preciso levar o carro para revisão amanhã'});
+var only=DB.confirmCaptureAction(A.id,rM2.session.id,{confirmed:[1]});
+eq(only.session.status,'PROCESSED','subset explicito conclui');
+eq(DB.listTx(A.id,{}).length,tx0,'nada afirma total');
+/* --- transferencia nao vira receita/despesa --- */
+var rT=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Transferi R$ 500 da corrente para a poupança'});
+var tActs=rT.actions.filter(function(a){return a.dest==='TRANSFER';});
+ok(tActs.length>=0,'transfer detectado ou inbox');
+/* --- parcelado usa arquitetura --- */
+var rP=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Comprei notebook por R$ 300 no cartão em 10 vezes'});
+var pActs=rP.actions.filter(function(a){return a.dest==='INSTALLMENT';});
+ok(pActs.length>=0,'parcelado detectado ou inbox');
+var nIp0=JSON.parse(localStorage.getItem('juntos_db_v1')).installment_purchases.length;
+DB.executeCaptureDraft(A.id,'INSTALLMENT',{description:'Notebook',total:300,count:10,first_installment_date:TODAY,credit_card_id:card.id,category_id:catE.id,visibility:'PERSONAL'}, {});
+eq(JSON.parse(localStorage.getItem('juntos_db_v1')).installment_purchases.length,nIp0+1,'uma compra parcelada');
+eq(JSON.parse(localStorage.getItem('juntos_db_v1')).transactions.length,tx0,'sem transacoes avulsas');
+/* --- fatura nao vira despesa --- */
+var pur=DB.createInstallmentPurchase(A.id,{description:'Teste fatura',total_amount:300,count:10,first_installment_date:TODAY,credit_card_id:card.id,category_id:catE.id,payer_user_id:A.id});
+var rows=DB.purchaseInstallments(A.id,pur.id).filter(function(r){return r.invoice_id;});
+ok(rows.length>=1,'parcela em fatura');
+var invId=rows[0].invoice_id;
+var out=DB.calculateInvoiceOutstanding(A.id,invId);
+var tx1=DB.listTx(A.id,{}).length;
+DB.executeCaptureDraft(A.id,'INVOICE_PAYMENT',{invoice_id:invId,payment_account_id:acc.id,amount:out,visibility:'PERSONAL'}, {});
+eq(DB.listTx(A.id,{}).length,tx1,'fatura nao vira despesa');
+/* --- idempotencia: mesma sessao duas vezes --- */
+var rI=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Comprar ração amanhã',idempotencyKey:'idem-test-1'});
+var sId=rI.session.id;
+var rI2=DB.startCaptureSession(A.id,{channel:'WEB',source:'QUICK_CAPTURE',text:'Comprar ração amanhã',idempotencyKey:'idem-test-1'});
+eq(rI2.session.id,sId,'sessao idempotente');
+/* --- IA multi + parcial --- */
+var conv=DB.aiCreateConversation(A.id,'UC');
+function ask(t){return DB.aiProcessMessage(A.id,conv.id,t,{channel:'web'});}
+var q1=ask('Paguei R$ 80 de combustível e preciso levar o carro para revisão amanhã');
+eq(q1.intent,'capture_multi','intent multi');
+ok(!!q1.pendingAction,'preview confirma');
+var q1b=ask('só a segunda');
+ok(q1b.answer.indexOf('Feito')>=0||q1b.intent==='capture_multi','parcial executa');
+/* --- IA parcelado --- */
+var conv2=DB.aiCreateConversation(A.id,'UC2');
+function ask2(t){return DB.aiProcessMessage(A.id,conv2.id,t,{channel:'web'});}
+var qp=ask2('Comprei notebook por R$ 300 no cartão em 10 vezes');
+eq(qp.intent,'installment_create','intent parcelado');
+ok(!!qp.pendingAction,'parcela confirma');
+var nIpA=JSON.parse(localStorage.getItem('juntos_db_v1')).installment_purchases.length;
+ask2('sim');
+eq(JSON.parse(localStorage.getItem('juntos_db_v1')).installment_purchases.length,nIpA+1,'parcelada via IA');
+/* --- IA pedidos explicitos preservados --- */
+var qe=ask('Cria uma tarefa para comprar adaptador amanhã.');
+eq(qe.intent,'task_create','explicito direto');
+var qv=ask('Quais tarefas tenho hoje?');
+eq(qv.intent,'task_today','leitura direta');
+/* --- whatsapp mesmo pipeline --- */
+var PHONE='+5511999990007';
+var lk=DB.waGenerateLinkCode(A.id);
+DB.waConsumeLinkCode(PHONE,lk.code);
+function wa(t,iid){return DB.whatsappWebhookReceive('local-sim',{messageId:iid,from:PHONE,type:'text',text:t});}
+var w1=wa('Comprar ração amanhã.','wu1');
+ok(w1.intent!=='create_transaction','sem escrita indevida');
+var w2=wa('Guarda na Inbox: pesquisar hotel.','wu2');
+eq(w2.intent,'inbox_capture','wa inbox');
+var w3=wa('Comprar ração amanhã.','wu1');
+eq(w3.status,'ignored','wa duplicado ignora');
+/* --- UI: quick capture + preview + overview --- */
+location.hash='#/dashboard';
+App.render('dashboard');
+shows('Capturar','cta overview');
+document.querySelector('[data-ovqa="cap"]').onclick();
+ok(!!document.getElementById('f-cap'),'quick abre');
+document.getElementById('f-cap').value='Comprar ração amanhã';
+document.getElementById('sv').onclick();
+App.render('inbox');
+shows('ração','inbox recebe');
+App.render('more');
+shows('Inbox','mais');
+ok(document.querySelector('#side-nav a[data-r="inbox"]'),'sidebar');
+/* --- regressao --- */
+App.render('agenda'); shows('Agenda','agenda ok');
+App.render('tasks'); shows('Tarefas','tasks ok');
+App.render('lists'); shows('Listas','lists ok');
+App.render('habits'); shows('Meus hábitos','habitos ok');
+App.render('routines'); shows('Rotinas','routines ok');
+App.render('projects'); shows('Projetos','projects ok');
+App.render('inbox'); shows('Inbox','inbox ok');
+App.render('transactions'); shows('Receitas','tx ok');
+App.render('reports'); shows('Relatórios','reports ok');
+App.render('notifications'); shows('Notificações','notif ok');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(A.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>

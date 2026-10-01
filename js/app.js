@@ -915,7 +915,7 @@
       '</strong><button class="pnav" id="ov-next" aria-label="Próximo período">›</button></div>' +
       '<div class="seg" role="group" aria-label="Alcance"><button data-ovm="day" class="' + (ov.mode === 'day' ? 'on' : '') + '">Dia</button><button data-ovm="week" class="' + (ov.mode === 'week' ? 'on' : '') + '">Semana</button><button data-ovm="month" class="' + (ov.mode === 'month' ? 'on' : '') + '">Mês</button></div>' +
       '<div class="seg" role="group" aria-label="Visão"><button data-ovv="couple" class="' + (ov.vision === 'couple' ? 'on' : '') + '">Casal</button><button data-ovv="me" class="' + (ov.vision === 'me' ? 'on' : '') + '">' + vMe + '</button><button data-ovv="partner" class="' + (ov.vision === 'partner' ? 'on' : '') + '">' + vPa + '</button></div>' +
-      '<div class="qa-grid" role="group" aria-label="Ações rápidas"><button data-ovqa="ag">+ Compromisso</button><button data-ovqa="hb">✓ Hábito</button><button data-ovqa="tx">+ Movimentação</button></div>' +
+      '<div class="qa-grid" role="group" aria-label="Ações rápidas"><button data-ovqa="ag">+ Compromisso</button><button data-ovqa="hb">✓ Hábito</button><button data-ovqa="tx">+ Movimentação</button><button data-ovqa="cap">+ Capturar</button></div>' +
       (solo ? '<p class="muted">Falta 1 pessoa aqui. <a href="#/settings/couple">Convidar parceiro ›</a></p>' : '') + '</div>';
     if (loadErr || !day) {
       v.innerHTML = html + '<div class="card"><b>Visão Geral</b><div class="alert">Não foi possível carregar sua visão geral. Tente novamente.</div><button class="btn ghost" data-ovretry>Tentar novamente</button></div>';
@@ -1116,6 +1116,7 @@
         if (k === 'ag') openAgendaModal(me, null, null);
         else if (k === 'hb') location.hash = '#/habits';
         else if (k === 'tx') openTxModal(me, null, 'expense');
+        else if (k === 'cap') openQuickCapture(me);
       };
     });
     Array.prototype.forEach.call(v.querySelectorAll('[data-ovhb]'), function (b) {
@@ -3650,18 +3651,56 @@
   }
   function openQuickCapture(me, preset) {
     preset = preset || {};
+    var attach = null;
     modalShell('<h2>Capturar</h2><div id="me"></div>' +
       '<label>O que você quer guardar?</label><input id="f-cap" maxlength="500" value="' + esc(preset.content || '') + '" aria-label="O que você quer guardar?">' +
+      '<div class="row" role="group" aria-label="Anexar"><button class="btn ghost sm" id="cap-mic" aria-label="Ditar por voz">🎤 Voz</button><label class="btn ghost sm" style="cursor:pointer">📷 Foto<input type="file" id="cap-img" accept="image/jpeg,image/png,image/webp" style="display:none"></label><label class="btn ghost sm" style="cursor:pointer">📎 Arquivo<input type="file" id="cap-doc" accept="application/pdf" style="display:none"></label></div>' +
+      '<p class="muted" id="cap-att" role="status"></p>' +
       '<div class="row"><label class="check"><input type="radio" name="capvis" value="PERSONAL" checked> Pessoal</label><label class="check"><input type="radio" name="capvis" value="COUPLE"> Do casal</label></div>' +
       '<p class="muted">Vai para a Inbox. Você organiza depois.</p>' +
       '<button class="btn" id="sv">Capturar</button><button class="btn ghost" id="cl">Cancelar</button>');
     document.getElementById('cl').onclick = closeModal;
     var inp = document.getElementById('f-cap'); if (inp) inp.focus();
+    document.getElementById('cap-mic').onclick = function () {
+      var st = document.getElementById('cap-att');
+      try {
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+        if (!SR) { if (st) st.textContent = 'Voz não suportada aqui. Digite ou envie um arquivo.'; return; }
+        var r = new SR(); r.lang = 'pt-BR'; r.interimResults = false; r.maxAlternatives = 1;
+        if (st) st.textContent = 'Ouvindo… fale agora.';
+        r.onresult = function (ev) {
+          var t = ev.results[0][0].transcript || '';
+          var cur = document.getElementById('f-cap');
+          if (cur) cur.value = (cur.value ? cur.value + ' ' : '') + t;
+          if (st) st.textContent = 'Texto capturado da voz. Confira e ajuste.';
+        };
+        r.onerror = function () { if (st) st.textContent = 'Não entendi o áudio. Digite ou tente de novo.'; };
+        r.start();
+      } catch (e) { if (st) st.textContent = 'Voz indisponível. Digite.'; }
+    };
+    function pickFile(inputId, kind) {
+      var el = document.getElementById(inputId);
+      if (el) el.onchange = function (e) {
+        var f = e.target.files && e.target.files[0];
+        var st = document.getElementById('cap-att');
+        if (!f) return;
+        if (f.size > 10 * 1024 * 1024) { if (st) st.textContent = 'Arquivo muito grande (máx 10 MB).'; return; }
+        attach = { kind: kind, name: f.name || 'arquivo', mime: f.type || '', size: f.size };
+        if (st) st.textContent = 'Anexo: ' + attach.name + ' (' + kind.toLowerCase() + '). Adicione um texto se quiser.';
+      };
+    }
+    pickFile('cap-img', 'IMAGE');
+    pickFile('cap-doc', 'DOCUMENT');
     document.getElementById('sv').onclick = function () {
       var btn = this; lock(btn);
       try {
         var vs = document.querySelector('input[name="capvis"]:checked');
-        var it = J.DB.captureItem(me.id, { content: document.getElementById('f-cap').value, visibility: vs ? vs.value : 'PERSONAL', source: 'QUICK_CAPTURE' }, {});
+        var txt = document.getElementById('f-cap').value;
+        var itp = 'TEXT', prov = {};
+        if (attach && attach.kind === 'IMAGE') { itp = txt.trim() ? 'MULTIMODAL' : 'IMAGE'; prov = { file_name: attach.name, file_size: attach.size, file_mime: attach.mime }; }
+        else if (attach && attach.kind === 'DOCUMENT') { itp = txt.trim() ? 'MULTIMODAL' : 'DOCUMENT'; prov = { file_name: attach.name, file_size: attach.size, file_mime: attach.mime }; }
+        if (!txt.trim() && !attach) throw new Error('Escreva ou anexe algo para capturar.');
+        var it = J.DB.captureItem(me.id, { content: txt.trim() || ('[' + (attach ? attach.name : 'anexo') + ']'), visibility: vs ? vs.value : 'PERSONAL', source: 'QUICK_CAPTURE', input_type: itp, processing_metadata: prov }, {});
         closeModal();
         toast('Capturado! ' + J.DB.inboxSuggestionText(it));
         render(here());
