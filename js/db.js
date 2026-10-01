@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [], weekly_plans: [], weekly_priorities: [], monthly_reviews: [], monthly_review_sections: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [], capture_sessions: [], capture_actions: [], weekly_plans: [], weekly_priorities: [], monthly_reviews: [], monthly_review_sections: [], oauth_identities: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -238,6 +238,7 @@ window.Juntos = window.Juntos || {};
     if (!db.weekly_priorities) { db.weekly_priorities = []; changed = true; }
     if (!db.monthly_reviews) { db.monthly_reviews = []; changed = true; }
     if (!db.monthly_review_sections) { db.monthly_review_sections = []; changed = true; }
+    if (!db.oauth_identities) { db.oauth_identities = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -501,6 +502,62 @@ window.Juntos = window.Juntos || {};
       logAudit(db, inv.couple_id, userId, 'invite', inv.id, 'accepted', {});
       try { DB.logSecurityEvent(userId, 'security_event', { action: 'invite_accepted', entity_type: 'invitation', entity_id: inv.id, metadata: {} }); } catch (e) {}
       write(db); return inv.couple_id;
+    },
+
+    /* ============ IDENTIDADES OAUTH (login social; agregação, sem segredos) ============
+       Uma linha por (provider, provider_user_id). Um usuário pode ter N provedores.
+       E-mail do provedor só vincula conta existente quando verified (Google/Apple)
+       ou com confirmação explícita + senha (Facebook/sem flag). */
+    OAUTH_PROVIDERS: function () { return ['google', 'facebook', 'apple']; },
+    findOAuthIdentity: function (provider, providerUserId) {
+      var db = read(), cid = null;
+      var row = (db.oauth_identities || []).find(function (x) {
+        return x.provider === String(provider).toLowerCase() && x.provider_user_id === String(providerUserId);
+      }) || null;
+      return row;
+    },
+    userOAuthIdentities: function (userId) {
+      var db = read();
+      return (db.oauth_identities || []).filter(function (x) { return x.user_id === userId; });
+    },
+    linkOAuthIdentity: function (userId, data) {
+      data = data || {};
+      var provider = String(data.provider || '').toLowerCase();
+      if (DB.OAUTH_PROVIDERS().indexOf(provider) < 0) throw new Error('Provedor inválido.');
+      var sub = String(data.provider_user_id || '');
+      if (!sub) throw new Error('Identidade do provedor inválida.');
+      var db = read();
+      var me = db.users.find(function (u) { return u.id === userId; });
+      if (!me) throw new Error('Usuário não encontrado.');
+      var ex = (db.oauth_identities || []).find(function (x) { return x.provider === provider && x.provider_user_id === sub; });
+      if (ex) {
+        if (ex.user_id === userId) return ex;
+        throw new Error('Esta conta social já está vinculada a outro usuário do 2gtr.');
+      }
+      var row = { id: id('oi'), user_id: userId, provider: provider, provider_user_id: sub, email: String(data.email || '').trim().toLowerCase().slice(0, 120) || null, email_verified: !!data.email_verified, created_at: now() };
+      db.oauth_identities.push(row);
+      logAudit(db, DB.myCoupleId(userId), userId, 'oauth_identity', row.id, 'linked', { provider: provider });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'oauth_linked', entity_type: 'oauth_identity', entity_id: row.id, metadata: { provider: provider } }); } catch (e) {}
+      return row;
+    },
+    unlinkOAuthIdentity: function (userId, provider) {
+      var db = read();
+      var rows = (db.oauth_identities || []).filter(function (x) { return x.user_id === userId && x.provider === String(provider).toLowerCase(); });
+      if (!rows.length) throw new Error('Nenhuma conta vinculada deste provedor.');
+      var u = db.users.find(function (x) { return x.id === userId; });
+      var others = (db.oauth_identities || []).filter(function (x) { return x.user_id === userId && x.provider !== String(provider).toLowerCase(); });
+      if ((!u || !u.pass) && !others.length) throw new Error('Você precisa manter uma senha ou outro login social para remover este vínculo.');
+      rows.forEach(function (r) { db.oauth_identities.splice(db.oauth_identities.indexOf(r), 1); });
+      logAudit(db, DB.myCoupleId(userId), userId, 'oauth_identity', provider, 'unlinked', { provider: provider });
+      write(db);
+      return true;
+    },
+    findUserByEmail: function (email) {
+      var db = read();
+      email = String(email || '').trim().toLowerCase();
+      if (!email) return null;
+      return db.users.find(function (u) { return String(u.email || '').toLowerCase() === email; }) || null;
     },
 
     /* ============ CATEGORIAS (etapa 2, preservado) ============ */
@@ -10137,11 +10194,14 @@ window.Juntos = window.Juntos || {};
       }
       return days;
     },
-    /* Semana seg-dom pt-BR como objeto (start/end/days); mesma base do ovWeekRange.
-       Usado por WeeklyPlanningService, Minha Semana, IA/WhatsApp e monthly-review. */
+    /* Semana seg-dom pt-BR; mesma base do ovWeekRange. Retorna objeto indexado
+       (0..6 + length, como array) com .start/.end/.days — sem referência
+       circular, seguro para JSON. */
     weekRangeOf: function (date) {
       var days = DB.ovWeekRange(date);
-      return { start: days[0], end: days[6], days: days };
+      var o = { start: days[0], end: days[6], days: days, length: 7 };
+      for (var i = 0; i < days.length; i++) o[i] = days[i];
+      return o;
     },
     getOverviewDay: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
