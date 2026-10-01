@@ -1,2 +1,2 @@
-# 2gtr — segredos/config local (nunca commitar)
-js/config.js
+# 2gtr — segredos locais (nunca commitar)
+supabase/.env
