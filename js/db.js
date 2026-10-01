@@ -10137,6 +10137,12 @@ window.Juntos = window.Juntos || {};
       }
       return days;
     },
+    /* Semana seg-dom pt-BR como objeto (start/end/days); mesma base do ovWeekRange.
+       Usado por WeeklyPlanningService, Minha Semana, IA/WhatsApp e monthly-review. */
+    weekRangeOf: function (date) {
+      var days = DB.ovWeekRange(date);
+      return { start: days[0], end: days[6], days: days };
+    },
     getOverviewDay: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
       if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
