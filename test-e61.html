@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t61</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=908"></script>
+<script src="js/auth.js?cb=908"></script>
+<script src="js/router.js?cb=908"></script>
+<script src="js/app.js?cb=908"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function hides(t,m){ok(html().indexOf(t)<0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+function all(){return JSON.parse(localStorage.getItem('juntos_db_v1'));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana S','ana.s@t.t','senha123');
+var B=Auth.register('Bruno S','bruno.s@t.t','senha123');
+DB.createCouple(A.id,'Casal S');
+var inv=DB.createInvite(A.id); DB.acceptInvite(B.id,inv.code);
+as(A.id);
+var TODAY=DB.agendaToday();
+var catE=DB.myCategories(A.id,'').filter(function(c){return c.type==='expense'||c.type==='both';})[0];
+var acc=DB.createAccount(A.id,{name:'Conta S',type:'checking',owner_type:'joint',initial_balance:'0'});
+/* --- fixtures pessoais e do casal --- */
+var hb=DB.createHabit(A.id,{name:'Leitura'});
+var tP=DB.createTask(A.id,{title:'Diário pessoal',visibility:'PERSONAL'});
+var tC=DB.createTask(A.id,{title:'Pintar sala',visibility:'COUPLE',assigned_to:A.id});
+var lP=DB.createList(A.id,{name:'Pessoal',visibility:'PERSONAL'});
+DB.addItem(A.id,lP.id,{title:'Café'});
+var lC=DB.createList(A.id,{name:'Mercado',visibility:'COUPLE'});
+DB.addItem(A.id,lC.id,{title:'Pão'});
+var rt=DB.createRoutine(A.id,{name:'Manhã',visibility:'PERSONAL'});
+DB.addRoutineItem(A.id,rt.id,{title:'Arrumar cama'});
+var ex=DB.getOrCreateExecution(A.id,rt.id,TODAY);
+var pjP=DB.createProject(A.id,{name:'Estudos',visibility:'PERSONAL'});
+var pjC=DB.createProject(A.id,{name:'Reforma',visibility:'COUPLE'});
+var wp=DB.getOrCreateWeeklyPlan(A.id,{visibility:'PERSONAL'});
+var mr=DB.startReview(A.id,{visibility:'PERSONAL'});
+var txS=DB.createTx(A.id,{type:'expense',description:'Mercado casal',amount:'100',date:TODAY,category_id:catE.id,payer_user_id:A.id,is_shared:true,account_id:acc.id});
+var txP=DB.createTx(A.id,{type:'expense',description:'Livro',amount:'40',date:TODAY,category_id:catE.id,payer_user_id:A.id,is_shared:false,account_id:acc.id});
+var lk=DB.waGenerateLinkCode(A.id);
+DB.waConsumeLinkCode('h_fone_a',lk.code,'local-sim',{preHashed:true});
+DB.captureItem(A.id,{content:'Lembrar conta',visibility:'PERSONAL'});
+/* --- desativação --- */
+var dr=Auth.deactivateAccount();
+ok(dr.deactivated,'desativa');
+ok(!!all().users.find(function(u){return u.id===A.id;}).deactivated_at,'marca deactivated_at');
+eq(Auth.current(),null,'sessao morre');
+as(A.id);
+eq(Auth.current(),null,'sessao legada nao volta');
+throws(function(){Auth.login('ana.s@t.t','errada');},'senha errada nega');
+ok(!!all().users.find(function(u){return u.id===A.id;}).deactivated_at,'continua desativada');
+var me=Auth.login('ana.s@t.t','senha123');
+eq(me.id,A.id,'login reativa');
+eq(all().users.find(function(u){return u.id===A.id;}).deactivated_at,null,'limpa flag');
+ok(!!Auth.current(),'sessao nova valida');
+eq(DB.deactivateAccount(A.id).deactivated,true,'re-desativa');
+eq(DB.deactivateAccount(A.id).already,true,'idempotente');
+/* --- sem sessão não opera --- */
+as(null);
+throws(function(){Auth.deactivateAccount();},'sem sessao nao desativa');
+throws(function(){Auth.deleteAccount('senha123');},'sem sessao nao exclui');
+as(A.id);
+/* --- exclusão exige reautenticação --- */
+throws(function(){Auth.deleteAccount();},'sem prova nega');
+throws(function(){Auth.deleteAccount('errada');},'senha errada nega exclusao');
+throws(function(){J.DB.deleteUserAccount(A.id,{userId:B.id,method:'password',at:Date.now()});},'prova de outro usuario nega');
+throws(function(){J.DB.deleteUserAccount(A.id,{userId:A.id,method:'password',at:Date.now()-11*60*1000});},'prova velha nega');
+/* --- prova social válida no backend --- */
+var C=Auth.register('Caio S','caio.s@t.t','senha456');
+as(C.id);
+var rs=J.DB.deleteUserAccount(C.id,{userId:C.id,method:'social',at:Date.now()});
+ok(rs.deleted,'prova social válida exclui');
+/* --- exclusão completa de A --- */
+as(A.id);
+Auth.login('ana.s@t.t','senha123');
+var del=Auth.deleteAccount('senha123');
+ok(del.deleted,'excluiu');
+eq(DB.findUserByEmail('ana.s@t.t'),null,'sem linha de usuario');
+eq(all().members.some(function(m){return m.user_id===A.id;}),false,'fora do casal');
+eq(all().habits.some(function(h){return h.user_id===A.id;}),false,'habitos somem');
+eq(all().tasks.some(function(t){return t.owner_user_id===A.id&&t.visibility!=='COUPLE';}),false,'tasks pessoais somem');
+ok(all().tasks.some(function(t){return t.title==='Pintar sala';}),'task do casal fica');
+eq(all().tasks.find(function(t){return t.title==='Pintar sala';}).assigned_to,null,'atribuicao limpa');
+eq(all().lists.some(function(l){return l.name==='Pessoal';}),false,'lista pessoal some');
+ok(all().lists.some(function(l){return l.name==='Mercado';}),'lista do casal fica');
+ok(all().list_items.some(function(x){return x.title==='Pão';}),'item do casal fica');
+eq(all().list_items.some(function(x){return x.title==='Café';}),false,'item pessoal some');
+eq(all().routines.some(function(r){return r.user_id===A.id||r.owner_user_id===A.id;}),false,'rotinas pessoais somem');
+eq(all().routine_executions.some(function(e){return e.user_id===A.id;}),false,'execucoes somem');
+eq(all().projects.some(function(p){return p.name==='Estudos';}),false,'projeto pessoal some');
+ok(all().projects.some(function(p){return p.name==='Reforma';}),'projeto do casal fica');
+eq(all().weekly_plans.some(function(p){return p.user_id===A.id;}),false,'planos semanais somem');
+eq(all().monthly_reviews.some(function(r){return r.user_id===A.id;}),false,'fechamentos somem');
+eq(all().inbox_items.some(function(x){return x.user_id===A.id;}),false,'inbox some');
+ok(all().transactions.some(function(t){return t.description==='Mercado casal';}),'tx compartilhada fica');
+ok(all().transactions.some(function(t){return t.description==='Livro';}),'tx individual fica (historico)');
+eq(all().oauth_identities.some(function(x){return x.user_id===A.id;}),false,'identidades somem');
+eq(all().whatsapp_connections.some(function(c){return c.user_id===A.id;}),false,'whatsapp desvincula');
+eq(all().ai_conversations.some(function(x){return x.user_id===A.id;}),false,'conversas IA somem');
+ok(all().audit_logs.some(function(a){return a.entity_type==='account'&&a.action==='deleted';}),'auditoria mantida');
+/* --- parceiro intacto --- */
+as(B.id);
+ok(!!Auth.current(),'sessao de B valida');
+ok(!!DB.myCoupleId(B.id),'casal mantido');
+eq(DB.findUserByEmail('bruno.s@t.t').id,B.id,'B intacto');
+/* --- segunda chamada nao quebra nem duplica --- */
+throws(function(){Auth.deleteAccount('senha123');},'pos-exclusao sem sessao');
+var again=Auth.register('Ana N','ana.s@t.t','nova123');
+eq(again.email,'ana.s@t.t','email liberado p/ novo cadastro');
+/* --- UI: seção Conta --- */
+App.render('settings/account');
+shows('Desativar conta','secao desativar');
+shows('Excluir minha conta','secao excluir');
+document.getElementById('acc-del').onclick();
+shows('EXCLUIR','modal pede confirmacao');
+ok(document.getElementById('sv').disabled,'botao travado');
+document.getElementById('f-del').value='EXCLUIR';
+document.getElementById('f-del').oninput();
+ok(!document.getElementById('sv').disabled,'botao libera');
+document.getElementById('cl').onclick();
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(B.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>

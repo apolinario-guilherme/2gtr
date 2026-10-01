@@ -6000,7 +6000,7 @@
     return '<p class="muted"><a href="#/settings">‹ Configurações</a> <span class="crumb-sep">› ' + esc(title) + '</span></p>';
   }
   var SETTING_GROUPS = [
-    ['Conta', [['profile', '👤', 'Meu perfil', 'Nome, e-mail, avatar e conta'], ['preferences', '🎛️', 'Preferências', 'Visão padrão e período inicial'], ['privacy', '🔒', 'Privacidade e segurança', 'Senha, segurança e auditoria']]],
+    ['Conta', [['profile', '👤', 'Meu perfil', 'Nome, e-mail, avatar e conta'], ['account', '🗝️', 'Conta', 'Desativar ou excluir sua conta'], ['preferences', '🎛️', 'Preferências', 'Visão padrão e período inicial'], ['privacy', '🔒', 'Privacidade e segurança', 'Senha, segurança e auditoria']]],
     ['Casal', [['couple', '❤️', 'Casal', 'Participantes e convites'], ['money', '💱', 'Gestão do dinheiro', 'Dinheiro separado ou tudo junto']]],
     ['Finanças', [['categories', '🏷️', 'Categorias', 'Categorias e subcategorias'], ['automation', '⚙️', 'Automação', 'Regras e automações'], ['financial', '💹', 'Preferências financeiras', 'Insights e visualização'], ['data', '📥', 'Dados', 'Importações e reconciliações']]],
     ['Comunicação', [['notifications', '🔔', 'Notificações', 'Preferências de alertas'], ['whatsapp', '📱', 'WhatsApp', 'Conexão e preferências'], ['assistant', '🤖', 'Assistente financeiro', 'Conversas e privacidade']]]
@@ -6017,7 +6017,7 @@
       }).join('');
   }
   function pSettingsSub(v, me, sub) {
-    var map = { profile: pSettingsProfile, preferences: pSettingsPreferences, couple: pSettingsCouple, money: pSettingsMoney, financial: pSettingsFinancial, automation: pSettingsAutomation, notifications: pSettingsNotifPrefs, whatsapp: pSettingsWhatsapp, assistant: pSettingsAssistant, data: pSettingsData, categories: pSettingsCategories, privacy: pSettingsPrivacy };
+    var map = { profile: pSettingsProfile, account: pSettingsAccount, preferences: pSettingsPreferences, couple: pSettingsCouple, money: pSettingsMoney, financial: pSettingsFinancial, automation: pSettingsAutomation, notifications: pSettingsNotifPrefs, whatsapp: pSettingsWhatsapp, assistant: pSettingsAssistant, data: pSettingsData, categories: pSettingsCategories, privacy: pSettingsPrivacy };
     var fn = map[sub];
     if (!fn) { location.hash = '#/settings'; return pSettings(v, me); }
     return fn(v, me);
@@ -6028,6 +6028,81 @@
     var isOwner = ctx.members.some(function (m) { return m.user_id === me.id && m.role === 'owner'; });
     v.innerHTML = crumb('Gestão do dinheiro') + '<div class="card"><h1>Gestão do dinheiro</h1><p class="muted">Como vocês querem administrar o dinheiro? Os registros financeiros existentes nunca são alterados.</p></div>' + moneyModeCard(me, ctx, isOwner);
     bindMoneyMode(me, isOwner);
+  }
+  function pSettingsAccount(v, me) {
+    var ids = [];
+    try { ids = J.DB.userOAuthIdentities(me.id); } catch (e) {}
+    var idLbl = { google: 'Google', facebook: 'Facebook', apple: 'Apple' };
+    v.innerHTML = crumb('Conta') + '<div class="card"><h1>Conta</h1><p class="muted">Gerencie o acesso à sua conta do 2gtr.</p>' +
+      '<p><b>' + esc(me.nome) + '</b><br><span class="muted">' + esc(me.email) + '</span></p>' +
+      '<p class="muted">Entrada: ' + (me.pass ? 'senha' : 'somente login social') + (ids.length ? ' • ' + ids.map(function (x) { return idLbl[x.provider] || x.provider; }).join(', ') : '') + '</p></div>' +
+      '<div class="card"><h2>Desativar conta</h2><p class="muted">Desative temporariamente sua conta. Seu perfil ficará indisponível até você entrar novamente. Nada é apagado.</p><button class="btn secondary" id="acc-deact" style="max-width:240px">Desativar conta</button></div>' +
+      '<div class="card danger-zone"><h2>⛔ Excluir conta</h2><p class="muted">Exclua permanentemente sua conta e os dados associados. Seus dados pessoais somem; o casal e o histórico compartilhado ficam para seu parceiro. <b>Esta ação não poderá ser desfeita.</b></p><button class="btn danger" id="acc-del" style="max-width:240px">Excluir minha conta</button></div>';
+    document.getElementById('acc-deact').onclick = function () { openDeactivateModal(me); };
+    document.getElementById('acc-del').onclick = function () { openDeleteModal(me); };
+  }
+  function openDeactivateModal(me) {
+    modalShell('<h2>Desativar conta</h2><div id="me"></div>' +
+      '<p>Ao desativar:</p><ul><li>Você sai em todos os lugares neste aparelho;</li><li>sessões antigas param de funcionar;</li><li>seus dados ficam guardados;</li><li>ao entrar de novo, a conta volta sozinha.</li></ul>' +
+      '<div class="row"><button class="btn secondary" id="sv">Desativar conta</button><button class="btn ghost" id="cl">Cancelar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        J.Auth.deactivateAccount();
+        closeModal(); toast('Conta desativada. Até logo!');
+      } catch (e) { document.getElementById('me').innerHTML = err(e); unlock(btn); }
+    };
+  }
+  function openDeleteModal(me) {
+    var hasPass = !!me.pass, ids = [];
+    try { ids = J.DB.userOAuthIdentities(me.id); } catch (e) {}
+    var idLbl = { google: 'Google', facebook: 'Facebook', apple: 'Apple' };
+    modalShell('<h2>Excluir minha conta</h2><div id="me"></div>' +
+      '<div class="alert">Ação permanente: sua conta e seus dados pessoais serão apagados. O casal e o histórico compartilhado ficam para seu parceiro. Não há como desfazer.</div>' +
+      '<label for="f-del">Digite <b>EXCLUIR</b> para continuar</label><input id="f-del" autocomplete="off" placeholder="EXCLUIR">' +
+      '<div id="reauth-zone"></div>' +
+      '<div class="row"><button class="btn danger" id="sv" disabled>Excluir permanentemente</button><button class="btn ghost" id="cl">Cancelar</button></div>');
+    document.getElementById('cl').onclick = closeModal;
+    var inp = document.getElementById('f-del'), sv = document.getElementById('sv');
+    inp.oninput = function () { sv.disabled = (inp.value.trim() !== 'EXCLUIR'); };
+    sv.onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var rz = document.getElementById('reauth-zone');
+        if (hasPass) {
+          rz.innerHTML = '<label for="f-rpw">Senha atual (confirma que é você)</label><input id="f-rpw" type="password" autocomplete="current-password"><div class="row"><button class="btn danger" id="go">Excluir permanentemente</button></div>';
+          unlock(btn);
+          document.getElementById('go').onclick = function () {
+            var b2 = this; lock(b2);
+            try {
+              J.Auth.deleteAccount((document.getElementById('f-rpw') || {}).value);
+              closeModal(); location.hash = '#/landing'; toast('Conta excluída permanentemente.');
+            } catch (e3) { document.getElementById('me').innerHTML = err(e3); unlock(b2); }
+          };
+        } else if (ids.length) {
+          rz.innerHTML = '<p class="muted">Confirme com seu login social:</p>' + ids.map(function (x) {
+            return '<button class="btn soc" data-ra="' + x.provider + '" style="max-width:100%">' + socIcon(x.provider) + '<span>Confirmar com ' + (idLbl[x.provider] || x.provider) + '</span></button>';
+          }).join('') + '<div id="e2"></div>';
+          unlock(btn);
+          Array.prototype.forEach.call(rz.querySelectorAll('[data-ra]'), function (b) {
+            b.onclick = function () {
+              lock(b);
+              J.Auth.reauthenticateSocial(b.dataset.ra).then(function () {
+                try {
+                  J.Auth.deleteAccount(null);
+                  closeModal(); location.hash = '#/landing'; toast('Conta excluída permanentemente.');
+                } catch (e4) { document.getElementById('me').innerHTML = err(e4); unlock(b); }
+              }).catch(function (e5) {
+                document.getElementById('me').innerHTML = err(new Error(J.Auth.socialErrorMessage(b.dataset.ra, e5))); unlock(b);
+              });
+            };
+          });
+        } else {
+          document.getElementById('me').innerHTML = err(new Error('Sua conta não tem senha nem login social. Fale com o suporte.')); unlock(btn);
+        }
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
   }
   function pSettingsPreferences(v, me) {
     v.innerHTML = crumb('Preferências') + '<div class="card"><h1>Preferências</h1><div id="e"></div>' +

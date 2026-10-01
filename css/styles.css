@@ -153,6 +153,9 @@ p{margin:8px 0}
 .btn.tertiary{background:none;color:var(--primary);min-height:44px}
 .btn.danger{background:var(--danger)}
 .btn.danger:hover{filter:brightness(.94)}
+.btn.danger:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.danger-zone{border:1.5px solid var(--danger)}
+.danger-zone h2{color:var(--danger)}
 .btn.sm{min-height:44px;padding:10px 14px;font-size:14px}
 .btn.loading{opacity:.7;pointer-events:none}
 .btn + .btn{margin-top:8px}

@@ -239,6 +239,10 @@ window.Juntos = window.Juntos || {};
     if (!db.monthly_reviews) { db.monthly_reviews = []; changed = true; }
     if (!db.monthly_review_sections) { db.monthly_review_sections = []; changed = true; }
     if (!db.oauth_identities) { db.oauth_identities = []; changed = true; }
+    db.users.forEach(function (u) {
+      if (u.deactivated_at === undefined) { u.deactivated_at = null; changed = true; }
+      if (u.session_version == null) { u.session_version = 1; changed = true; }
+    });
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -558,6 +562,140 @@ window.Juntos = window.Juntos || {};
       email = String(email || '').trim().toLowerCase();
       if (!email) return null;
       return db.users.find(function (u) { return String(u.email || '').toLowerCase() === email; }) || null;
+    },
+
+    /* ============ CONTA: desativar / reativar / excluir (backend da ação) ============
+       Todas recebem só o userId da sessão (nunca alvo arbitrário do frontend).
+       Exclusão exige proof de reautenticação recente (senha ou social). */
+    deactivateAccount: function (userId) {
+      DB.requireAuthz(userId, 'account_deactivate', null);
+      var db = read();
+      var u = db.users.find(function (x) { return x.id === userId; });
+      if (!u) throw new Error('Conta não encontrada.');
+      if (u.deactivated_at) return { already: true };
+      u.deactivated_at = now();
+      u.session_version = (u.session_version || 1) + 1;
+      u.updated_at = now();
+      logAudit(db, DB.myCoupleId(userId), userId, 'account', userId, 'deactivated', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'account_deactivated', entity_type: 'user', entity_id: userId, metadata: {} }); } catch (e) {}
+      return { deactivated: true };
+    },
+    reactivateAccount: function (userId) {
+      var db = read();
+      var u = db.users.find(function (x) { return x.id === userId; });
+      if (!u || !u.deactivated_at) return false;
+      u.deactivated_at = null;
+      u.updated_at = now();
+      logAudit(db, DB.myCoupleId(userId), userId, 'account', userId, 'reactivated', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'account_reactivated', entity_type: 'user', entity_id: userId, metadata: {} }); } catch (e) {}
+      return true;
+    },
+    deleteUserAccount: function (userId, proof) {
+      try { DB.rateCheck('account:delete:' + userId, 5, 60000); } catch (e) { throw new Error('Muitas tentativas. Aguarde um momento.'); }
+      DB.requireAuthz(userId, 'account_delete', null);
+      if (!proof || proof.userId !== userId || (proof.method !== 'password' && proof.method !== 'social') || !(proof.at > Date.now() - 10 * 60 * 1000)) {
+        throw new Error('Confirme sua identidade novamente para excluir a conta.');
+      }
+      var db = read();
+      var u = db.users.find(function (x) { return x.id === userId; });
+      if (!u) return { already: true, deleted: true };
+      var email = String(u.email || '').toLowerCase();
+      var cid = (db.members.find(function (m) { return m.user_id === userId; }) || {}).couple_id || null;
+      var removed = {};
+      function sweep(arr, fn) {
+        if (!db[arr]) return 0;
+        var before = db[arr].length;
+        db[arr] = db[arr].filter(function (x) { return !fn(x); });
+        return before - db[arr].length;
+      }
+      function personal(e) { return e.visibility !== 'COUPLE'; }
+      /* Pessoais do usuário (somem por completo). */
+      var habitIds = {};
+      (db.habits || []).forEach(function (h) { if (h.user_id === userId) habitIds[h.id] = true; });
+      removed.habits = sweep('habits', function (h) { return h.user_id === userId; });
+      removed.habit_completions = sweep('habit_completions', function (c) { return c.user_id === userId || habitIds[c.habit_id]; });
+      removed.inbox_items = sweep('inbox_items', function (x) { return x.user_id === userId; });
+      var wpIds = {};
+      (db.weekly_plans || []).forEach(function (p) { if (p.user_id === userId) wpIds[p.id] = true; });
+      removed.weekly_plans = sweep('weekly_plans', function (p) { return p.user_id === userId; });
+      removed.weekly_priorities = sweep('weekly_priorities', function (p) { return wpIds[p.weekly_plan_id]; });
+      var mrIds = {};
+      (db.monthly_reviews || []).forEach(function (r) { if (r.user_id === userId) mrIds[r.id] = true; });
+      removed.monthly_reviews = sweep('monthly_reviews', function (r) { return r.user_id === userId; });
+      removed.monthly_review_sections = sweep('monthly_review_sections', function (s) { return mrIds[s.monthly_review_id]; });
+      removed.saved_reports = sweep('saved_reports', function (r) { return r.user_id === userId; });
+      var taskIds = {};
+      (db.tasks || []).forEach(function (t) { if (t.owner_user_id === userId && personal(t)) taskIds[t.id] = true; });
+      removed.tasks = sweep('tasks', function (t) { return !!taskIds[t.id]; });
+      (db.tasks || []).forEach(function (t) { if (t.assigned_to === userId) { t.assigned_to = null; t.updated_at = now(); } });
+      var lstGone = {};
+      (db.lists || []).forEach(function (l) { if (l.owner_user_id === userId && personal(l)) lstGone[l.id] = true; });
+      removed.lists = sweep('lists', function (l) { return !!lstGone[l.id]; });
+      removed.list_items = sweep('list_items', function (x) { return !!lstGone[x.list_id]; });
+      var rtIds = {};
+      (db.routines || []).forEach(function (r) { if (r.owner_user_id === userId && personal(r)) rtIds[r.id] = true; });
+      removed.routines = sweep('routines', function (r) { return !!rtIds[r.id]; });
+      removed.routine_items = sweep('routine_items', function (x) { return !!rtIds[x.routine_id]; });
+      var exIds = {};
+      (db.routine_executions || []).forEach(function (e) { if (e.user_id === userId) exIds[e.id] = true; });
+      removed.routine_executions = sweep('routine_executions', function (e) { return !!exIds[e.id]; });
+      removed.routine_item_executions = sweep('routine_item_executions', function (e) { return !!exIds[e.routine_execution_id]; });
+      removed.routine_contexts = sweep('routine_contexts', function (x) { return x.user_id === userId; });
+      var pjIds = {};
+      (db.projects || []).forEach(function (p) { if (p.owner_user_id === userId && personal(p)) pjIds[p.id] = true; });
+      removed.projects = sweep('projects', function (p) { return !!pjIds[p.id]; });
+      removed.project_links = sweep('project_links', function (l) { return !!pjIds[l.project_id]; });
+      removed.agenda_events = sweep('agenda_events', function (e) { return e.owner_user_id === userId && personal(e); });
+      /* Mídia e IA do usuário. */
+      removed.audio = sweep('audio_messages', function (x) { return x.user_id === userId; });
+      removed.images = sweep('image_messages', function (x) { return x.user_id === userId; });
+      removed.documents = sweep('financial_documents', function (x) { return x.user_id === userId; });
+      var miIds = {};
+      (db.multimodal_inputs || []).forEach(function (x) { if (x.user_id === userId) miIds[x.id] = true; });
+      removed.multimodal_inputs = sweep('multimodal_inputs', function (x) { return !!miIds[x.id]; });
+      removed.input_evidence = sweep('input_evidence', function (x) { return !!miIds[x.input_id]; });
+      removed.ai_conversations = sweep('ai_conversations', function (x) { return x.user_id === userId; });
+      removed.ai_messages = sweep('ai_messages', function (x) { return x.user_id === userId; });
+      removed.ai_actions = sweep('ai_actions', function (x) { return x.user_id === userId; });
+      var capIds = {};
+      (db.capture_sessions || []).forEach(function (x) { if (x.user_id === userId) capIds[x.id] = true; });
+      removed.capture_sessions = sweep('capture_sessions', function (x) { return !!capIds[x.id]; });
+      removed.capture_actions = sweep('capture_actions', function (x) { return !!capIds[x.capture_session_id]; });
+      /* Notificações e preferências próprias. */
+      removed.notifications = sweep('notifications', function (x) { return x.user_id === userId; });
+      removed.notification_preferences = sweep('notification_preferences', function (x) { return x.user_id === userId; });
+      /* Credenciais e vínculos. */
+      removed.oauth_identities = sweep('oauth_identities', function (x) { return x.user_id === userId; });
+      removed.resets = sweep('resets', function (x) { return String(x.email || '').toLowerCase() === email; });
+      var waHashes = {};
+      (db.whatsapp_connections || []).forEach(function (c) { if (c.user_id === userId) waHashes[c.phone_hash] = true; });
+      removed.whatsapp_connections = sweep('whatsapp_connections', function (c) { return c.user_id === userId; });
+      removed.whatsapp_link_codes = sweep('whatsapp_link_codes', function (x) { return x.user_id === userId; });
+      removed.whatsapp_messages = sweep('whatsapp_messages', function (x) { return x.user_id === userId || !!waHashes[x.phone_hash]; });
+      removed.whatsapp_message_failures = sweep('whatsapp_message_failures', function (x) { return x.user_id === userId || !!waHashes[x.phone_hash]; });
+      removed.of_connections = sweep('openfinance_connections', function (c) { return c.user_id === userId; });
+      /* Convites pendentes criados pelo usuário são cancelados. */
+      var cancelledInvites = 0;
+      (db.invitations || []).forEach(function (i) { if (i.created_by === userId && i.status === 'pending') { i.status = 'cancelled'; cancelledInvites++; } });
+      removed.invitations_cancelled = cancelledInvites;
+      /* Sai do casal (casal e dados compartilhados ficam para o parceiro).
+         Ex-membro vira lápide p/ integridade do histórico (diagnose/settle). */
+      removed.memberships = sweep('members', function (m) { return m.user_id === userId; });
+      if (cid) {
+        var cp = db.couples.find(function (c) { return c.id === cid; });
+        if (cp) {
+          cp.former_user_ids = cp.former_user_ids || [];
+          if (cp.former_user_ids.indexOf(userId) < 0) cp.former_user_ids.push(userId);
+        }
+      }
+      /* Trilha preservada (sem segredos); conta removida por último. */
+      logAudit(db, cid, userId, 'account', userId, 'deleted', { couple_kept: !!cid });
+      try { DB.logSecurityEvent(userId, 'security_event', { action: 'account_deleted', entity_type: 'user', entity_id: userId, metadata: {} }); } catch (e2) {}
+      db.users.splice(db.users.indexOf(u), 1);
+      write(db);
+      return { deleted: true, removed: removed, keptCouple: !!cid };
     },
 
     /* ============ CATEGORIAS (etapa 2, preservado) ============ */
@@ -2551,9 +2689,11 @@ window.Juntos = window.Juntos || {};
       var out = [];
       if (!cid) return out;
       function flag(code, entity, id, detail) { out.push({ code: code, entity: entity, id: id, detail: detail }); }
-      var memberIds = {};
-      db.members.forEach(function (m) { if (m.couple_id === cid) memberIds[m.user_id] = true; });
-      var nMembers = Object.keys(memberIds).length;
+      var memberIds = {}, nActive = 0;
+      db.members.forEach(function (m) { if (m.couple_id === cid) { memberIds[m.user_id] = true; nActive++; } });
+      var cp0 = db.couples.find(function (c) { return c.id === cid; });
+      ((cp0 && cp0.former_user_ids) || []).forEach(function (uid) { memberIds[uid] = true; });
+      var nMembers = nActive;
       if (nMembers > 2) flag('couple_too_big', 'couple', cid, 'Casal com ' + nMembers + ' membros');
       var catIds = {}, accIds = {}, cardIds = {}, invIds = {};
       db.categories.forEach(function (c) { if (c.couple_id === cid) catIds[c.id] = c; });

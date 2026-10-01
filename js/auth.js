@@ -25,6 +25,7 @@
     for (var j = 0; j < n * 2; j++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)];
     return s;
   }
+  var _reauth = {};
   /* ============ LOGIN SOCIAL (OAuth/OIDC, sem segredos no frontend) ============
      Google (GIS token flow) + Facebook (JS SDK) + Apple (JS popup + JWKS).
      Cliente público: só IDs públicos via window.JuntosConfig (js/config.js).
@@ -89,6 +90,9 @@
     current: function () {
       var s = sess(); if (!s) return null;
       var u = J.DB.all().users.find(function (x) { return x.id === s.userId; });
+      if (!u || u.deactivated_at) return null;
+      if (s.sv != null) { if (u.session_version == null || s.sv !== u.session_version) return null; }
+      else if (u.session_version !== 1) return null;
       return u || null;
     },
     register: function (nome, email, pass) {
@@ -98,9 +102,9 @@
       if (String(pass || '').length < 6) throw new Error('A senha precisa de pelo menos 6 caracteres.');
       var db = J.DB.all();
       if (db.users.some(function (u) { return u.email === email; })) throw new Error('Este e-mail já está cadastrado. Tente entrar.');
-      var u = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nome, email: email, salt: randHex(16), avatar: null, created_at: new Date().toISOString() };
+      var u = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nome, email: email, salt: randHex(16), avatar: null, deactivated_at: null, session_version: 1, created_at: new Date().toISOString() };
       u.pass = hash(pass, u.salt);
-      db.users.push(u); J.DB.save(db); setS({ userId: u.id });
+      db.users.push(u); J.DB.save(db); setS({ userId: u.id, sv: 1 });
       try { J.DB.logSecurityEvent(u.id, 'register', { action: 'register', metadata: {} }); } catch (e) {}
       return u;
     },
@@ -113,7 +117,8 @@
         try { J.DB.logSecurityEvent(u ? u.id : null, 'login', { action: 'login', result: 'denied', metadata: {} }); } catch (e2) {}
         throw new Error('E-mail ou senha incorretos.');
       }
-      setS({ userId: u.id });
+      try { J.DB.reactivateAccount(u.id); } catch (eR) {}
+      setS({ userId: u.id, sv: u.session_version || 1 });
       try { J.DB.logSecurityEvent(u.id, 'login', { action: 'login', metadata: {} }); } catch (e3) {}
       return u;
     },
@@ -146,7 +151,9 @@
       var u = db.users.find(function (x) { return x.email === email; });
       u.pass = hash(npass, u.salt);
       db.resets = db.resets.filter(function (x) { return x.email !== email; });
-      J.DB.save(db); setS({ userId: u.id }); return u;
+      J.DB.save(db);
+      try { J.DB.reactivateAccount(u.id); } catch (eR) {}
+      setS({ userId: u.id, sv: u.session_version || 1 }); return u;
     },
     socialProviders: function () {
       return [
@@ -277,7 +284,8 @@
         var db0 = J.DB.all();
         var u0 = db0.users.find(function (x) { return x.id === ident.user_id; });
         if (!u0) throw new Error('Conta não encontrada. Fale com o suporte.');
-        setS({ userId: u0.id });
+        try { J.DB.reactivateAccount(u0.id); } catch (eR) {}
+        setS({ userId: u0.id, sv: u0.session_version || 1 });
         try { J.DB.logSecurityEvent(u0.id, 'login', { action: 'social_login', metadata: { provider: provider } }); } catch (e2) {}
         return { status: 'ok', user: u0, isNew: false };
       }
@@ -295,10 +303,10 @@
           nm = base.charAt(0).toUpperCase() + base.slice(1);
         }
         var db = J.DB.all();
-        var nu = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nm.slice(0, 80), email: email, salt: null, pass: null, avatar: null, created_at: new Date().toISOString() };
+        var nu = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nm.slice(0, 80), email: email, salt: null, pass: null, avatar: null, deactivated_at: null, session_version: 1, created_at: new Date().toISOString() };
         db.users.push(nu); J.DB.save(db);
         J.DB.linkOAuthIdentity(nu.id, { provider: provider, provider_user_id: sub, email: email, email_verified: !!profile.emailVerified });
-        setS({ userId: nu.id });
+        setS({ userId: nu.id, sv: 1 });
         try { J.DB.logSecurityEvent(nu.id, 'register', { action: 'social_register', metadata: { provider: provider } }); } catch (e3) {}
         return { status: 'ok', user: nu, isNew: true };
       }
@@ -316,9 +324,57 @@
         }
       }
       J.DB.linkOAuthIdentity(userId, { provider: profile.provider, provider_user_id: profile.providerUserId, email: profile.email, email_verified: !!profile.emailVerified });
-      setS({ userId: userId });
+      try { J.DB.reactivateAccount(userId); } catch (eR) {}
+      var u3 = J.DB.all().users.find(function (x) { return x.id === userId; });
+      setS({ userId: userId, sv: (u3 && u3.session_version) || 1 });
       try { J.DB.logSecurityEvent(userId, 'login', { action: 'social_link', metadata: { provider: profile.provider } }); } catch (e2) {}
       return u;
+    },
+    /* Reautenticação recente p/ ações destrutivas (em memória, 10 min).
+       Senha: confere hash. Social: novo popup com sub igual ao já vinculado. */
+    reauthenticatePassword: function (userId, password) {
+      var db = J.DB.all();
+      var u = db.users.find(function (x) { return x.id === userId; });
+      if (!u || !u.pass) throw new Error('Esta conta não tem senha. Use seu login social para confirmar.');
+      if (u.pass !== hash(password, u.salt)) throw new Error('Senha incorreta.');
+      _reauth[userId] = { userId: userId, method: 'password', at: Date.now() };
+      return _reauth[userId];
+    },
+    reauthenticateSocial: function (provider) {
+      var me = Auth.current();
+      if (!me) throw new Error('Entre novamente.');
+      var linked = J.DB.userOAuthIdentities(me.id).filter(function (x) { return x.provider === provider; });
+      if (!linked.length) throw new Error('Nenhum login social deste provedor vinculado à sua conta.');
+      var fn = provider === 'google' ? Auth.socialGoogle : provider === 'facebook' ? Auth.socialFacebook : Auth.socialApple;
+      return fn().then(function (profile) {
+        var okSub = linked.some(function (x) { return x.provider_user_id === String(profile.providerUserId); });
+        if (!okSub) throw new Error('Este login social não pertence a esta conta.');
+        _reauth[me.id] = { userId: me.id, method: 'social', provider: provider, at: Date.now() };
+        return _reauth[me.id];
+      });
+    },
+    deactivateAccount: function () {
+      var me = Auth.current();
+      if (!me) throw new Error('Entre novamente.');
+      var r = J.DB.deactivateAccount(me.id);
+      delete _reauth[me.id];
+      Auth.logout();
+      return r;
+    },
+    deleteAccount: function (password) {
+      var me = Auth.current();
+      if (!me) throw new Error('Entre novamente.');
+      var proof = _reauth[me.id];
+      if (!proof || !(proof.at > Date.now() - 10 * 60 * 1000)) {
+        if (password == null) throw new Error('Confirme sua identidade para excluir a conta.');
+        proof = Auth.reauthenticatePassword(me.id, password);
+      }
+      var r = J.DB.deleteUserAccount(me.id, proof);
+      delete _reauth[me.id];
+      try { setS(null); } catch (e) {}
+      try { ['juntos_dash_v3', 'juntos_ov_v1', 'juntos_sb_v1'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e2) {}
+      try { if (J.Ctx) J.Ctx.clear(); } catch (e3) {}
+      return r;
     },
     updateProfile: function (nome) {
       var me = Auth.current(); if (!me) return;
