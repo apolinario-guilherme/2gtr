@@ -387,12 +387,12 @@
   function socRender(zone) {
     if (!zone) return;
     var provs;
-    try { provs = J.Auth.socialProviders().filter(function (p) { return p.enabled; }); }
+    try { provs = J.Auth.socialProviders(); }
     catch (e) { provs = []; }
     if (!provs.length) return;
     zone.innerHTML = '<div class="soc-div" aria-hidden="true"><span>ou</span></div>' +
       provs.map(function (p) {
-        return '<button class="btn soc" data-soc="' + p.id + '" style="max-width:100%">' + socIcon(p.id) + '<span>' + p.label + '</span></button>';
+        return '<button class="btn soc' + (p.enabled ? '' : ' off') + '" data-soc="' + p.id + '" style="max-width:100%"' + (p.enabled ? '' : ' title="Disponível após configuração (js/config.js)"') + '>' + socIcon(p.id) + '<span>' + p.label + '</span></button>';
       }).join('');
     Array.prototype.forEach.call(zone.querySelectorAll('[data-soc]'), function (b) {
       b.onclick = function () { doSocial(b.dataset.soc, b); };

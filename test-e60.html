@@ -82,15 +82,15 @@ throws(function(){DB.unlinkOAuthIdentity(r2.user.id,'apple');},'nao remove ultim
 eq(DB.userOAuthIdentities(r2.user.id).length,1,'resta 1');
 /* --- provedor inválido / identidade inválida --- */
 throws(function(){Auth.socialLogin({provider:'twitter',providerUserId:'x',name:'X',email:'x@t.t',emailVerified:true});},'provedor invalido nega');
-/* --- UI: botoes aparecem só com config --- */
+/* --- UI: botoes sempre visiveis; sem config ficam como indisponiveis --- */
 as(null);
 App.render('login');
-hides('Continuar com Google','sem config esconde');
+shows('Continuar com Google','botao google visivel');
+shows('Continuar com Facebook','botao facebook visivel');
+shows('Continuar com Apple','botao apple visivel');
 window.JuntosConfig={GOOGLE_CLIENT_ID:'g-test',FACEBOOK_APP_ID:'f-test',APPLE_CLIENT_ID:'a-test',APPLE_REDIRECT_URI:'https://x.test/#/auth/callback'};
 App.render('login');
-shows('Continuar com Google','botao google');
-shows('Continuar com Facebook','botao facebook');
-shows('Continuar com Apple','botao apple');
+shows('Continuar com Google','botao google com config');
 try{ delete window.JuntosConfig; }catch(e){}
 /* --- callback: erro amigável, sem vazar detalhe --- */
 location.hash='#/auth/callback?error=access_denied&error_description=User+denied';
