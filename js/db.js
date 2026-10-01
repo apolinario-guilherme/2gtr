@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -229,6 +229,8 @@ window.Juntos = window.Juntos || {};
     if (!db.routine_executions) { db.routine_executions = []; changed = true; }
     if (!db.routine_item_executions) { db.routine_item_executions = []; changed = true; }
     if (!db.routine_contexts) { db.routine_contexts = []; changed = true; }
+    if (!db.projects) { db.projects = []; changed = true; }
+    if (!db.project_links) { db.project_links = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5956,14 +5958,24 @@ window.Juntos = window.Juntos || {};
         { key: 'routine_complete_item', kind: 'write' }, { key: 'routine_skip_item', kind: 'write' },
         { key: 'routine_complete', kind: 'write' }, { key: 'routine_pause', kind: 'write' },
         { key: 'routine_resume', kind: 'write' }, { key: 'routine_update', kind: 'write' },
-        { key: 'routine_link', kind: 'write' }
+        { key: 'routine_link', kind: 'write' },
+        { key: 'project_list', kind: 'read' }, { key: 'project_detail', kind: 'read' },
+        { key: 'project_summary', kind: 'read' }, { key: 'project_upcoming', kind: 'read' },
+        { key: 'project_create', kind: 'write' }, { key: 'project_create_task', kind: 'write' },
+        { key: 'project_link_task', kind: 'write' }, { key: 'project_create_list', kind: 'write' },
+        { key: 'project_link_list', kind: 'write' }, { key: 'project_link_agenda', kind: 'write' },
+        { key: 'project_link_routine', kind: 'write' }, { key: 'project_link_goal', kind: 'write' },
+        { key: 'project_link_financial_plan', kind: 'write' }, { key: 'project_unlink_entity', kind: 'write' },
+        { key: 'project_pause', kind: 'write' }, { key: 'project_resume', kind: 'write' },
+        { key: 'project_complete', kind: 'write' }, { key: 'project_reopen', kind: 'write' },
+        { key: 'project_archive', kind: 'write' }
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6223,6 +6235,30 @@ window.Juntos = window.Juntos || {};
       else if ((has(['retoma', 'retomar', 'volta com', 'voltar com', 'reativa']) && hasAny(HBW))) out.intent = 'habit_resume';
       else if (has(['criar habito', 'cria um habito', 'crie um habito', 'novo habito', 'nova rotina'])) out.intent = 'habit_create';
       else if (/(adicion|aport|coloca|colocar|deposita).{0,20}meta\b/.test(s) || /(na|para) (a )?meta\b/.test(s)) out.intent = 'contribute_goal';
+      else if ((has(['projeto', 'projetos']) && has(['pausa', 'pausar', 'pause'])) || /(pausa|pausar).{0,40}projeto/.test(s)) out.intent = 'project_pause';
+      else if ((has(['projeto', 'projetos']) && has(['retoma', 'retomar', 'reativa', 'volta'])) || /(retoma|reativa).{0,40}projeto/.test(s)) out.intent = 'project_resume';
+      else if ((has(['projeto', 'projetos']) && has(['conclui', 'concluir', 'finaliza', 'termina'])) || /(conclui|finaliza|termina).{0,40}projeto/.test(s)) out.intent = 'project_complete';
+      else if ((has(['projeto', 'projetos']) && has(['reabre', 'reabrir'])) || /(reabre|reabrir).{0,40}projeto/.test(s)) out.intent = 'project_reopen';
+      else if ((has(['projeto', 'projetos']) && has(['arquiva', 'arquivar'])) || /(arquiva|arquivar).{0,40}projeto/.test(s)) out.intent = 'project_archive';
+      else if ((has(['projeto', 'projetos']) && has(['cria', 'criar', 'crie', 'novo', 'nova', 'monta'])) || /(cria|criar|crie|monta).{2,60}projeto/.test(s)) out.intent = 'project_create';
+      else if (has(['projeto', 'projetos']) && has(['desvincula', 'desvincular', 'remove', 'remover', 'tira', 'tirar'])) out.intent = 'project_unlink_entity';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['tarefa', 'tarefas'])) out.intent = 'project_link_task';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['lista', 'listas', 'mercado'])) out.intent = 'project_link_list';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['compromisso', 'agenda', 'reuniao'])) out.intent = 'project_link_agenda';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['rotina', 'rotinas'])) out.intent = 'project_link_routine';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['meta', 'metas'])) out.intent = 'project_link_goal';
+      else if (has(['projeto', 'projetos']) && has(['vincula', 'vincular', 'vinculo']) && has(['planejamento', 'plano', 'planos'])) out.intent = 'project_link_financial_plan';
+      else if (has(['projeto', 'projetos']) && has(['tarefa', 'tarefas']) && has(['adiciona', 'adicionar', 'adicione', 'cria', 'criar', 'crie', 'nova', 'novo'])) out.intent = 'project_create_task';
+      else if (has(['projeto', 'projetos']) && has(['tarefa', 'tarefas'])) out.intent = 'project_detail';
+      else if (has(['projeto', 'projetos']) && has(['lista', 'listas']) && has(['cria', 'criar', 'crie', 'nova', 'novo'])) out.intent = 'project_create_list';
+      else if (has(['projeto', 'projetos']) && has(['quais', 'tenho', 'temos', 'minhas', 'meus', 'todos', 'ativos', 'andamento'])) out.intent = 'project_list';
+      else if (has(['projeto', 'projetos'])) out.intent = 'project_detail';
+      else if ((has(['adiciona', 'adicionar', 'adicione', 'cria', 'criar', 'crie']) && has(['tarefa', 'tarefas']) && DB.projectNameHit(userId, text).length >= 1)) out.intent = 'project_create_task';
+      else if (has(['como esta', 'o que falta', 'faltam', 'resumo', 'mostra', 'mostre', 'proximo', 'pendente', 'pendentes', 'andamento', 'status', 'tarefas', 'compromisso', 'meta']) && DB.projectNameHit(userId, text).length >= 1 && !has(['fatura', 'cartao', 'conta', 'orcamento', 'relatorio', 'insight', 'saldo', 'limite', 'gastei', 'recebi', 'paguei', 'registre', 'transfira', 'habito'])) out.intent = 'project_detail';
+      else if (/^(adiciona|adicione|adicionar|cria|crie)\b.{0,40}tarefa/.test(s) && DB.projectHasContext(userId) && !has(['compromisso', 'reuniao', 'habito', 'lista', 'mercado', 'rotina', 'meta', 'fatura'])) out.intent = 'project_create_task';
+      else if (/^(mostra|mostre|como|o que|qual|resumo)\b/.test(s) && DB.projectHasContext(userId) && !has(['fatura', 'tarefa', 'compromisso', 'habito', 'lista', 'rotina', 'meta', 'conta'])) out.intent = 'project_detail';
+      else if (/^(cria|crie)\b.{0,40}lista/.test(s) && DB.projectHasContext(userId) && !has(['tarefa', 'compromisso', 'habito', 'rotina', 'meta'])) out.intent = 'project_create_list';
+      else if ((has(['cria', 'criar', 'crie']) && has(['lista', 'listas'])) && DB.projectNameHit(userId, text).length >= 1 && !has(['tarefa', 'compromisso', 'habito', 'rotina', 'meta', 'fatura', 'conta'])) out.intent = 'project_create_list';
       else if (has(['quais compromissos tenho hoje', 'compromissos de hoje', 'tenho compromisso hoje', 'o que tenho hoje']) && !has(['para hoje'])) out.intent = 'agenda_today';
       else if (has(['compromisso amanha', 'compromissos amanha', 'tenho amanha']) && hasAny(AGW)) out.intent = 'agenda_tomorrow';
       else if (hasAny(AGW) && has(['essa semana', 'esta semana', 'nessa semana'])) out.intent = 'agenda_week';
@@ -6272,7 +6308,7 @@ window.Juntos = window.Juntos || {};
       else if (has(['quais listas', 'minhas listas', 'lista do mercado', 'lista da viagem', 'mostra a lista', 'mostra as listas', 'tem alguma lista', 'o que falta comprar', 'o que falta na', 'quais itens faltam']) || (has(['lista', 'listas']) && has(['tenho', 'temos', 'mostra', 'mostre', 'quais', 'compartilhada', 'compartilhadas']))) out.intent = 'list_view';
       else if (has(['planejado e realizado', 'quanto temos previsto', 'previsto para', 'compromissos financeiros', 'planejado para'])) out.intent = 'planning_status';
       else if (has(['notifica', 'tenho notificacao', 'minhas notificacoes', 'o que esta pendente', 'fatura perto de vencer', 'fatura vencendo', 'alguma fatura'])) out.intent = 'notification_status';
-      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente'])) out.intent = 'product_navigation';
+      else if (/^onde\b/.test(s) && has(['tarefa', 'tarefas', 'cartao', 'cartoes', 'habito', 'habitos', 'notifica', 'convido', 'convidar', 'modo do dinheiro', 'gestao do dinheiro', 'agenda', 'meta', 'orcamento', 'planejamento', 'relatorio', 'conta', 'fatura', 'recorrente', 'acerto', 'categoria', 'automacao', 'visao geral', 'perfil', 'privacidade', 'seguranca', 'whatsapp', 'assistente', 'projeto', 'projetos', 'lista', 'listas', 'rotina', 'rotinas'])) out.intent = 'product_navigation';
       else if (has(['qual modo financeiro', 'modo financeiro estamos', 'modo do dinheiro', 'dinheiro separado ou tudo junto', 'como administramos'])) out.intent = 'money_mode_status';
       else if (has(['whatsapp esta conectado', 'whatsapp conectado', 'meu whatsapp'])) out.intent = 'whatsapp_status';
       else if (has(['conectar meu banco', 'conectar banco', 'ligar meu banco', 'integracao com banco', 'sincronizar banco'])) out.intent = 'openfinance_status';
@@ -6410,6 +6446,7 @@ window.Juntos = window.Juntos || {};
       if (/^task_/.test(intent)) return 'TASKS';
       if (/^list_/.test(intent)) return 'LISTS';
       if (/^routine_/.test(intent)) return 'ROUTINES';
+      if (/^project_/.test(intent)) return 'PROJECTS';
       if (/^(account_|card_|invoice_|installment_|recurring_|settlement_|cash_flow|transaction_|category_|budget_|financial_|income_|expense_|report_|openfinance_|planning_question|create_|mark_|update_)/.test(intent)) return 'FINANCE';
       if (/^(goal_|contribute_)/.test(intent)) return 'GOALS';
       if (/^planning_/.test(intent)) return 'PLANNING';
@@ -6481,6 +6518,7 @@ window.Juntos = window.Juntos || {};
         { match: ['tarefa', 'tarefas'], label: 'Tarefas', route: '#/tasks' },
         { match: ['lista', 'listas', 'mercado', 'checklist'], label: 'Listas', route: '#/lists' },
         { match: ['rotina', 'rotinas'], label: 'Rotinas', route: '#/routines' },
+        { match: ['projeto', 'projetos'], label: 'Projetos', route: '#/projects' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
         { match: ['notifica'], label: 'Notificações', route: '#/notifications' },
@@ -6668,6 +6706,22 @@ window.Juntos = window.Juntos || {};
         var rex = null;
         try { rex = DB.getOrCreateExecution(userId, rd.id, DB.agendaToday()); } catch (eR) {}
         out = rex ? { id: rd.id, name: rd.name, visibility: rd.visibility, status: rd.status, execution: { id: rex.id, status: rex.status, total: rex.total, done: rex.done, items: rex.items.map(function (it) { return { title: it.title, status: it.status, required: it.required }; }) } } : { id: rd.id, name: rd.name, visibility: rd.visibility, status: rd.status };
+      } else if (name === 'project_list') {
+        out = { projects: DB.getProjects(userId, { limit: 20 }).map(function (p) { return { id: p.id, name: p.name, visibility: p.visibility, status: p.status, target_date: p.target_date }; }) };
+      } else if (name === 'project_detail') {
+        var pd = DB.aiFindProject(userId, args.project_name || '')[0];
+        if (!pd) throw new Error('Projeto não encontrado.');
+        out = DB.getProjectOverview(userId, pd.id);
+        out.project = out.project || { id: pd.id, name: pd.name };
+      } else if (name === 'project_summary') {
+        var ps = DB.aiFindProject(userId, args.project_name || '')[0];
+        if (!ps) throw new Error('Projeto não encontrado.');
+        out = DB.getProjectSummary(userId, ps.id);
+        out.project = { id: ps.id, name: ps.name };
+      } else if (name === 'project_upcoming') {
+        var pu = DB.aiFindProject(userId, args.project_name || '')[0];
+        if (!pu) throw new Error('Projeto não encontrado.');
+        out = { project: { id: pu.id, name: pu.name }, items: DB.getProjectUpcoming(userId, pu.id, { days: 30, limit: 10 }) };
       } else if (name === 'list_view' || name === 'list_search') {
         var lq = args.list_name || args.query || '';
         var lrows = lq ? DB.searchLists(userId, lq, 10) : DB.getLists(userId, { status: 'ACTIVE', limit: 10 });
@@ -6837,6 +6891,33 @@ window.Juntos = window.Juntos || {};
         var rl = db.routines.find(function (x) { return x.id === p.routine_id && x.couple_id === cid && !x.deleted_at; });
         if (!rl || !DB.routineCanAct(db, userId, rl)) throw new Error('Rotina inválida.');
         DB.routineResolveLink(userId, p.linked_entity_type, p.linked_entity_id);
+      } else if (actionType === 'project_create') {
+        DB.validateProject(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', start_date: p.start_date, target_date: p.target_date, icon: p.icon, color: p.color });
+      } else if (actionType === 'project_create_task') {
+        var pcp = db.projects.find(function (x) { return x.id === p.project_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pcp || !DB.projectCanAct(db, userId, pcp)) throw new Error('Projeto inválido.');
+        DB.validateTask(userId, { title: p.title, description: p.description, visibility: p.visibility || pcp.visibility, priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to, recurrence: p.recurrence, source_type: 'AI' });
+      } else if (actionType === 'project_create_list') {
+        var pcl = db.projects.find(function (x) { return x.id === p.project_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pcl || !DB.projectCanAct(db, userId, pcl)) throw new Error('Projeto inválido.');
+        DB.validateList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || pcl.visibility });
+      } else if (actionType === 'project_link_task' || actionType === 'project_link_list' || actionType === 'project_link_agenda' || actionType === 'project_link_routine' || actionType === 'project_link_goal' || actionType === 'project_link_financial_plan') {
+        var plk = db.projects.find(function (x) { return x.id === p.project_id && x.couple_id === cid && !x.deleted_at; });
+        if (!plk || !DB.projectCanAct(db, userId, plk)) throw new Error('Projeto inválido.');
+        var _lt = { project_link_task: 'TASK', project_link_list: 'LIST', project_link_agenda: 'AGENDA_EVENT', project_link_routine: 'ROUTINE', project_link_goal: 'GOAL', project_link_financial_plan: 'FINANCIAL_PLAN' }[actionType];
+        DB.projectLinkTarget(userId, _lt, p.entity_id);
+        if (plk.visibility === 'COUPLE') {
+          var _t = DB.projectLinkTarget(userId, _lt, p.entity_id);
+          if (_t.visibility === 'PERSONAL' || _t.visibility === 'PRIVATE') throw new Error('Esta informação é pessoal e não pode ser adicionada diretamente a um projeto compartilhado.');
+        }
+      } else if (actionType === 'project_unlink_entity') {
+        var pu = db.project_links.find(function (x) { return x.id === p.link_id && !x.deleted_at; });
+        if (!pu) throw new Error('Vínculo inválido.');
+        var pup = db.projects.find(function (x) { return x.id === pu.project_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pup || !DB.projectCanAct(db, userId, pup)) throw new Error('Acesso negado.');
+      } else if (actionType === 'project_pause' || actionType === 'project_resume' || actionType === 'project_archive' || actionType === 'project_complete' || actionType === 'project_reopen') {
+        var pr2 = db.projects.find(function (x) { return x.id === p.project_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pr2 || !DB.projectCanAct(db, userId, pr2)) throw new Error('Projeto inválido.');
       } else if (actionType === 'list_create') {
         DB.validateList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' });
       } else if (actionType === 'list_add_item') {
@@ -6961,6 +7042,45 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'task_archive') {
           DB.archiveTask(userId, p.task_id);
           res = { task_id: p.task_id };
+        } else if (r.action_type === 'project_create') {
+          var srcP = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var np = DB.createProject(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', start_date: p.start_date, target_date: p.target_date }, { source_type: srcP });
+          res = { project_id: np.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'PROJECT', np.id, 30); } catch (ePC) {}
+        } else if (r.action_type === 'project_create_task') {
+          var srcPT = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var npt = DB.createProjectTask(userId, p.project_id, { title: p.title, description: p.description, visibility: p.visibility, priority: p.priority, due_date: p.due_date, due_time: p.due_time, assigned_to: p.assigned_to }, { source_type: srcPT, idempotency_key: 'ai:' + r.id });
+          res = { project_id: p.project_id, task_id: npt.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'PROJECT', p.project_id, 30); } catch (ePT) {}
+        } else if (r.action_type === 'project_create_list') {
+          var srcPL = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
+          var npl = DB.createProjectList(userId, p.project_id, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility }, { source_type: srcPL, idempotency_key: 'ai:' + r.id });
+          if (p.items && p.items.length) { try { DB.addItemsBulk(userId, npl.id, p.items.slice(0, 20), { idempotency_key: 'ai:' + r.id }); } catch (ePL) {} }
+          res = { project_id: p.project_id, list_id: npl.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'PROJECT', p.project_id, 30); } catch (ePL2) {}
+        } else if (r.action_type === 'project_link_task' || r.action_type === 'project_link_list' || r.action_type === 'project_link_agenda' || r.action_type === 'project_link_routine' || r.action_type === 'project_link_goal' || r.action_type === 'project_link_financial_plan') {
+          var _lt2 = { project_link_task: 'TASK', project_link_list: 'LIST', project_link_agenda: 'AGENDA_EVENT', project_link_routine: 'ROUTINE', project_link_goal: 'GOAL', project_link_financial_plan: 'FINANCIAL_PLAN' }[r.action_type];
+          var nlk = DB.linkEntity(userId, p.project_id, { entity_type: _lt2, entity_id: p.entity_id, relationship_type: p.relationship_type || 'RELATED' }, { idempotency_key: 'ai:' + r.id });
+          res = { project_id: p.project_id, link_id: nlk.id };
+          try { DB.convSetContext(userId, r.conversation_id, r.channel, 'PROJECT', p.project_id, 30); } catch (eLKc) {}
+        } else if (r.action_type === 'project_unlink_entity') {
+          DB.unlinkEntity(userId, p.link_id);
+          res = { link_id: p.link_id };
+        } else if (r.action_type === 'project_pause') {
+          DB.pauseProject(userId, p.project_id);
+          res = { project_id: p.project_id };
+        } else if (r.action_type === 'project_resume') {
+          DB.resumeProject(userId, p.project_id);
+          res = { project_id: p.project_id };
+        } else if (r.action_type === 'project_complete') {
+          DB.completeProject(userId, p.project_id, {});
+          res = { project_id: p.project_id };
+        } else if (r.action_type === 'project_reopen') {
+          DB.reopenProject(userId, p.project_id);
+          res = { project_id: p.project_id };
+        } else if (r.action_type === 'project_archive') {
+          DB.archiveProject(userId, p.project_id);
+          res = { project_id: p.project_id };
         } else if (r.action_type === 'routine_create') {
           var srcR = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
           var nr = DB.createRoutine(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', frequency_type: p.frequency_type, frequency_config: p.frequency_config, preferred_time: p.preferred_time, start_date: p.start_date }, { source_type: srcR });
@@ -7390,6 +7510,104 @@ window.Juntos = window.Juntos || {};
             params = { title: atitle.charAt(0).toUpperCase() + atitle.slice(1), description: '', visibility: 'COUPLE', priority: 'NORMAL', due_date: (!aw2.clarification && aw2.date) ? aw2.date : null, due_time: (!aw2.clarification && aw2.start) ? aw2.start : null, assigned_to: apart, recurrence: { type: 'NONE' } };
             label = 'Criar tarefa "' + params.title + '" para o seu par' + (params.due_date ? ' (' + params.due_date.split('-').reverse().join('/') + ')' : '');
           }
+        } else if (det.intent === 'project_create') {
+          var pjRaw = rawText.replace(/(cria|criar|crie|um projeto|uma projeto|novo projeto|nova projeto|projeto|monta|montar|para nós|pra nos|para nos|nos dois|nós dois|do casal|pessoal|meus|minha|meu|nossa|nosso|nossos|nossas|por favor|para|organizar)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Novo projeto';
+          if (/^(novo projeto|um projeto|projeto)$/i.test(pjRaw)) pjRaw = 'Novo projeto';
+          pjRaw = pjRaw.charAt(0).toUpperCase() + pjRaw.slice(1);
+          var pjCouple = /(para nos|pra nos|nos dois|nós dois|do casal|casal|compartilhado|nossa|nosso|nossos|nossas|para nós)\b/.test(s);
+          var pjW = DB.aiParseAgendaWhen(rawText, today);
+          var pjTarget = (!pjW.clarification && pjW.date && pjW.date !== today) ? pjW.date : null;
+          params = { name: pjRaw, description: '', visibility: pjCouple ? 'COUPLE' : 'PERSONAL', start_date: today, target_date: pjTarget };
+          label = 'Criar projeto "' + pjRaw + '" (' + (pjCouple ? 'casal' : 'pessoal') + ')' + (pjTarget ? ' com prazo ' + pjTarget.split('-').reverse().join('/') : '');
+          if (!pjCouple) {
+            var createdP = DB.createProject(userId, params, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'PROJECT', createdP.id, 30); } catch (ePCx) {}
+            try { DB.logSecurityEvent(userId, 'ai_action', { action: 'project_created', entity_type: 'project', entity_id: createdP.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (eP2) {}
+            return { answer: 'Projeto "' + createdP.name + '" criado.', facts: [{ label: 'projeto', value: 1 }], tools: ['project_create'], intent: det.intent, domain: 'PROJECTS' };
+          }
+        } else if (det.intent === 'project_create_task') {
+          var pctP = DB.aiResolveProject(userId, rawText, convId);
+          var pctTitle = (rawText.replace(/(cria|criar|crie|adiciona|adicionar|adicione|uma tarefa|nova tarefa|no projeto|na viagem|para|projeto|tarefa|até|ate|para nós|pra nos|do casal|amanhã|amanha|hoje|sábado|sabado|sexta|segunda|terça|quarta|quinta|domingo|[0-9\/]+)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)) || '';
+          if (pctTitle.length < 2) throw { clarification: 'Qual tarefa adicionar ao projeto "' + pctP.name + '"?' };
+          var pctW = DB.aiParseAgendaWhen(rawText, today);
+          if (pctW.clarification) pctW = { date: null, start: null };
+          params = { project_id: pctP.id, project_name: pctP.name, title: pctTitle.charAt(0).toUpperCase() + pctTitle.slice(1), description: '', visibility: pctP.visibility, priority: 'NORMAL', due_date: pctW.date || null, due_time: pctW.start || null, assigned_to: null };
+          label = 'Criar tarefa "' + params.title + '" no projeto "' + pctP.name + '"' + (params.due_date ? ' para ' + params.due_date.split('-').reverse().join('/') : '');
+          if (pctP.visibility !== 'COUPLE') {
+            var pctT = DB.createProjectTask(userId, pctP.id, { title: params.title, description: '', visibility: 'PERSONAL', priority: 'NORMAL', due_date: params.due_date, due_time: params.due_time }, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'PROJECT', pctP.id, 30); } catch (ePTx) {}
+            return { answer: 'Tarefa "' + pctT.title + '" criada no projeto "' + pctP.name + '".', facts: [{ label: 'tarefa', value: 1 }], tools: ['project_create_task'], intent: det.intent, domain: 'PROJECTS' };
+          }
+        } else if (det.intent === 'project_create_list') {
+          var pclP = DB.aiResolveProject(userId, rawText, convId);
+          var pclRaw = rawText.replace(/(cria|criar|crie|uma lista|nova lista|de coisas|para levar|no projeto|na viagem|projeto|lista|por favor)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Nova lista';
+          pclRaw = pclRaw.charAt(0).toUpperCase() + pclRaw.slice(1);
+          var pclItems = [];
+          var pclM = rawText.match(/com\s+(.+)$/i);
+          if (pclM) {
+            pclM[1].split(/,|\be\b/).forEach(function (pie) {
+              var t = pie.replace(/(no projeto|na viagem|projeto|por favor)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+              if (t.length >= 2) pclItems.push({ title: t.charAt(0).toUpperCase() + t.slice(1) });
+            });
+            pclItems = pclItems.slice(0, 20);
+          }
+          params = { project_id: pclP.id, project_name: pclP.name, name: pclRaw, description: '', list_type: 'GENERAL', visibility: pclP.visibility, items: pclItems };
+          label = 'Criar lista "' + pclRaw + '" no projeto "' + pclP.name + '"' + (pclItems.length ? ' com ' + pclItems.length + ' itens' : '');
+          if (pclP.visibility !== 'COUPLE') {
+            var pclL = DB.createProjectList(userId, pclP.id, { name: pclRaw, description: '', visibility: 'PERSONAL' }, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
+            if (pclItems.length) { try { DB.addItemsBulk(userId, pclL.id, pclItems, { idempotency_key: 'ai:' + messageId }); } catch (ePLx) {} }
+            try { DB.convSetContext(userId, convId, opts.channel || 'web', 'PROJECT', pclP.id, 30); } catch (ePLx2) {}
+            return { answer: 'Lista "' + pclL.name + '" criada no projeto "' + pclP.name + '".', facts: [{ label: 'lista', value: 1 }], tools: ['project_create_list'], intent: det.intent, domain: 'PROJECTS' };
+          }
+        } else if (det.intent === 'project_link_task' || det.intent === 'project_link_list' || det.intent === 'project_link_agenda' || det.intent === 'project_link_routine' || det.intent === 'project_link_goal' || det.intent === 'project_link_financial_plan') {
+          var plkP = DB.aiResolveProject(userId, rawText, convId);
+          var _lkmap = { project_link_task: 'TASK', project_link_list: 'LIST', project_link_agenda: 'AGENDA_EVENT', project_link_routine: 'ROUTINE', project_link_goal: 'GOAL', project_link_financial_plan: 'FINANCIAL_PLAN' };
+          var _lt = _lkmap[det.intent], _found = [], _lname = '';
+          if (_lt === 'TASK') { _found = DB.aiFindTask(userId, rawText); if (_found.length === 1) _lname = _found[0].title; }
+          else if (_lt === 'LIST') { _found = DB.aiFindList(userId, rawText); if (_found.length === 1) _lname = _found[0].name; }
+          else if (_lt === 'HABIT') { _found = []; }
+          else if (_lt === 'ROUTINE') { _found = DB.aiFindRoutine(userId, rawText); if (_found.length === 1) _lname = _found[0].name; }
+          else if (_lt === 'GOAL') { _found = DB.aiFindGoal(userId, rawText); if (_found.length === 1) _lname = _found[0].name; }
+          else if (_lt === 'AGENDA_EVENT') {
+            _found = (function () {
+              var nq = DB.aiNorm(rawText), out = [];
+              db.agenda_events.forEach(function (ev) {
+                if (ev.couple_id !== cid || ev.deleted_at) return;
+                if (ev.visibility !== 'COUPLE' && ev.owner_user_id !== userId) return;
+                var en = DB.aiNorm(ev.title);
+                if (en.length >= 4 && nq.indexOf(en) >= 0) out.push(ev);
+              });
+              return out;
+            })();
+            if (_found.length === 1) _lname = _found[0].title;
+          } else if (_lt === 'FINANCIAL_PLAN') {
+            _found = DB.listPlans(userId, {}).filter(function (pl) { var n = DB.aiNorm(pl.name); var nq2 = DB.aiNorm(rawText); return n.length >= 3 && nq2.indexOf(n) >= 0; });
+            if (_found.length === 1) _lname = _found[0].name;
+          }
+          if (!_found.length) throw { clarification: 'Qual ' + ({ TASK: 'tarefa', LIST: 'lista', AGENDA_EVENT: 'compromisso', ROUTINE: 'rotina', GOAL: 'meta', FINANCIAL_PLAN: 'planejamento' }[_lt]) + ' vincular ao projeto "' + plkP.name + '"?' };
+          if (_found.length > 1) throw { clarification: 'Qual deles? ' + _found.slice(0, 3).map(function (x) { return '"' + (x.title || x.name) + '"'; }).join(', ') + '?' };
+          params = { project_id: plkP.id, project_name: plkP.name, entity_type: _lt, entity_id: _found[0].id, title: _lname, relationship_type: 'RELATED' };
+          label = 'Vincular "' + _lname + '" ao projeto "' + plkP.name + '"';
+        } else if (det.intent === 'project_unlink_entity') {
+          var punP = DB.aiResolveProject(userId, rawText, convId);
+          var punLinks = DB.getProjectEntities(userId, punP.id).filter(function (x) { return x.ok; });
+          var punNq = DB.aiNorm(rawText);
+          var punHit = punLinks.filter(function (x) { var n = DB.aiNorm(x.label || ''); return n.length >= 3 && punNq.indexOf(n) >= 0; });
+          if (punHit.length !== 1) {
+            if (!punHit.length) throw { clarification: 'O que desvincular do projeto "' + punP.name + '"?' };
+            throw { clarification: 'Qual deles? ' + punHit.slice(0, 3).map(function (x) { return '"' + x.label + '"'; }).join(', ') + '?' };
+          }
+          params = { project_id: punP.id, project_name: punP.name, link_id: punHit[0].link.id, title: punHit[0].label };
+          label = 'Desvincular "' + punHit[0].label + '" do projeto "' + punP.name + '" (a entidade continua existindo)';
+        } else if (det.intent === 'project_pause' || det.intent === 'project_resume' || det.intent === 'project_reopen' || det.intent === 'project_archive') {
+          var ppj = DB.aiResolveProject(userId, rawText, convId);
+          params = { project_id: ppj.id, project_name: ppj.name };
+          label = (det.intent === 'project_pause' ? 'Pausar "' + ppj.name + '"' : det.intent === 'project_resume' ? 'Retomar "' + ppj.name + '"' : det.intent === 'project_reopen' ? 'Reabrir "' + ppj.name + '"' : 'Arquivar "' + ppj.name + '" (preserva links e histórico)');
+        } else if (det.intent === 'project_complete') {
+          var pco = DB.aiResolveProject(userId, rawText, convId);
+          var ppend = DB.projectPendings(userId, pco.id);
+          params = { project_id: pco.id, project_name: pco.name };
+          label = 'Concluir projeto "' + pco.name + '"' + ((ppend.tasks || ppend.agenda) ? ' (ainda há ' + (ppend.tasks ? ppend.tasks + ' tarefas pendentes' : '') + (ppend.tasks && ppend.agenda ? ' e ' : '') + (ppend.agenda ? ppend.agenda + ' compromissos futuros' : '') + ')' : ' (sem pendências)') + ' — entidades relacionadas não serão alteradas';
         } else if (det.intent === 'routine_create') {
           var rcRaw = rawText.replace(/(cria|criar|crie|uma rotina|nova rotina|monta|montar|para nós|pra nos|para nos|nos dois|nós dois|do casal|compartilhada|compartilhado|juntos|juntas|todos os dias|todo dia|diariamente|toda semana|mensal|todo mês|por favor)/gi, ' ').replace(/\s+/g, ' ').trim();
           var rcFreq = 'DAILY', rcCfg = { interval: 1 }, rcStart = today;
@@ -7685,7 +7903,22 @@ window.Juntos = window.Juntos || {};
         routine_pause: 'Rotina pausada.',
         routine_resume: 'Rotina retomada.',
         routine_update: 'Rotina atualizada.',
-        routine_link: 'Item vinculado à rotina.'
+        routine_link: 'Item vinculado à rotina.',
+        project_create: 'Projeto "' + (p.name || '') + '" criado.',
+        project_create_task: 'Tarefa "' + (p.title || '') + '" criada no projeto "' + (p.project_name || '') + '".',
+        project_create_list: 'Lista "' + (p.name || '') + '" criada no projeto "' + (p.project_name || '') + '".',
+        project_link_task: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_link_list: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_link_agenda: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_link_routine: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_link_goal: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_link_financial_plan: '"' + (p.title || '') + '" vinculado ao projeto.',
+        project_unlink_entity: 'Item desvinculado do projeto (a entidade continua existindo).',
+        project_pause: 'Projeto pausado.',
+        project_resume: 'Projeto retomado.',
+        project_complete: 'Projeto concluído.',
+        project_reopen: 'Projeto reaberto.',
+        project_archive: 'Projeto arquivado.'
       };
       return { answer: map[action.action_type] || 'Ação concluída.', facts: [{ label: 'valor', value: p.amount != null ? p.amount : 0 }], tools: [action.action_type], intent: 'action_executed', domain: DB.aiDomainOf(action.action_type) };
     },
@@ -7955,6 +8188,50 @@ window.Juntos = window.Juntos || {};
         tools.push('notification_status'); toolOut = ant;
         if (!ant.unread) answer = 'Tudo tranquilo: nenhuma notificação não lida.';
         else answer = ant.unread + ' não lidas' + (ant.top.length ? ': ' + ant.top.map(function (x) { return x.title; }).join('; ') + '.' : '.') + ' Abra Notificações no app para ver tudo.';
+      } else if (det.intent === 'project_list') {
+        var pjres = DB.aiRunTool(userId, 'project_list', {});
+        tools.push('project_list'); toolOut = pjres;
+        if (!pjres.projects.length) answer = 'Você ainda não tem projetos. Quer criar um? Ex: "cria um projeto para nossa viagem".';
+        else {
+          F('projetos', pjres.projects.length);
+          answer = 'Seus projetos: ' + pjres.projects.slice(0, 6).map(function (p) { return p.name + ' (' + p.status.toLowerCase() + (p.visibility === 'COUPLE' ? ', casal' : ', pessoal') + ')'; }).join('; ') + '.';
+        }
+        navTarget = '#/projects';
+      } else if (det.intent === 'project_detail' || det.intent === 'project_summary') {
+        var pdN = null;
+        try { pdN = DB.aiResolveProject(userId, rawText); } catch (ePD) { answer = (ePD && ePD.clarification) || 'Qual projeto?'; }
+        if (pdN) {
+          var pdT = DB.aiRunTool(userId, det.intent === 'project_summary' ? 'project_summary' : 'project_detail', { project_name: pdN.name });
+          tools.push(det.intent); toolOut = pdT;
+          var bits = [];
+          if (pdT.tasks && pdT.tasks.ok) bits.push(pdT.tasks.data.done + ' de ' + pdT.tasks.data.total + ' tarefas concluídas');
+          else if (pdT.taskTotal != null) bits.push(pdT.taskDone + ' de ' + pdT.taskTotal + ' tarefas concluídas');
+          if (pdT.goals && pdT.goals.ok && pdT.goals.data.length) {
+            var _g0 = pdT.goals.data[0];
+            bits.push('Meta: ' + DB.aiMoney(_g0.current) + ' de ' + DB.aiMoney(_g0.target));
+          }
+          if (pdT.upcoming && pdT.upcoming.ok && pdT.upcoming.data.length) {
+            var _u0 = pdT.upcoming.data[0];
+            bits.push('Próximo: ' + _u0.title + ' em ' + String(_u0.date).split('-').reverse().join('/'));
+          }
+          if (pdT.lists && pdT.lists.ok && pdT.lists.data.length) {
+            var _pend = pdT.lists.data.reduce(function (a, l) { return a + (l.pending || 0); }, 0);
+            if (_pend) bits.push('Lista com ' + _pend + ' itens pendentes');
+          }
+          F('itens', bits.length);
+          answer = '*' + pdN.name + '*\n' + (bits.length ? '• ' + bits.join('\n• ') : 'Sem itens relacionados ainda.');
+        }
+        navTarget = '#/projects';
+        try { var _pjl = DB.aiListConversations(userId); if (_pjl.length && pdN) DB.convSetContext(userId, _pjl[0].id, _pjl[0].channel || 'web', 'PROJECT', pdN.id, 30); } catch (ePJ) {}
+      } else if (det.intent === 'project_upcoming') {
+        var puN = null;
+        try { puN = DB.aiResolveProject(userId, rawText); } catch (ePU) { answer = (ePU && ePU.clarification) || 'De qual projeto?'; }
+        if (puN) {
+          var puT = DB.aiRunTool(userId, 'project_upcoming', { project_name: puN.name });
+          tools.push('project_upcoming'); toolOut = puT;
+          answer = puT.items.length ? 'Próximos de "' + puN.name + '": ' + puT.items.slice(0, 5).map(function (i) { return i.title + ' em ' + String(i.date).split('-').reverse().join('/'); }).join('; ') + '.' : 'Nada futuro vinculado a "' + puN.name + '".';
+        }
+        navTarget = '#/projects';
       } else if (det.intent === 'routine_today' || det.intent === 'routine_list') {
         var rres = DB.aiRunTool(userId, det.intent === 'routine_today' ? 'routine_today' : 'routine_list', {});
         tools.push(det.intent === 'routine_today' ? 'routine_today' : 'routine_list'); toolOut = rres;
@@ -8407,7 +8684,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -9246,10 +9523,12 @@ window.Juntos = window.Juntos || {};
       var lst = DB.getRelevantLists(userId, 3);
       var rtn = [];
       try { rtn = DB.getRelevantRoutines(userId, 3); } catch (eR) {}
+      var pjt = [];
+      try { pjt = DB.getRelevantProjects(userId, 3); } catch (ePj) {}
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -9316,7 +9595,7 @@ window.Juntos = window.Juntos || {};
     },
     getOverviewSummary: function (userId, date) {
       var d = DB.getOverviewDay(userId, date, 'couple');
-      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], routines: (d.routines || []).length, tx: d.finance.count, next: d.next };
+      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], routines: (d.routines || []).length, projects: (d.projects || []).length, tx: d.finance.count, next: d.next };
     },
     /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
        Fonte própria (habits + habit_completions). Tudo por user_id do
@@ -11499,6 +11778,597 @@ window.Juntos = window.Juntos || {};
         .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
       return rows[0] || null;
     },
+    /* ============ PROJETOS (contexto e agregacao; fonte oficial ProjectService) ============
+       Projeto agrega e contextualiza entidades oficiais via project_links
+       (desacoplado: sem project_id nas tabelas alheias). Nunca copia dados,
+       nunca duplica logica de dominio, nunca cria financa. A agregacao le
+       apenas via servicos oficiais, com tolerancia a falhas por secao e sem
+       expor entidade que o usuario nao pode ver (link nunca e bypass). */
+    PROJECT_STATUSES: function () { return ['PLANNING', 'ACTIVE', 'PAUSED', 'COMPLETED', 'ARCHIVED']; },
+    PROJECT_LINK_TYPES: function () { return ['TASK', 'LIST', 'AGENDA_EVENT', 'ROUTINE', 'GOAL', 'FINANCIAL_PLAN']; },
+    PROJECT_REL_TYPES: function () { return ['PRIMARY', 'RELATED']; },
+    projectVisible: function (db, userId, p) {
+      if (!p || p.deleted_at) return false;
+      if (p.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return p.owner_user_id === userId;
+    },
+    projectCanAct: function (db, userId, p) {
+      if (!DB.projectVisible(db, userId, p)) return false;
+      if (p.visibility === 'COUPLE') return true;
+      return p.owner_user_id === userId;
+    },
+    projectWriteGuard: function (db, userId, projectId) {
+      var cid = DB.myCoupleId(userId);
+      var p = db.projects.find(function (x) { return x.id === projectId && x.couple_id === cid && !x.deleted_at; });
+      if (!p || !DB.projectCanAct(db, userId, p)) {
+        try { DB.logAuthorizationFailure(userId, 'project_write', { entity_type: 'project', entity_id: projectId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return p;
+    },
+    validateProject: function (userId, data) {
+      var cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      data = data || {};
+      var name = String(data.name || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name.length < 2) throw new Error('Dê um nome ao projeto.');
+      if (name.length > 80) throw new Error('Nome muito longo (máx 80 caracteres).');
+      var desc = String(data.description || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var sd = data.start_date ? String(data.start_date).slice(0, 10) : DB.agendaToday();
+      if (!DB.agendaParseDay(sd)) throw new Error('Data de início inválida.');
+      var td = data.target_date ? String(data.target_date).slice(0, 10) : null;
+      if (td) {
+        if (!DB.agendaParseDay(td)) throw new Error('Prazo inválido.');
+        if (td < sd) throw new Error('Prazo anterior ao início.');
+      }
+      var icon = data.icon != null && String(data.icon) !== '' ? String(data.icon).slice(0, 12) : null;
+      var color = data.color ? String(data.color).slice(0, 20) : null;
+      return { couple_id: cid, name: name, description: desc, visibility: vis, start_date: sd, target_date: td, icon: icon, color: color };
+    },
+    createProject: function (userId, data, opt) {
+      DB.requireAuthz(userId, 'project_create', null);
+      opt = opt || {};
+      var v = DB.validateProject(userId, data);
+      var db = read();
+      var p = { id: id('pj'), couple_id: v.couple_id, created_by: userId, owner_user_id: userId, name: v.name, description: v.description, visibility: v.visibility, status: 'PLANNING', start_date: v.start_date, target_date: v.target_date, icon: v.icon, color: v.color, source_type: opt.source_type || 'MANUAL', source_id: opt.source_id || null, created_at: now(), updated_at: now(), completed_at: null, archived_at: null, deleted_at: null };
+      db.projects.push(p);
+      logAudit(db, v.couple_id, userId, 'project', p.id, 'created', { name: p.name, visibility: p.visibility });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'project', { action: 'project_created', entity_type: 'project', entity_id: p.id, metadata: { visibility: p.visibility } }); } catch (e) {}
+      try { DB.emitProjectEvent(userId, 'project_created', p, {}); } catch (e2) {}
+      return p;
+    },
+    getProject: function (userId, projectId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      var p = db.projects.find(function (x) { return x.id === projectId && x.couple_id === cid && !x.deleted_at; });
+      if (!p || !DB.projectVisible(db, userId, p)) {
+        try { DB.logAuthorizationFailure(userId, 'project_read', { entity_type: 'project', entity_id: projectId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return p;
+    },
+    getProjects: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.projects.filter(function (p) {
+        if (p.couple_id !== cid || p.deleted_at) return false;
+        if (!DB.projectVisible(db, userId, p)) return false;
+        if (f.status && p.status !== String(f.status).toUpperCase()) return false;
+        if (!f.include_archived && p.status === 'ARCHIVED') return false;
+        if (f.visibility && p.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.search) {
+          var q = String(f.search).toLowerCase();
+          if ((p.name + ' ' + (p.description || '')).toLowerCase().indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+      rows.sort(function (a, b) { return (b.updated_at + b.id).localeCompare(a.updated_at + a.id); });
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return rows;
+    },
+    getPersonalProjects: function (userId, f) { return DB.getProjects(userId, Object.assign({}, f, { visibility: 'PERSONAL' })); },
+    getCoupleProjects: function (userId, f) { return DB.getProjects(userId, Object.assign({}, f, { visibility: 'COUPLE' })); },
+    searchProjects: function (userId, q, limit) { return DB.getProjects(userId, { search: q, limit: limit || 20 }); },
+    updateProject: function (userId, projectId, data) {
+      DB.requireAuthz(userId, 'project_update', null);
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      data = data || {};
+      var visBefore = p.visibility;
+      var merged = { name: p.name, description: p.description, visibility: p.visibility, start_date: p.start_date, target_date: p.target_date, icon: p.icon, color: p.color };
+      ['name', 'description', 'visibility', 'start_date', 'target_date', 'icon', 'color'].forEach(function (k) { if (data[k] !== undefined) merged[k] = data[k]; });
+      var v = DB.validateProject(userId, merged);
+      if (visBefore !== v.visibility) DB.projectCheckVisibilityChange(db, userId, p, v.visibility);
+      p.name = v.name; p.description = v.description; p.visibility = v.visibility;
+      p.start_date = v.start_date; p.target_date = v.target_date; p.icon = v.icon; p.color = v.color;
+      p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'project', p.id, 'updated', { name: p.name });
+      write(db);
+      if (visBefore !== p.visibility) {
+        try { DB.logSecurityEvent(userId, 'project', { action: p.visibility === 'COUPLE' ? 'project_shared' : 'project_privatized', entity_type: 'project', entity_id: p.id, metadata: { from: visBefore, to: p.visibility } }); } catch (e) {}
+      }
+      try { DB.emitProjectEvent(userId, 'project_updated', p, {}); } catch (e2) {}
+      return p;
+    },
+    projectCheckVisibilityChange: function (db, userId, p, newVis) {
+      if (p.visibility === newVis) return true;
+      if (newVis === 'COUPLE') {
+        var priv = db.project_links.filter(function (l) { return l.project_id === p.id && !l.deleted_at; }).map(function (l) {
+          try {
+            var t = DB.projectLinkTarget(userId, l.entity_type, l.entity_id);
+            return (t.visibility === 'PERSONAL' || t.visibility === 'PRIVATE') ? t.label : null;
+          } catch (e) { return null; }
+        }).filter(function (x) { return x; });
+        if (priv.length) throw new Error('Este projeto possui itens pessoais (' + priv.slice(0, 3).join(', ') + ') e não pode ser compartilhado sem tratá-los antes.');
+      }
+      return true;
+    },
+    projectSetStatus: function (userId, projectId, status, opt) {
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      p.status = status; p.updated_at = now();
+      if (status === 'COMPLETED') p.completed_at = now();
+      if (status === 'ARCHIVED') p.archived_at = now();
+      if (status === 'ACTIVE' && (opt || {}).clearCompleted) p.completed_at = null;
+      logAudit(db, p.couple_id, userId, 'project', p.id, status.toLowerCase(), {});
+      write(db);
+      return p;
+    },
+    pauseProject: function (userId, projectId) {
+      DB.requireAuthz(userId, 'project_pause', null);
+      var p = DB.projectSetStatus(userId, projectId, 'PAUSED');
+      try { DB.emitProjectEvent(userId, 'project_paused', p, {}); } catch (e) {}
+      return p;
+    },
+    resumeProject: function (userId, projectId) {
+      DB.requireAuthz(userId, 'project_pause', null);
+      var p = DB.projectSetStatus(userId, projectId, 'ACTIVE');
+      try { DB.emitProjectEvent(userId, 'project_resumed', p, {}); } catch (e) {}
+      return p;
+    },
+    projectPendings: function (userId, projectId) {
+      var ov = DB.getProjectOverview(userId, projectId);
+      var out = { tasks: 0, task_titles: [], agenda: 0 };
+      if (ov.tasks && ov.tasks.ok) {
+        var pend = ov.tasks.items.filter(function (t) { return t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'ARCHIVED'; });
+        out.tasks = pend.length;
+        out.task_titles = pend.slice(0, 5).map(function (t) { return t.title; });
+      }
+      if (ov.agenda && ov.agenda.ok) {
+        var today = DB.agendaToday();
+        out.agenda = ov.agenda.items.filter(function (o) { return o.date >= today; }).length;
+      }
+      return out;
+    },
+    completeProject: function (userId, projectId, opt) {
+      DB.requireAuthz(userId, 'project_complete', null);
+      opt = opt || {};
+      if (!opt.force) {
+        var pend = DB.projectPendings(userId, projectId);
+        if (pend.tasks || pend.agenda) {
+          var bits = [];
+          if (pend.tasks) bits.push(pend.tasks + (pend.tasks === 1 ? ' tarefa pendente' : ' tarefas pendentes'));
+          if (pend.agenda) bits.push(pend.agenda + (pend.agenda === 1 ? ' compromisso futuro' : ' compromissos futuros'));
+          throw new Error('Este projeto ainda possui: ' + bits.join(' e ') + '. Concluir mesmo assim?');
+        }
+      }
+      var p = DB.projectSetStatus(userId, projectId, 'COMPLETED');
+      try { DB.logSecurityEvent(userId, 'project', { action: 'project_completed', entity_type: 'project', entity_id: p.id }); } catch (e) {}
+      try { DB.emitProjectEvent(userId, 'project_completed', p, {}); } catch (e2) {}
+      return p;
+    },
+    reopenProject: function (userId, projectId) {
+      DB.requireAuthz(userId, 'project_complete', null);
+      var p = DB.projectSetStatus(userId, projectId, 'ACTIVE', { clearCompleted: true });
+      try { DB.emitProjectEvent(userId, 'project_reopened', p, {}); } catch (e) {}
+      return p;
+    },
+    archiveProject: function (userId, projectId) {
+      DB.requireAuthz(userId, 'project_archive', null);
+      var p = DB.projectSetStatus(userId, projectId, 'ARCHIVED');
+      try { DB.emitProjectEvent(userId, 'project_archived', p, {}); } catch (e) {}
+      return p;
+    },
+    deleteProject: function (userId, projectId) {
+      DB.requireAuthz(userId, 'project_delete', null);
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      p.deleted_at = now(); p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'project', p.id, 'deleted', {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'project', { action: 'project_deleted', entity_type: 'project', entity_id: p.id }); } catch (e) {}
+      return true;
+    },
+    /* Resolve entidade via servico oficial (existencia + autorizacao) e
+       retorna rotulo + visibilidade para as regras de compatibilidade. */
+    projectLinkTarget: function (userId, entityType, entityId) {
+      var t = String(entityType || '').toUpperCase();
+      if (DB.PROJECT_LINK_TYPES().indexOf(t) < 0) throw new Error('Tipo de entidade inválido.');
+      if (t === 'TASK') { var tk = DB.getTask(userId, entityId); return { label: tk.title, visibility: tk.visibility }; }
+      if (t === 'LIST') { var li = DB.getList(userId, entityId); return { label: li.name, visibility: li.visibility }; }
+      if (t === 'AGENDA_EVENT') { var ag = DB.getAgendaEvent(userId, entityId); return { label: ag.title, visibility: ag.visibility }; }
+      if (t === 'ROUTINE') { var rt = DB.getRoutine(userId, entityId); return { label: rt.name, visibility: rt.visibility }; }
+      if (t === 'GOAL') { var g = DB.getGoal(userId, entityId); return { label: g.name, visibility: 'COUPLE' }; }
+      if (t === 'FINANCIAL_PLAN') { var pl = DB.getPlan(userId, entityId); return { label: pl.name, visibility: 'COUPLE' }; }
+      throw new Error('Tipo de entidade inválido.');
+    },
+    projectLinkNextPosition: function (db, projectId) {
+      var max = -1;
+      db.project_links.forEach(function (l) { if (l.project_id === projectId && !l.deleted_at && l.position != null && l.position > max) max = l.position; });
+      return max + 1;
+    },
+    linkEntity: function (userId, projectId, data, opt) {
+      DB.requireAuthz(userId, 'project_link', null);
+      opt = opt || {};
+      data = data || {};
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      var t = String(data.entity_type || '').toUpperCase();
+      if (DB.PROJECT_LINK_TYPES().indexOf(t) < 0) throw new Error('Tipo de entidade inválido.');
+      var eid = data.entity_id ? String(data.entity_id) : null;
+      if (!eid) throw new Error('Escolha a entidade para vincular.');
+      var rel = String(data.relationship_type || 'RELATED').toUpperCase();
+      if (DB.PROJECT_REL_TYPES().indexOf(rel) < 0) throw new Error('Tipo de relacionamento inválido.');
+      var target = DB.projectLinkTarget(userId, t, eid);
+      if (p.visibility === 'COUPLE' && (target.visibility === 'PERSONAL' || target.visibility === 'PRIVATE')) {
+        try { DB.logAuthorizationFailure(userId, 'project_link', { entity_type: 'project_link', entity_id: projectId }); } catch (e) {}
+        throw new Error('Esta informação é pessoal e não pode ser adicionada diretamente a um projeto compartilhado.');
+      }
+      var dup = db.project_links.find(function (l) { return l.project_id === projectId && l.entity_type === t && l.entity_id === eid && !l.deleted_at; });
+      if (dup) return dup;
+      var link = { id: id('pl'), project_id: projectId, entity_type: t, entity_id: eid, relationship_type: rel, position: DB.projectLinkNextPosition(db, projectId), created_by: userId, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, created_at: now(), updated_at: now(), deleted_at: null };
+      db.project_links.push(link);
+      p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'project_link', link.id, 'linked', { entity_type: t, entity_id: eid, label: target.label });
+      write(db);
+      try { DB.emitProjectEvent(userId, 'project_entity_linked', p, { link_id: link.id }); } catch (e2) {}
+      return link;
+    },
+    unlinkEntity: function (userId, linkId) {
+      DB.requireAuthz(userId, 'project_link', null);
+      var db = read();
+      var link = db.project_links.find(function (l) { return l.id === linkId && !l.deleted_at; });
+      if (!link) throw new Error('Vínculo não encontrado.');
+      var p = DB.projectWriteGuard(db, userId, link.project_id);
+      link.deleted_at = now(); link.updated_at = now(); p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'project_link', link.id, 'unlinked', { entity_type: link.entity_type });
+      write(db);
+      try { DB.emitProjectEvent(userId, 'project_entity_unlinked', p, { link_id: link.id }); } catch (e) {}
+      return true;
+    },
+    getProjectLinks: function (userId, projectId) {
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      void p;
+      return db.project_links.filter(function (l) { return l.project_id === projectId && !l.deleted_at; })
+        .sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)) || (a.created_at + a.id).localeCompare(b.created_at + b.id); });
+    },
+    /* Resolve links com autorizacao transitiva: falha vira {ok:false} sem vazar. */
+    getProjectEntities: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId);
+      return links.map(function (l) {
+        try {
+          var t = DB.projectLinkTarget(userId, l.entity_type, l.entity_id);
+          return { link: l, ok: true, label: t.label, visibility: t.visibility };
+        } catch (e) {
+          return { link: l, ok: false, label: null, error: 'inacessível' };
+        }
+      });
+    },
+    reorderLinks: function (userId, projectId, order) {
+      DB.requireAuthz(userId, 'project_link', null);
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      if (!Array.isArray(order) || !order.length) throw new Error('Ordem inválida.');
+      if (order.length > 200) throw new Error('Projeto muito grande para reordenar.');
+      var seen = {};
+      order.forEach(function (lid, ix) {
+        if (seen[lid]) throw new Error('Ordem com vínculo duplicado.');
+        seen[lid] = true;
+        var l = db.project_links.find(function (x) { return x.id === lid && x.project_id === projectId && !x.deleted_at; });
+        if (!l) throw new Error('Vínculo não pertence a este projeto.');
+        l.position = ix; l.updated_at = now();
+      });
+      p.updated_at = now();
+      logAudit(db, p.couple_id, userId, 'project', p.id, 'reordered', { count: order.length });
+      write(db);
+      return true;
+    },
+    moveProjectLink: function (userId, linkId, direction) {
+      DB.requireAuthz(userId, 'project_link', null);
+      var db = read();
+      var link = db.project_links.find(function (l) { return l.id === linkId && !l.deleted_at; });
+      if (!link) throw new Error('Vínculo não encontrado.');
+      var p = DB.projectWriteGuard(db, userId, link.project_id);
+      var rows = db.project_links.filter(function (l) { return l.project_id === p.id && !l.deleted_at; });
+      rows.sort(function (a, b) { return ((a.position == null ? 1e9 : a.position) - (b.position == null ? 1e9 : b.position)); });
+      var ix = rows.findIndex(function (x) { return x.id === linkId; });
+      var jx = direction === 'up' ? ix - 1 : ix + 1;
+      if (ix < 0 || jx < 0 || jx >= rows.length) return false;
+      var a = rows[ix], b = rows[jx], tp = a.position;
+      a.position = b.position; b.position = tp;
+      a.updated_at = now(); b.updated_at = now(); p.updated_at = now();
+      write(db);
+      return true;
+    },
+    /* Criacao contextual com compensacao: se o link falhar, a entidade
+       recem-criada e removida para nao virar orfa silenciosa. */
+    createProjectTask: function (userId, projectId, taskData, opt) {
+      DB.requireAuthz(userId, 'task_create', null);
+      opt = opt || {};
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      taskData = taskData || {};
+      if (taskData.visibility === undefined) taskData.visibility = p.visibility;
+      var t = DB.createTask(userId, taskData, { source_type: opt.source_type || 'MANUAL' });
+      try {
+        DB.linkEntity(userId, projectId, { entity_type: 'TASK', entity_id: t.id, relationship_type: 'RELATED' }, { idempotency_key: opt.idempotency_key });
+      } catch (e) {
+        try { DB.deleteTask(userId, t.id); } catch (e2) {}
+        throw new Error('Não foi possível vincular a tarefa ao projeto: ' + (e.message || 'tente novamente.'));
+      }
+      return t;
+    },
+    createProjectList: function (userId, projectId, listData, opt) {
+      DB.requireAuthz(userId, 'list_create', null);
+      opt = opt || {};
+      var db = read();
+      var p = DB.projectWriteGuard(db, userId, projectId);
+      listData = listData || {};
+      if (listData.visibility === undefined) listData.visibility = p.visibility;
+      var l = DB.createList(userId, listData, { source_type: opt.source_type || 'MANUAL' });
+      try {
+        DB.linkEntity(userId, projectId, { entity_type: 'LIST', entity_id: l.id, relationship_type: 'RELATED' }, { idempotency_key: opt.idempotency_key });
+      } catch (e) {
+        try { DB.deleteList(userId, l.id); } catch (e2) {}
+        throw new Error('Não foi possível vincular a lista ao projeto: ' + (e.message || 'tente novamente.'));
+      }
+      return l;
+    },
+    /* ============ PROJECTAGGREGATIONSERVICE (somente leitura agregada) ============
+       Monta a visao consolidada consultando servicos oficiais. Sem logica de
+       negocio dos dominios, sem copiar dados, com falha isolada por secao. */
+    getProjectTasks: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'TASK'; });
+      var items = [];
+      links.forEach(function (l) {
+        try {
+          var t = DB.getTask(userId, l.entity_id);
+          items.push({ id: t.id, title: t.title, status: t.status, due_date: t.due_date, due_time: t.due_time, priority: t.priority, visibility: t.visibility, assigned_to: t.assigned_to, link_id: l.id, relationship: l.relationship_type });
+        } catch (e) {}
+      });
+      items.sort(function (a, b) { return ((a.due_date || '9999') + (a.due_time || '')).localeCompare((b.due_date || '9999') + (b.due_time || '')); });
+      var done = items.filter(function (t) { return t.status === 'COMPLETED'; }).length;
+      return { total: items.length, done: done, pending: items.length - done, items: items };
+    },
+    getProjectLists: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'LIST'; });
+      var out = [];
+      links.forEach(function (l) {
+        try {
+          var li = DB.getList(userId, l.entity_id);
+          var pr = DB.getListProgress(userId, li.id);
+          out.push({ id: li.id, name: li.name, list_type: li.list_type, visibility: li.visibility, total: pr.total, done: pr.done, pending: pr.pending, link_id: l.id });
+        } catch (e) {}
+      });
+      return out;
+    },
+    getProjectAgenda: function (userId, projectId, opt) {
+      opt = opt || {};
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'AGENDA_EVENT'; });
+      if (!links.length) return { total: 0, items: [] };
+      var from = opt.from || DB.agendaToday(), to = opt.to || DB.agendaAddDays(from, 90);
+      var ids = {};
+      links.forEach(function (l) { ids[l.entity_id] = l; });
+      var items = [];
+      try {
+        DB.agendaOccurrences(userId, from, to, { vision: 'couple' }).forEach(function (o) {
+          if (ids[o.event_id]) items.push({ event_id: o.event_id, title: o.title, date: o.date, start: (o.start_at && o.start_at.length > 10) ? o.start_at.slice(11, 16) : null, visibility: o.visibility, link_id: ids[o.event_id].id });
+        });
+      } catch (e) {}
+      items.sort(function (a, b) { return (a.date + (a.start || '')).localeCompare(b.date + (b.start || '')); });
+      return { total: items.length, items: items.slice(0, opt.limit || 30) };
+    },
+    getProjectRoutines: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'ROUTINE'; });
+      var db = read(), today = DB.agendaToday();
+      var out = [];
+      links.forEach(function (l) {
+        try {
+          var r = DB.getRoutine(userId, l.entity_id);
+          var due = DB.routineIsDueOnDate(r, today);
+          var execStatus = null, done = 0, total = 0;
+          try {
+            var ex = DB.routineFindExecution(db, r.id, DB.routineScopeKey(r, userId), today);
+            if (ex) {
+              execStatus = ex.status;
+              total = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === ex.id; }).length;
+              done = db.routine_item_executions.filter(function (e) { return e.routine_execution_id === ex.id && e.status === 'COMPLETED'; }).length;
+            }
+          } catch (e2) {}
+          out.push({ id: r.id, name: r.name, visibility: r.visibility, dueToday: due, execStatus: execStatus, total: total, done: done, link_id: l.id });
+        } catch (e3) {}
+      });
+      return out;
+    },
+    getProjectGoals: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'GOAL'; });
+      var out = [];
+      links.forEach(function (l) {
+        try {
+          var g = DB.getGoal(userId, l.entity_id);
+          var pr = DB.goalProgress(g);
+          out.push({ id: g.id, name: g.name, current: g.current_amount, target: g.target_amount, pct: pr.pct, deadline: g.deadline, status: g.status, relationship: l.relationship_type, link_id: l.id });
+        } catch (e) {}
+      });
+      return out;
+    },
+    getProjectFinancialPlans: function (userId, projectId) {
+      var links = DB.getProjectLinks(userId, projectId).filter(function (l) { return l.entity_type === 'FINANCIAL_PLAN'; });
+      var out = [];
+      links.forEach(function (l) {
+        try {
+          var pl = DB.getPlan(userId, l.entity_id);
+          out.push({ id: pl.id, name: pl.name, status: pl.status, period_start: pl.period_start, period_end: pl.period_end, link_id: l.id });
+        } catch (e) {}
+      });
+      return out;
+    },
+    getProjectUpcoming: function (userId, projectId, opt) {
+      opt = opt || {};
+      var days = opt.days || 30, limit = opt.limit || 10;
+      var today = DB.agendaToday(), out = [];
+      try {
+        DB.getProjectTasks(userId, projectId).items.forEach(function (t) {
+          if (t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.status === 'ARCHIVED') return;
+          if (!t.due_date || t.due_date < today || t.due_date > DB.agendaAddDays(today, days)) return;
+          out.push({ date: t.due_date, time: t.due_time || null, kind: 'task', title: t.title, ref: { task_id: t.id } });
+        });
+      } catch (e) {}
+      try {
+        DB.getProjectAgenda(userId, projectId, { from: today, to: DB.agendaAddDays(today, days), limit: 50 }).items.forEach(function (o) {
+          out.push({ date: o.date, time: o.start, kind: 'agenda', title: o.title, ref: { event_id: o.event_id } });
+        });
+      } catch (e2) {}
+      out.sort(function (a, b) { return (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')); });
+      return out.slice(0, limit);
+    },
+    getProjectProgress: function (userId, projectId) {
+      var tasks = { total: 0, done: 0 }, lists = [], goals = [];
+      try {
+        var tt = DB.getProjectTasks(userId, projectId);
+        tasks = { total: tt.total, done: tt.done };
+        lists = DB.getProjectLists(userId, projectId).map(function (l) { return { id: l.id, name: l.name, total: l.total, done: l.done }; });
+        goals = DB.getProjectGoals(userId, projectId).map(function (g) { return { id: g.id, name: g.name, pct: g.pct }; });
+      } catch (e) {}
+      return { tasks: tasks, lists: lists, goals: goals };
+    },
+    getProjectSummary: function (userId, projectId) {
+      var p = DB.getProject(userId, projectId);
+      var pr = DB.getProjectProgress(userId, projectId);
+      var up = DB.getProjectUpcoming(userId, projectId, { days: 60, limit: 3 });
+      var counts = { tasks: 0, lists: 0, agenda: 0, routines: 0, goals: 0, plans: 0 };
+      try {
+        DB.getProjectLinks(userId, projectId).forEach(function (l) {
+          if (l.entity_type === 'TASK') counts.tasks++;
+          else if (l.entity_type === 'LIST') counts.lists++;
+          else if (l.entity_type === 'AGENDA_EVENT') counts.agenda++;
+          else if (l.entity_type === 'ROUTINE') counts.routines++;
+          else if (l.entity_type === 'GOAL') counts.goals++;
+          else if (l.entity_type === 'FINANCIAL_PLAN') counts.plans++;
+        });
+      } catch (e) {}
+      var goalPct = pr.goals.length ? pr.goals[0].pct : null;
+      return { id: p.id, name: p.name, visibility: p.visibility, status: p.status, target_date: p.target_date, taskTotal: pr.tasks.total, taskDone: pr.tasks.done, goalPct: goalPct, upcoming: up, counts: counts };
+    },
+    getProjectOverview: function (userId, projectId) {
+      var p = DB.getProject(userId, projectId);
+      function section(fn) {
+        try { return { ok: true, data: fn() }; }
+        catch (e) { return { ok: false, error: 'indisponível', data: null }; }
+      }
+      var tasks = section(function () { return DB.getProjectTasks(userId, projectId); });
+      var lists = section(function () { return DB.getProjectLists(userId, projectId); });
+      var agenda = section(function () { return DB.getProjectAgenda(userId, projectId, {}); });
+      var routines = section(function () { return DB.getProjectRoutines(userId, projectId); });
+      var goals = section(function () { return DB.getProjectGoals(userId, projectId); });
+      var plans = section(function () { return DB.getProjectFinancialPlans(userId, projectId); });
+      var upcoming = section(function () { return DB.getProjectUpcoming(userId, projectId, { days: 60, limit: 10 }); });
+      var progress = section(function () { return DB.getProjectProgress(userId, projectId); });
+      return { project: { id: p.id, name: p.name, description: p.description, visibility: p.visibility, status: p.status, start_date: p.start_date, target_date: p.target_date, icon: p.icon }, tasks: tasks, lists: lists, agenda: agenda, routines: routines, goals: goals, plans: plans, upcoming: upcoming, progress: progress };
+    },
+    getProjectActivity: function (userId, projectId, limit) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      DB.getProject(userId, projectId);
+      var ids = {};
+      ids[projectId] = true;
+      db.project_links.forEach(function (l) { if (l.project_id === projectId) { ids[l.entity_id] = true; ids[l.id] = true; } });
+      var rows = db.audit_logs.filter(function (a) { return a.couple_id === cid && ids[a.entity_id]; })
+        .sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); })
+        .slice(0, limit || 20);
+      return rows.map(function (a) {
+        var who = a.user_id ? (function () { try { return DB.userName(userId, a.user_id); } catch (e) { return 'alguém'; } })() : 'sistema';
+        return { at: a.created_at, actor: who, entity: a.entity, action: a.action };
+      });
+    },
+    getRelevantProjects: function (userId, limit) {
+      var rows = DB.getProjects(userId, { limit: 50 }).filter(function (p) { return p.status === 'ACTIVE' || p.status === 'PLANNING'; });
+      var out = rows.map(function (p) {
+        var up = [];
+        try { up = DB.getProjectUpcoming(userId, p.id, { days: 30, limit: 1 }); } catch (e) {}
+        return { project: p, hasUpcoming: up.length > 0, nextDate: up.length ? up[0].date : null };
+      });
+      out.sort(function (a, b) {
+        if ((a.hasUpcoming ? 0 : 1) !== (b.hasUpcoming ? 0 : 1)) return (a.hasUpcoming ? 0 : 1) - (b.hasUpcoming ? 0 : 1);
+        var ta = a.project.target_date || '9999', tb = b.project.target_date || '9999';
+        if (ta !== tb) return ta < tb ? -1 : 1;
+        return (b.project.updated_at + b.project.id).localeCompare(a.project.updated_at + a.project.id);
+      });
+      return out.slice(0, limit || 3).map(function (x) {
+        var s = null;
+        try { s = DB.getProjectSummary(userId, x.project.id); } catch (e2) { s = { id: x.project.id, name: x.project.name }; }
+        return s;
+      });
+    },
+    projectProcessDue: function (userId, nowISO) {
+      var today = (nowISO || now()).slice(0, 10);
+      var made = [];
+      DB.getProjects(userId, { limit: 100 }).forEach(function (p) {
+        if ((p.status !== 'ACTIVE' && p.status !== 'PLANNING') || !p.target_date) return;
+        var dd = Math.round((Date.parse(p.target_date) - Date.parse(today)) / 864e5);
+        if (dd < 0 || dd > 7) return;
+        try {
+          var r = DB.notifCreate(userId, { type: 'project_deadline_approaching', title: 'Prazo do projeto: ' + p.name, body: '"' + p.name + '" tem prazo em ' + p.target_date.split('-').reverse().join('/') + (dd === 0 ? ' (hoje).' : ' (em ' + dd + (dd === 1 ? ' dia).' : ' dias).')), priority: 'attention', user_id: userId, related_entity_type: 'project', related_entity_id: p.id, idempotency_key: ['project', 'deadline', p.couple_id, p.id, p.target_date].join('|'), payload: { project_id: p.id } });
+          if (r && r.id) made.push(r.id);
+        } catch (e) {}
+      });
+      return made;
+    },
+    emitProjectEvent: function (userId, kind, project, extra) {
+      extra = extra || {};
+      var allowed = ['project_created', 'project_updated', 'project_paused', 'project_resumed', 'project_completed', 'project_reopened', 'project_archived', 'project_entity_linked', 'project_entity_unlinked'];
+      if (allowed.indexOf(kind) < 0) return null;
+      var db = read();
+      logAudit(db, project.couple_id, userId, 'project', project.id, kind, { link_id: extra.link_id || null });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'project', { action: kind, entity_type: 'project', entity_id: project.id }); } catch (e) {}
+      return true;
+    },
+    projectHasContext: function (userId) {
+      try { return !!DB.convGetContext(userId, null, 'PROJECT'); } catch (e) { return false; }
+    },
+    projectNameHit: function (userId, text) {
+      var s = DB.aiNorm(text || '');
+      if (!s) return [];
+      try {
+        return DB.getProjects(userId, { limit: 100 }).filter(function (p) {
+          var words = DB.aiNorm(p.name).split(' ').filter(function (w) { return w.length >= 5; });
+          return words.some(function (w) { return s.indexOf(w) >= 0; });
+        });
+      } catch (e) { return []; }
+    },
+    aiResolveProject: function (userId, rawText, convId) {
+      var cands = DB.aiFindProject(userId, rawText);
+      if (cands.length === 1) return cands[0];
+      if (cands.length > 1) throw { clarification: 'Qual deles? ' + cands.slice(0, 3).map(function (p) { return '"' + p.name + '"'; }).join(', ') + '?' };
+      var hits = DB.projectNameHit(userId, rawText);
+      if (hits.length === 1) return hits[0];
+      if (hits.length > 1) throw { clarification: 'Qual deles? ' + hits.slice(0, 3).map(function (p) { return '"' + p.name + '"'; }).join(', ') + '?' };
+      var ctx = null;
+      try { var _c = DB.convGetContext(userId, convId, 'PROJECT'); if (_c && _c.entity_id) { try { ctx = DB.getProject(userId, _c.entity_id); } catch (e) {} } } catch (e2) {}
+      if (ctx) return ctx;
+      throw { clarification: 'Qual projeto? Ex: "como está nossa viagem?".' };
+    },
+    aiFindProject: function (userId, q) {
+      if (!q) return [];
+      var rows = DB.getProjects(userId, { limit: 100 });
+      var nq = DB.aiNorm(q);
+      return rows.filter(function (p) { var n = DB.aiNorm(p.name); return n.length >= 3 && (nq.indexOf(n) >= 0 || n.indexOf(nq) >= 0); });
+    },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
        notifications → deliveries (in_app/whatsapp; email/push futuros).
@@ -11549,7 +12419,8 @@ window.Juntos = window.Juntos || {};
         { key: 'list_item_assigned', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'lists' },
         { key: 'routine_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
         { key: 'routine_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
-        { key: 'routine_assigned_item', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'routines' }
+        { key: 'routine_assigned_item', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'routines' },
+        { key: 'project_deadline_approaching', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'projects' }
       ];
     },
     notifTypeDef: function (type) {
@@ -12029,6 +12900,12 @@ window.Juntos = window.Juntos || {};
           var made3 = DB.habitProcessDue(userId, opt.nowISO || now());
           made3.forEach(function (id) { made.push(id); });
         } catch (e2) { /* hábitos indisponíveis: segue */ }
+      }
+      if (types.indexOf('project_deadline_approaching') >= 0) {
+        try {
+          var madeP = DB.projectProcessDue(userId, opt.nowISO || now());
+          madeP.forEach(function (id) { made.push(id); });
+        } catch (eP2) { /* projetos indisponiveis: segue */ }
       }
       if (types.indexOf('routine_due') >= 0 || types.indexOf('routine_reminder') >= 0 || types.indexOf('routine_assigned_item') >= 0) {
         try {
@@ -14538,7 +15415,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;
@@ -14671,6 +15548,28 @@ window.Juntos = window.Juntos || {};
     canPauseRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
     canArchiveRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
     canDeleteRoutine: function (userId, routineId) { return DB.canEditRoutine(userId, routineId); },
+    canViewProject: function (userId, projectId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!projectId) return true;
+      var db = read();
+      var p = db.projects.find(function (x) { return x.id === projectId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!p && DB.projectVisible(db, userId, p);
+    },
+    canCreateProject: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditProject: function (userId, projectId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !projectId) return !!c.member;
+      var db = read();
+      var p = db.projects.find(function (x) { return x.id === projectId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!p && DB.projectCanAct(db, userId, p);
+    },
+    canLinkProjectEntity: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canUnlinkProjectEntity: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canPauseProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canCompleteProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canArchiveProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canDeleteProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
        financeira (audit_logs). Sem segredos; IP/UA só como hash. */

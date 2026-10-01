@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -941,6 +941,7 @@
     s += blk('Tarefas', function () { return ovTasksCard(me, day); });
     s += blk('Listas', function () { return ovListsCard(me, day); });
     s += blk('Rotinas', function () { return ovRoutinesCard(me, day); });
+    s += blk('Projetos', function () { return ovProjectsCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
     pair2 += blk('Timeline', function () { return ovTimelineCard(day); });
@@ -3275,6 +3276,275 @@
     var top = lst[0];
     return '<div class="card"><b>🔁 ' + esc(top.name) + '</b><p class="muted">' + top.done + ' de ' + top.total + ' • <a href="#/routines/' + top.id + '">Continuar ›</a></p></div>';
   }
+  /* ============ PROJETOS (só apresentação sobre ProjectService) ============
+     Projeto agrega via project_links; cada entidade segue no seu serviço. */
+  var pj = { tab: 'active', vis: 'all', q: '', dtab: 'overview', cur: null };
+  function pjStatusLbl(s) {
+    return { PLANNING: 'Planejamento', ACTIVE: 'Ativo', PAUSED: 'Pausado', COMPLETED: 'Concluído', ARCHIVED: 'Arquivado' }[s] || s;
+  }
+  function pjNextLbl(n) {
+    if (!n) return 'Nada futuro vinculado';
+    return n.title + ' • ' + dueLabel(n.date);
+  }
+  function pProjects(v, me) {
+    var tabs = [['active', 'Ativos'], ['PLANNING', 'Planejamento'], ['COMPLETED', 'Concluídos'], ['all', 'Todos']];
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Projetos</h1><button class="btn" id="pj-new" style="max-width:190px">+ Novo projeto</button></div>' +
+      '<div class="seg-scroll"><div class="seg" role="tablist" aria-label="Status">' +
+      tabs.map(function (x) { return '<button data-pjtab="' + x[0] + '" class="' + (pj.tab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="seg" role="group" aria-label="Visibilidade"><button data-pjvis="all" class="' + (pj.vis === 'all' ? 'on' : '') + '">Todos</button><button data-pjvis="PERSONAL" class="' + (pj.vis === 'PERSONAL' ? 'on' : '') + '">Pessoais</button><button data-pjvis="COUPLE" class="' + (pj.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<input id="pj-q" placeholder="🔍 Buscar projetos" value="' + esc(pj.q) + '" aria-label="Buscar projetos"></div>';
+    var rows = [], errMsg = null;
+    try {
+      var f = { search: pj.q || undefined, limit: 100 };
+      if (pj.tab === 'active') f.status = 'ACTIVE';
+      else if (pj.tab !== 'all') f.status = pj.tab;
+      else f.include_archived = true;
+      if (pj.vis !== 'all') f.visibility = pj.vis;
+      rows = J.DB.getProjects(me.id, f);
+      if (pj.tab === 'active') rows = rows.concat(J.DB.getProjects(me.id, { status: 'PLANNING', visibility: f.visibility, search: f.search, limit: 100 }));
+    } catch (e) { errMsg = e; }
+    if (errMsg) { v.innerHTML = html + '<div class="card"><b>Projetos</b><div class="alert">Não foi possível carregar seus projetos.</div><button class="btn ghost" data-pjretry>Tentar novamente</button></div>'; bindProjects(v, me); return; }
+    if (!rows.length) {
+      html += '<div class="card empty"><div class="ico">🗂</div><h2>Organize objetivos maiores em projetos.</h2><p class="muted">Reúna tarefas, listas, compromissos, metas e planejamento em um só lugar.</p><button class="btn" id="pj-new2" style="max-width:220px;margin:0 auto">+ Novo projeto</button></div>';
+    } else {
+      html += rows.slice(0, 60).map(function (p) {
+        var s = null;
+        try { s = J.DB.getProjectSummary(me.id, p.id); } catch (e2) {}
+        var prog = s ? s.taskDone + '/' + s.taskTotal + ' tarefas' : '';
+        var goal = s && s.goalPct != null ? ' • Meta ' + String(s.goalPct).replace('.', ',') + '%' : '';
+        var nx = s && s.upcoming && s.upcoming.length ? '<br><span class="muted">Próximo: ' + esc(pjNextLbl(s.upcoming[0])) + '</span>' : '';
+        return '<a class="card dash-link" href="#/projects/' + p.id + '" aria-label="Abrir projeto ' + esc(p.name) + '"><div class="row between"><b>' + esc(p.name) + '</b><span class="pill">' + (p.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</span></div>' +
+          '<p class="muted">' + esc(pjStatusLbl(p.status)) + (p.target_date ? ' • Prazo ' + esc(dueLabel(p.target_date)) : '') + '</p>' +
+          '<p>' + esc(prog) + esc(goal) + nx + '</p></a>';
+      }).join('');
+    }
+    v.innerHTML = html;
+    bindProjects(v, me);
+  }
+  function bindProjects(v, me) {
+    var nw = document.getElementById('pj-new'); if (nw) nw.onclick = function () { openProjectModal(me, null); };
+    var nw2 = document.getElementById('pj-new2'); if (nw2) nw2.onclick = function () { openProjectModal(me, null); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjtab]'), function (b) { b.onclick = function () { pj.tab = b.dataset.pjtab; render('projects'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjvis]'), function (b) { b.onclick = function () { pj.vis = b.dataset.pjvis; render('projects'); }; });
+    var q = document.getElementById('pj-q'); if (q) q.onchange = function (e) { pj.q = e.target.value; render('projects'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjretry]'), function (b) { b.onclick = function () { render('projects'); }; });
+  }
+  function openProjectModal(me, projectId) {
+    var p = null;
+    if (projectId) { try { p = J.DB.getProject(me.id, projectId); } catch (e) { toast('Projeto não encontrado.'); return; } }
+    modalShell('<h2>' + (p ? 'Editar projeto' : 'Novo projeto') + '</h2><div id="me"></div>' +
+      '<label>Nome *</label><input id="f-pn" maxlength="80" value="' + esc(p ? p.name : '') + '">' +
+      '<label>Descrição</label><input id="f-pd" maxlength="500" value="' + esc(p ? (p.description || '') : '') + '">' +
+      '<label>É</label><div class="row"><label class="check"><input type="radio" name="pjvis" value="PERSONAL"' + ((!p || p.visibility === 'PERSONAL') ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="pjvis" value="COUPLE"' + ((p && p.visibility === 'COUPLE') ? ' checked' : '') + '> Do casal</label></div>' +
+      '<div class="row"><div><label>Início</label><input id="f-ps" type="date" value="' + esc(p ? (p.start_date || '') : todayISO()) + '"></div>' +
+      '<div><label>Prazo desejado</label><input id="f-pt" type="date" value="' + esc(p && p.target_date ? p.target_date : '') + '"></div></div>' +
+      '<p class="muted">Projeto reúne o que já existe; nada é copiado.</p>' +
+      '<button class="btn" id="sv">' + (p ? 'Salvar' : 'Criar projeto') + '</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var vs = document.querySelector('input[name="pjvis"]:checked');
+        var data = { name: document.getElementById('f-pn').value, description: document.getElementById('f-pd').value, visibility: vs ? vs.value : 'PERSONAL', start_date: document.getElementById('f-ps').value || null, target_date: document.getElementById('f-pt').value || null };
+        if (!p && data.visibility === 'COUPLE' && !confirm('Esse projeto passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        if (p && data.visibility !== p.visibility && data.visibility === 'COUPLE' && !confirm('Esse projeto passará a ser visível para seu parceiro. Continuar?')) { unlock(btn); return; }
+        if (p) { J.DB.updateProject(me.id, p.id, data); toast('Projeto atualizado!'); closeModal(); render(here()); }
+        else { var np = J.DB.createProject(me.id, data); toast('Projeto criado! 🗂'); location.hash = '#/projects/' + np.id; closeModal(); return; }
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function pProjectDetail(v, me, pid) {
+    var p;
+    try { p = J.DB.getProject(me.id, pid); }
+    catch (e) { v.innerHTML = '<div class="card"><b>Projeto</b><div class="alert">Não foi possível carregar este projeto.</div><p><a href="#/projects">‹ Voltar para Projetos</a></p></div>'; return; }
+    if (pj.cur !== pid) { pj.cur = pid; pj.dtab = 'overview'; }
+    var ov = null, act = [];
+    try { ov = J.DB.getProjectOverview(me.id, pid); } catch (e2) { ov = null; }
+    try { act = J.DB.getProjectActivity(me.id, pid, 10); } catch (e3) {}
+    if (!ov) { v.innerHTML = '<p class="muted"><a href="#/projects">‹ Projetos</a></p><div class="card"><div class="alert">Não foi possível carregar este projeto.</div><button class="btn ghost" onclick="location.hash=\'#/projects\'">Voltar</button></div>'; return; }
+    var tabs = [['overview', 'Visão Geral'], ['tasks', 'Tarefas'], ['agenda', 'Agenda'], ['lists', 'Listas'], ['finance', 'Finanças']];
+    var html = '<p class="muted"><a href="#/projects">‹ Projetos</a></p>' +
+      '<div class="card"><div class="row between" style="flex-wrap:wrap"><div><h1 style="margin:0">' + esc(p.name) + '</h1><p class="muted">' + esc(pjStatusLbl(p.status)) + ' • ' + (p.visibility === 'COUPLE' ? 'Casal' : 'Pessoal') + (p.target_date ? ' • Prazo ' + esc(dueLabel(p.target_date)) : '') + '</p></div>' +
+      '<span><button class="btn ghost sm" id="pj-edit">Editar</button></span></div>' +
+      (p.description ? '<p class="muted">' + esc(p.description) + '</p>' : '') + '</div>' +
+      '<div class="seg-scroll"><div class="seg" role="tablist" aria-label="Seções">' +
+      tabs.map(function (x) { return '<button data-pjdtab="' + x[0] + '" class="' + (pj.dtab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div id="pj-body">' + pjDetailBody(me, p, ov, act) + '</div>' +
+      '<div class="card"><div class="row" style="flex-wrap:wrap">' +
+      (p.status === 'COMPLETED' ? '<button class="btn ghost sm" id="pj-re">Reabrir</button>' : '<button class="btn ghost sm" id="pj-done">Concluir projeto</button>') +
+      (p.status === 'PAUSED' ? '<button class="btn ghost sm" id="pj-res">Retomar</button>' : (p.status !== 'COMPLETED' && p.status !== 'ARCHIVED' ? '<button class="btn ghost sm" id="pj-pause">Pausar</button>' : '')) +
+      (p.status === 'ARCHIVED' ? '' : '<button class="btn ghost sm" id="pj-arch">Arquivar</button>') +
+      ' <button class="btn ghost sm" id="pj-link">+ Vincular</button></div></div>';
+    v.innerHTML = html;
+    bindProjectDetail(v, me, p, ov);
+  }
+  function pjDetailBody(me, p, ov, act) {
+    var h = '';
+    if (pj.dtab === 'overview' || pj.dtab === 'tasks') {
+      var up = (ov.upcoming && ov.upcoming.ok && ov.upcoming.data.length) ? ov.upcoming.data[0] : null;
+      h += '<div class="card"><b>Próximo passo</b>' + (up ? '<h2>' + esc(up.title) + '</h2><p class="muted">Prazo: ' + esc(dueLabel(up.date)) + '</p>' : '<p class="muted">Nada futuro vinculado.</p>') + '</div>';
+    }
+    if (pj.dtab === 'overview' || pj.dtab === 'tasks') {
+      var tk = (ov.tasks && ov.tasks.ok) ? ov.tasks.data : { total: 0, done: 0, items: [] };
+      h += '<div class="card"><div class="row between"><b>Tarefas (' + tk.done + ' de ' + tk.total + ')</b><button class="btn ghost sm" id="pj-newtask">+ Tarefa</button></div>' +
+        (tk.items.length ? tk.items.slice(0, 20).map(function (t) { return '<p>' + (t.status === 'COMPLETED' ? '✓ ' : '○ ') + esc(t.title) + (t.due_date ? ' <span class="muted">• ' + esc(dueLabel(t.due_date)) + '</span>' : '') + ' <button class="btn ghost sm" data-pjunlink="' + t.link_id + '" aria-label="Desvincular ' + esc(t.title) + '" style="max-width:40px">✕</button></p>'; }).join('') : '<p class="muted">Este projeto ainda não possui itens relacionados.</p>') + '</div>';
+    }
+    if (pj.dtab === 'overview' || pj.dtab === 'agenda') {
+      var ag = (ov.agenda && ov.agenda.ok) ? ov.agenda.data : { items: [] };
+      h += '<div class="card"><div class="row between"><b>Agenda</b><button class="btn ghost sm" id="pj-newag">+ Compromisso</button></div>' +
+        (ag.items.length ? ag.items.slice(0, 20).map(function (o) { return '<p><b>' + esc(dueLabel(o.date)) + '</b> ' + esc(o.title) + ' <button class="btn ghost sm" data-pjunlink="' + o.link_id + '" aria-label="Desvincular" style="max-width:40px">✕</button></p>'; }).join('') : '<p class="muted">Sem compromissos vinculados.</p>') + '</div>';
+    }
+    if (pj.dtab === 'overview' || pj.dtab === 'lists') {
+      var ls = (ov.lists && ov.lists.ok) ? ov.lists.data : [];
+      var rt = [];
+      try {
+        var _ov2 = ov;
+        if (_ov2.routines && _ov2.routines.ok) rt = _ov2.routines.data;
+      } catch (eR) {}
+      h += '<div class="card"><div class="row between"><b>Listas e rotinas</b><span><button class="btn ghost sm" id="pj-newlist">+ Lista</button> <button class="btn ghost sm" id="pj-linkrt">+ Rotina</button></span></div>' +
+        (ls.length ? ls.map(function (l) { return '<p><a href="#/lists/' + l.id + '">' + esc(l.name) + '</a> <span class="muted">• ' + l.pending + ' pendentes</span> <button class="btn ghost sm" data-pjunlink="' + l.link_id + '" aria-label="Desvincular" style="max-width:40px">✕</button></p>'; }).join('') : '<p class="muted">Sem listas vinculadas.</p>') +
+        (rt.length ? rt.map(function (r) { return '<p><a href="#/routines/' + r.id + '">' + esc(r.name) + '</a>' + (r.dueToday ? ' <span class="muted">• hoje</span>' : '') + ' <button class="btn ghost sm" data-pjunlink="' + r.link_id + '" aria-label="Desvincular" style="max-width:40px">✕</button></p>'; }).join('') : '') + '</div>';
+    }
+    if (pj.dtab === 'overview' || pj.dtab === 'finance') {
+      var gs = (ov.goals && ov.goals.ok) ? ov.goals.data : [];
+      var ps = (ov.plans && ov.plans.ok) ? ov.plans.data : [];
+      h += '<div class="card"><div class="row between"><b>Finanças</b><span><button class="btn ghost sm" id="pj-newgoal">+ Meta</button> <button class="btn ghost sm" id="pj-linkpl">+ Planejamento</button></span></div>';
+      if (!gs.length && !ps.length) h += '<p class="muted">Sem metas ou planejamento vinculados. O projeto não cria contabilidade própria.</p>';
+      h += gs.map(function (g) { return '<p><b>' + esc(g.name) + '</b><br><span class="muted">' + BRL(g.current) + ' / ' + BRL(g.target) + ' • ' + String(g.pct).replace('.', ',') + '%</span> <button class="btn ghost sm" data-pjunlink="' + g.link_id + '" aria-label="Desvincular" style="max-width:40px">✕</button></p>'; }).join('');
+      h += ps.map(function (x) { return '<p>📊 <a href="#/planning">' + esc(x.name) + '</a> <span class="muted">• ' + esc(x.status) + '</span> <button class="btn ghost sm" data-pjunlink="' + x.link_id + '" aria-label="Desvincular" style="max-width:40px">✕</button></p>'; }).join('') + '</div>';
+    }
+    if (pj.dtab === 'overview') {
+      if (!(ov.tasks && ov.tasks.ok)) h += '<div class="card"><div class="alert">Não foi possível carregar as tarefas relacionadas.</div><button class="btn ghost sm" data-pjretry>Tentar novamente</button></div>';
+      if (!(ov.goals && ov.goals.ok)) h += '<div class="card"><div class="alert">Não foi possível carregar as metas relacionadas.</div><button class="btn ghost sm" data-pjretry>Tentar novamente</button></div>';
+      h += '<div class="card"><b>Atividade</b>' + (act.length ? act.map(function (a) { return '<p class="muted">' + esc(a.actor) + ' • ' + esc(a.action) + ' • ' + esc((a.at || '').slice(0, 10).split('-').reverse().join('/')) + '</p>'; }).join('') : '<p class="muted">Sem atividade registrada.</p>') + '</div>';
+    }
+    return h;
+  }
+  function bindProjectDetail(v, me, p, ov) {
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjdtab]'), function (b) { b.onclick = function () { pj.dtab = b.dataset.pjdtab; render('projects/' + p.id); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjunlink]'), function (b) {
+      b.onclick = function () {
+        if (!confirm('Desvincular do projeto? A entidade continua existindo.')) return;
+        try { J.DB.unlinkEntity(me.id, b.dataset.pjunlink); toast('Desvinculado.'); render('projects/' + p.id); }
+        catch (eU) { toast('Não foi possível.'); }
+      };
+    });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-pjretry]'), function (b) { b.onclick = function () { render('projects/' + p.id); }; });
+    document.getElementById('pj-edit').onclick = function () { openProjectModal(me, p.id); };
+    document.getElementById('pj-link').onclick = function () { openProjectLinkModal(me, p.id); };
+    var nt = document.getElementById('pj-newtask'); if (nt) nt.onclick = function () { openProjectTaskModal(me, p); };
+    var nl = document.getElementById('pj-newlist'); if (nl) nl.onclick = function () { openProjectListModal(me, p); };
+    var ng = document.getElementById('pj-newgoal'); if (ng) ng.onclick = function () { openProjectGoalModal(me, p); };
+    var na = document.getElementById('pj-newag'); if (na) na.onclick = function () { location.hash = '#/agenda'; };
+    var lr = document.getElementById('pj-linkrt'); if (lr) lr.onclick = function () { openProjectLinkModal(me, p.id, 'ROUTINE'); };
+    var lp = document.getElementById('pj-linkpl'); if (lp) lp.onclick = function () { openProjectLinkModal(me, p.id, 'FINANCIAL_PLAN'); };
+    var fin = document.getElementById('pj-done'); if (fin) fin.onclick = function () {
+      try { J.DB.completeProject(me.id, p.id, {}); toast('Projeto concluído!'); render('projects/' + p.id); }
+      catch (e) {
+        if (/ainda possui/.test(e.message || '') && confirm(e.message + ' ')) { try { J.DB.completeProject(me.id, p.id, { force: true }); toast('Projeto concluído!'); render('projects/' + p.id); } catch (e2) { toast('Não foi possível.'); } }
+        else toast(e.message || 'Não foi possível.');
+      }
+    };
+    var re = document.getElementById('pj-re'); if (re) re.onclick = function () { try { J.DB.reopenProject(me.id, p.id); render('projects/' + p.id); } catch (e3) { toast('Não foi possível.'); } };
+    var pa = document.getElementById('pj-pause'); if (pa) pa.onclick = function () { try { J.DB.pauseProject(me.id, p.id); toast('Projeto pausado.'); render('projects/' + p.id); } catch (e4) { toast('Não foi possível.'); } };
+    var rs = document.getElementById('pj-res'); if (rs) rs.onclick = function () { try { J.DB.resumeProject(me.id, p.id); toast('Projeto retomado!'); render('projects/' + p.id); } catch (e5) { toast('Não foi possível.'); } };
+    var ar = document.getElementById('pj-arch'); if (ar) ar.onclick = function () { try { J.DB.archiveProject(me.id, p.id); toast('Projeto arquivado.'); location.hash = '#/projects'; } catch (e6) { toast('Não foi possível.'); } };
+  }
+  function pjEntityOptions(me, type) {
+    var rows = [], label = 'Entidade';
+    try {
+      if (type === 'TASK') { rows = J.DB.getTasks(me.id, { limit: 100 }).map(function (t) { return { id: t.id, name: t.title }; }); label = 'Tarefa'; }
+      else if (type === 'LIST') { rows = J.DB.getLists(me.id, { limit: 100 }).map(function (l) { return { id: l.id, name: l.name }; }); label = 'Lista'; }
+      else if (type === 'AGENDA_EVENT') {
+        var seen = {};
+        J.DB.agendaOccurrences(me.id, todayISO(), J.DB.agendaAddDays(todayISO(), 90), { vision: 'couple' }).forEach(function (o) { if (o.event_id && !seen[o.event_id]) { seen[o.event_id] = true; rows.push({ id: o.event_id, name: o.title }); } });
+        label = 'Compromisso';
+      }
+      else if (type === 'ROUTINE') { rows = J.DB.getRoutines(me.id, { limit: 100 }).map(function (r) { return { id: r.id, name: r.name }; }); label = 'Rotina'; }
+      else if (type === 'GOAL') { rows = J.DB.analyticsGoals(me.id).map(function (g) { return { id: g.id, name: g.name }; }); label = 'Meta'; }
+      else if (type === 'FINANCIAL_PLAN') { rows = J.DB.listPlans(me.id, {}).map(function (x) { return { id: x.id, name: x.name }; }); label = 'Planejamento'; }
+    } catch (e) { rows = []; }
+    return { rows: rows.slice(0, 60), label: label };
+  }
+  function openProjectLinkModal(me, projectId, presetType) {
+    var p;
+    try { p = J.DB.getProject(me.id, projectId); } catch (e) { toast('Projeto não encontrado.'); return; }
+    var types = [['TASK', 'Tarefa'], ['LIST', 'Lista'], ['AGENDA_EVENT', 'Compromisso'], ['ROUTINE', 'Rotina'], ['GOAL', 'Meta'], ['FINANCIAL_PLAN', 'Planejamento']];
+    modalShell('<h2>Vincular ao projeto</h2><div id="me"></div>' +
+      '<label>Tipo</label><select id="f-lt">' + types.map(function (t) { return '<option value="' + t[0] + '"' + (presetType === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select>' +
+      '<label>Item</label><select id="f-le"></select>' +
+      '<p class="muted">O item continua no seu lugar; o projeto só referencia. Itens pessoais não entram em projeto do casal.</p>' +
+      '<button class="btn" id="sv">Vincular</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    function paint() {
+      var t = document.getElementById('f-lt').value;
+      var o = pjEntityOptions(me, t);
+      document.getElementById('f-le').innerHTML = o.rows.map(function (x) { return '<option value="' + x.id + '">' + esc(String(x.name).slice(0, 60)) + '</option>'; }).join('') || '<option value="">(nada disponível)</option>';
+    }
+    document.getElementById('f-lt').onchange = paint; paint();
+    document.getElementById('sv').onclick = function () {
+      try {
+        var t2 = document.getElementById('f-lt').value, eid = document.getElementById('f-le').value;
+        if (!eid) throw new Error('Escolha um item.');
+        J.DB.linkEntity(me.id, projectId, { entity_type: t2, entity_id: eid, relationship_type: 'RELATED' });
+        closeModal(); toast('Vinculado!'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); }
+    };
+  }
+  function openProjectTaskModal(me, p) {
+    modalShell('<h2>Nova tarefa do projeto</h2><div id="me"></div>' +
+      '<label>Título *</label><input id="f-tt" maxlength="120">' +
+      '<div class="row"><div><label>Prazo</label><input id="f-td" type="date"></div>' +
+      '<div><label>Prioridade</label><select id="f-tp"><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="LOW">Baixa</option></select></div></div>' +
+      '<p class="muted">Será criada como tarefa ' + (p.visibility === 'COUPLE' ? 'do casal' : 'pessoal') + ' e vinculada ao projeto.</p>' +
+      '<button class="btn" id="sv">Criar e vincular</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        J.DB.createProjectTask(me.id, p.id, { title: document.getElementById('f-tt').value, due_date: document.getElementById('f-td').value || null, priority: document.getElementById('f-tp').value });
+        closeModal(); toast('Tarefa criada no projeto!'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openProjectListModal(me, p) {
+    modalShell('<h2>Nova lista do projeto</h2><div id="me"></div>' +
+      '<label>Nome *</label><input id="f-ln" maxlength="80">' +
+      '<label>Tipo</label><select id="f-ly"><option value="GENERAL">Geral</option><option value="SHOPPING">Compras</option><option value="CHECKLIST">Checklist</option></select>' +
+      '<p class="muted">Será criada como lista ' + (p.visibility === 'COUPLE' ? 'do casal' : 'pessoal') + ' e vinculada ao projeto.</p>' +
+      '<button class="btn" id="sv">Criar e vincular</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        J.DB.createProjectList(me.id, p.id, { name: document.getElementById('f-ln').value, list_type: document.getElementById('f-ly').value });
+        closeModal(); toast('Lista criada no projeto!'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openProjectGoalModal(me, p) {
+    modalShell('<h2>Nova meta do projeto</h2><div id="me"></div>' +
+      '<label>Nome *</label><input id="f-gn" maxlength="80">' +
+      '<div class="row"><div><label>Objetivo (R$)</label><input id="f-gt" inputmode="decimal" placeholder="10000"></div>' +
+      '<div><label>Prazo</label><input id="f-gd" type="date"></div></div>' +
+      '<p class="muted">Aporte à meta continua sem criar movimentação.</p>' +
+      '<button class="btn" id="sv">Criar e vincular</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var g = J.DB.createGoal(me.id, { name: document.getElementById('f-gn').value, target_amount: document.getElementById('f-gt').value || '0', current_amount: '0', deadline: document.getElementById('f-gd').value || '' });
+        J.DB.linkEntity(me.id, p.id, { entity_type: 'GOAL', entity_id: g.id, relationship_type: 'PRIMARY' });
+        closeModal(); toast('Meta criada no projeto!'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function ovProjectsCard(me, day) {
+    var lst = (day && day.projects) || [];
+    if (!lst.length) return '';
+    var top = lst[0];
+    return '<div class="card"><b>🗂 ' + esc(top.name) + '</b><p class="muted">' + top.taskDone + '/' + top.taskTotal + ' tarefas' + (top.upcoming && top.upcoming.length ? ' • Próximo: ' + esc(pjNextLbl(top.upcoming[0])) : '') + ' • <a href="#/projects/' + top.id + '">Ver projeto ›</a></p></div>';
+  }
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
@@ -4742,7 +5012,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };
