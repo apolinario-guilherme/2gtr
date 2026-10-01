@@ -20,90 +20,48 @@ function hides(t,m){ok(html().indexOf(t)<0,m);}
 function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
 try{localStorage.clear();}catch(e){}
 window.scrollTo=function(){};
-try{ delete window.JuntosConfig; }catch(e){}
 DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
 DB._waOutbox=[];
 try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
 try{
+/* --- 1-5: tradicional intacto --- */
 var A=Auth.register('Ana S','ana.s@t.t','senha123');
-var B=Auth.register('Bruno S','bruno.s@t.t','senha123');
-/* --- provedores desabilitados sem config --- */
-var provs=Auth.socialProviders();
-eq(provs.length,3,'3 provedores');
-ok(provs.every(function(p){return !p.enabled;}),'todos desabilitados sem config');
-/* --- identidades: CRUD + unicidade --- */
-eq(DB.findOAuthIdentity('google','g1'),null,'identidade inexistente');
-var i1=DB.linkOAuthIdentity(A.id,{provider:'google',provider_user_id:'g1',email:'ana.s@t.t',email_verified:true});
-ok(!!i1.id,'vincula identidade');
-eq(DB.linkOAuthIdentity(A.id,{provider:'google',provider_user_id:'g1',email:'ana.s@t.t'}).id,i1.id,'revink idempotente');
-throws(function(){DB.linkOAuthIdentity(B.id,{provider:'google',provider_user_id:'g1',email:'x@t.t'});},'mesma conta social em outro usuario nega');
-eq(DB.userOAuthIdentities(A.id).length,1,'lista identidades');
-eq(DB.findUserByEmail('ANA.S@T.T').id,A.id,'busca email case-insensitive');
-/* --- login por identidade existente --- */
-as(null);
-var r1=Auth.socialLogin({provider:'google',providerUserId:'g1',name:'Ana',email:'ana.s@t.t',emailVerified:true});
-eq(r1.status,'ok','login por identidade');
-eq(r1.isNew,false,'nao e novo');
-eq(JSON.parse(localStorage.getItem('juntos_session_v1')).userId,A.id,'sessao criada');
-/* --- conta nova via social (sem senha) --- */
-var r2=Auth.socialLogin({provider:'apple',providerUserId:'a9',name:'',email:'nova@t.t',emailVerified:true});
-eq(r2.status,'ok','cria conta social');
-eq(r2.isNew,true,'marca isNew');
-eq(r2.user.pass,null,'sem senha');
-eq(DB.userOAuthIdentities(r2.user.id).length,1,'identidade da nova conta');
-/* --- email existente + verificado => consentimento (conta com senha => pede senha) --- */
-var r3=Auth.socialLogin({provider:'facebook',providerUserId:'f1',name:'Ana',email:'ana.s@t.t',emailVerified:true});
-eq(r3.status,'need_link','pede vinculo');
-eq(r3.needsPassword,true,'conta com senha exige senha');
-throws(function(){Auth.socialLinkConfirm(A.id,r3.profile,'errada');},'senha errada nega vinculo');
-var u3=Auth.socialLinkConfirm(A.id,r3.profile,'senha123');
-eq(u3.id,A.id,'vincula com senha certa');
-eq(DB.userOAuthIdentities(A.id).length,2,'duas identidades (google+facebook)');
-/* --- conta só-social existente + verificado => vinculo direto --- */
-var r4=Auth.socialLogin({provider:'google',providerUserId:'g9',name:'Nova',email:'nova@t.t',emailVerified:true});
-eq(r4.status,'need_link','pede vinculo p/ conta social');
-eq(r4.needsPassword,false,'sem senha: vinculo direto');
-Auth.socialLinkConfirm(r4.user.id,r4.profile,null);
-eq(DB.userOAuthIdentities(r2.user.id).length,2,'vinculou segunda identidade');
-/* --- facebook (sem flag) + conta com senha => exige senha --- */
-var r5=Auth.socialLogin({provider:'facebook',providerUserId:'f2',name:'Bruno',email:'bruno.s@t.t',emailVerified:false});
-eq(r5.status,'need_link','fb pede vinculo');
-eq(r5.needsPassword,true,'fb exige senha');
-/* --- sem email => erro amigável --- */
-throws(function(){Auth.socialLogin({provider:'facebook',providerUserId:'f3',name:'X',email:'',emailVerified:false});},'fb sem email nega');
-/* --- relay Apple (privaterelay) cria conta normalmente --- */
-var r6=Auth.socialLogin({provider:'apple',providerUserId:'a-relay-1',name:'',email:'xyz@privaterelay.appleid.com',emailVerified:true});
-eq(r6.status,'ok','relay cria conta');
-/* --- desvincular: mantém credencial mínima --- */
-DB.linkOAuthIdentity(r2.user.id,{provider:'facebook',providerUserId:'f9',email:'nova@t.t',emailVerified:false});
-ok(DB.unlinkOAuthIdentity(r2.user.id,'google'),'remove google');
-ok(DB.unlinkOAuthIdentity(r2.user.id,'facebook'),'remove facebook');
-throws(function(){DB.unlinkOAuthIdentity(r2.user.id,'apple');},'nao remove ultima credencial sem senha');
-eq(DB.userOAuthIdentities(r2.user.id).length,1,'resta 1');
-/* --- provedor inválido / identidade inválida --- */
-throws(function(){Auth.socialLogin({provider:'twitter',providerUserId:'x',name:'X',email:'x@t.t',emailVerified:true});},'provedor invalido nega');
-/* --- UI: botoes sempre visiveis; sem config ficam como indisponiveis --- */
-as(null);
+eq(Auth.login('ana.s@t.t','senha123').id,A.id,'login senha');
+Auth.logout();
+eq(Auth.current(),null,'logout limpa sessao');
+var code=Auth.forgot('ana.s@t.t');
+ok(/^\d{6}$/.test(code),'codigo reset');
+Auth.reset('ana.s@t.t',code,'nova456');
+eq(Auth.login('ana.s@t.t','nova456').id,A.id,'redefinicao funciona');
+/* --- 6: rotas sociais mortas --- */
+eq(typeof Auth.socialGoogle,'undefined','sem google');
+eq(typeof Auth.socialFacebook,'undefined','sem facebook');
+eq(typeof Auth.socialApple,'undefined','sem apple');
+eq(typeof Auth.socialLogin,'undefined','sem socialLogin');
+eq(typeof Auth.socialLinkConfirm,'undefined','sem socialLinkConfirm');
+eq(typeof Auth.reauthenticateSocial,'undefined','sem reauth social');
 App.render('login');
-shows('Continuar com Google','botao google visivel');
-shows('Continuar com Facebook','botao facebook visivel');
-shows('Continuar com Apple','botao apple visivel');
-window.JuntosConfig={GOOGLE_CLIENT_ID:'g-test',FACEBOOK_APP_ID:'f-test',APPLE_CLIENT_ID:'a-test',APPLE_REDIRECT_URI:'https://x.test/#/auth/callback'};
-App.render('login');
-shows('Continuar com Google','botao google com config');
-try{ delete window.JuntosConfig; }catch(e){}
-/* --- callback: erro amigável, sem vazar detalhe --- */
-location.hash='#/auth/callback?error=access_denied&error_description=User+denied';
+hides('Continuar com Google','sem botao google');
+hides('Continuar com Facebook','sem botao facebook');
+hides('Continuar com Apple','sem botao apple');
+hides('soc-zone','sem zona social');
+hides('soc-div','sem divisor social');
+shows('Entrar','login tradicional central');
 App.render('auth/callback');
-shows('Login cancelado','callback cancelado');
-location.hash='#/login';
-/* --- regressao: senha continua --- */
-var me=Auth.login('ana.s@t.t','senha123');
-eq(me.id,A.id,'login por senha ok');
-App.render('login'); shows('Entrar','login convencional intacto');
-eq(DB.ofIsEnabled(),false,'OF off');
-eq(DB.diagnose(A.id).length,0,'diagnose');
+shows('Não encontramos esta página','callback morto');
+/* --- 7: legado só-social migra via Esqueci a senha --- */
+var db0=DB.all();
+var leg={id:'u_legado',nome:'Legado S',email:'legado@t.t',salt:null,pass:null,avatar:null,deactivated_at:null,session_version:1,created_at:new Date().toISOString()};
+db0.users.push(leg); DB.save(db0);
+DB.linkOAuthIdentity('u_legado',{provider:'google',provider_user_id:'g-leg',email:'legado@t.t',email_verified:true});
+throws(function(){Auth.login('legado@t.t','qualquer');},'sem senha nao entra');
+var code2=Auth.forgot('legado@t.t');
+Auth.reset('legado@t.t',code2,'senha789');
+eq(Auth.login('legado@t.t','senha789').id,'u_legado','legado migra p/ senha');
+/* --- 8: responsivo + base --- */
 ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose('u_legado').length,0,'diagnose');
 }catch(e){L.push('FAIL ex '+e.message);}
 document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
 })();

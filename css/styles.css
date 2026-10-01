@@ -159,14 +159,6 @@ p{margin:8px 0}
 .btn.sm{min-height:44px;padding:10px 14px;font-size:14px}
 .btn.loading{opacity:.7;pointer-events:none}
 .btn + .btn{margin-top:8px}
-/* ---- login social ---- */
-.soc-div{display:flex;align-items:center;gap:10px;margin:16px 0 8px;color:var(--text-2,#6b7280)}
-.soc-div::before,.soc-div::after{content:'';flex:1;border-top:1px solid var(--line,#e5e7eb)}
-.soc-div span{font-size:13px}
-.btn.soc{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--surface,#fff);color:var(--text-1,#111);border:1.5px solid var(--line,#e5e7eb);font-weight:600;margin-top:8px}
-.btn.soc:hover{background:var(--surface-2,#f3f4f6)}
-.btn.soc svg{flex:none}
-.btn.soc.off{opacity:.55;border-style:dashed}
 
 /* ---- inputs ---- */
 input,select,textarea{width:100%;padding:12px;margin:6px 0;border:1px solid var(--line);border-radius:var(--radius-md);font-size:16px;background:#fff;color:var(--text-1);min-height:46px}

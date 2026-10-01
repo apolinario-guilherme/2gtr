@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, auth: (parts[1] === 'callback' ? pAuthCallback : pNotFound), onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, week: pWeek, 'monthly-review': function (vv, mm) { return pMonthlyReview(vv, mm, parts[1], parts[2]); }, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, week: pWeek, 'monthly-review': function (vv, mm) { return pMonthlyReview(vv, mm, parts[1], parts[2]); }, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -357,7 +357,6 @@
         '<label for="f-pw">Senha</label><div class="lg-pw"><input id="f-pw" type="password" autocomplete="current-password"><button type="button" id="pw-eye" aria-label="Mostrar senha" aria-pressed="false">👁</button></div>' +
         '<p class="lg-forgot"><a href="#/forgot-password">Esqueci minha senha</a></p>' +
         '<button class="btn lg-enter" id="go">Entrar</button>' +
-        '<div id="soc-zone"></div>' +
         '<p class="center muted">Ainda não tem uma conta? <a href="#/register"><b>Criar conta</b></a></p>' +
         '<p class="lg-legal"><a href="#/privacy">Privacidade</a> • <a href="#/terms">Termos</a> • <a href="#/landing">Ajuda</a></p>' +
       '</section>' +
@@ -376,82 +375,6 @@
       eye.setAttribute('aria-pressed', show ? 'true' : 'false');
       pw.focus();
     };
-    socRender(document.getElementById('soc-zone'));
-  }
-  /* ---------- LOGIN SOCIAL (botões + consentimento + callback) ---------- */
-  function socIcon(p) {
-    if (p === 'google') return '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.3c0-.8-.1-1.5-.2-2.3H12v4.5h6c-.3 1.4-1.2 2.5-2.4 3.2v2.7h3.9c2.3-2.1 3.1-5 3.1-8.1z"/><path fill="#34A853" d="M12 23c3.2 0 5.9-1.1 7.9-2.9l-3.9-2.7c-1.1.7-2.5 1.1-4 1.1-3.1 0-5.7-2.1-6.6-4.9H1.4v2.8C3.4 20.5 7.4 23 12 23z"/><path fill="#FBBC05" d="M5.4 13.6c-.2-.7-.4-1.5-.4-2.3s.1-1.6.4-2.3V6.2H1.4C.5 7.6 0 9.3 0 11.3s.5 3.7 1.4 5.1l4-2.8z"/><path fill="#EA4335" d="M12 5.5c1.8 0 3.3.6 4.6 1.8l3.4-3.4C18 2.1 15.2 1 12 1 7.4 1 3.4 3.5 1.4 7.4l4 2.8c.9-2.7 3.5-4.7 6.6-4.7z"/></svg>';
-    if (p === 'facebook') return '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#1877F2" d="M24 12a12 12 0 1 0-13.9 11.9v-8.4h-3V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 1-2 1.9V12h3.3l-.5 3.5h-2.8v8.4A12 12 0 0 0 24 12z"/></svg>';
-    return '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17.1 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.3-.1-2.6.8-3.3.8-.7 0-1.7-.8-2.9-.8-1.5 0-2.9.9-3.6 2.2-1.6 2.7-.4 6.8 1.1 9 .8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-0.7s2.3.7 3 0c-1-1.6-1.6-3.8-1.6-3.9 0-.1 2-1.2 2.7-3.1zM14.2 5.4c.6-.7 1-1.7.9-2.7-1 0-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 2.8 1 .1 2.2-.6 2.9-1.5z"/></svg>';
-  }
-  function socRender(zone) {
-    if (!zone) return;
-    var provs;
-    try { provs = J.Auth.socialProviders(); }
-    catch (e) { provs = []; }
-    if (!provs.length) return;
-    zone.innerHTML = '<div class="soc-div" aria-hidden="true"><span>ou</span></div>' +
-      provs.map(function (p) {
-        return '<button class="btn soc' + (p.enabled ? '' : ' off') + '" data-soc="' + p.id + '" style="max-width:100%"' + (p.enabled ? '' : ' title="Disponível após configuração (js/config.js)"') + '>' + socIcon(p.id) + '<span>' + p.label + '</span></button>';
-      }).join('');
-    Array.prototype.forEach.call(zone.querySelectorAll('[data-soc]'), function (b) {
-      b.onclick = function () { doSocial(b.dataset.soc, b); };
-    });
-  }
-  function doSocial(provider, btn) {
-    var errBox = document.getElementById('e');
-    function fail(msg) { if (errBox) errBox.innerHTML = '<div class="alert">' + esc(msg) + '</div>'; else toast(msg); }
-    lock(btn);
-    var fn = provider === 'google' ? J.Auth.socialGoogle : provider === 'facebook' ? J.Auth.socialFacebook : J.Auth.socialApple;
-    fn().then(function (profile) {
-      var r = J.Auth.socialLogin(profile);
-      if (r.status === 'ok') {
-        if (r.isNew) { location.hash = '#/onboarding'; toast('Conta criada com ' + (provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'Apple') + '! Vamos configurar.'); }
-        else { J.Router.go(r.user); toast('Bem-vindo de volta!'); }
-      } else {
-        openSocialLink(r);
-      }
-      unlock(btn);
-    }).catch(function (e) {
-      unlock(btn);
-      var msg = J.Auth.socialErrorMessage(provider, e);
-      fail(msg);
-    });
-  }
-  function openSocialLink(r) {
-    var pname = r.profile.provider === 'google' ? 'Google' : r.profile.provider === 'facebook' ? 'Facebook' : 'Apple';
-    var h = '<h2>Vincular conta</h2><div id="me"></div>' +
-      '<p>Encontramos sua conta <b>' + esc(r.user.nome) + '</b> (' + esc(r.user.email) + ').</p>' +
-      '<p class="muted">Quer vincular este login ' + esc(pname) + ' a ela? Depois disso você entra com qualquer um dos dois.</p>';
-    if (r.needsPassword) h += '<label for="f-lpw">Senha atual (confirma que a conta é sua)</label><input id="f-lpw" type="password" autocomplete="current-password">';
-    h += '<div class="row"><button class="btn" id="sv">Vincular e entrar</button><button class="btn ghost" id="cl">Voltar</button></div>';
-    modalShell(h);
-    document.getElementById('cl').onclick = closeModal;
-    document.getElementById('sv').onclick = function () {
-      var btn = this; lock(btn);
-      try {
-        var pw = r.needsPassword ? (document.getElementById('f-lpw') || {}).value : null;
-        var u = J.Auth.socialLinkConfirm(r.user.id, r.profile, pw);
-        closeModal(); J.Router.go(u); toast('Conta vinculada! Bem-vindo de volta!');
-      } catch (e2) {
-        document.getElementById('me').innerHTML = err(e2); unlock(btn);
-      }
-    };
-  }
-  function pAuthCallback(v) {
-    var h = String(location.hash || '');
-    var q = h.indexOf('?') >= 0 ? h.slice(h.indexOf('?') + 1) : '';
-    var params = {};
-    q.split('&').forEach(function (kv) {
-      var ix = kv.indexOf('=');
-      if (ix > 0) params[decodeURIComponent(kv.slice(0, ix))] = decodeURIComponent(kv.slice(ix + 1).replace(/\+/g, ' '));
-    });
-    var msg = null;
-    if (params.error === 'access_denied' || params.error === 'user_cancelled_authorize' || params.error === 'user_cancelled_login') msg = 'Login cancelado. Tente novamente quando quiser.';
-    else if (params.error) msg = 'Autorização negada pelo provedor (' + params.error + '). Tente novamente ou use outro método.';
-    v.innerHTML = '<div class="card center" style="padding:40px 24px"><h1>Login social</h1>' +
-      (msg ? '<div class="alert">' + esc(msg) + '</div>' : '<p class="muted">Retorno inválido. Volte ao login e tente novamente.</p>') +
-      '<p><a class="btn" href="#/login" style="max-width:240px">Voltar ao login</a></p></div>';
   }
   function pRegister(v) {
     v.innerHTML = '<div class="card">' + brandLockup({ size: 56 }) + '<h1>Criar conta ❤️</h1><p class="muted">Leva menos de 1 minuto.</p><div id="e"></div><label>Seu nome</label><input id="f-nm"><label>E-mail</label><input id="f-em" type="email"><label>Senha (6+ caracteres)</label><input id="f-pw" type="password"><button class="btn" id="go">Criar conta</button><p class="center"><a href="#/login">Já tenho conta</a></p></div>';
@@ -6030,12 +5953,9 @@
     bindMoneyMode(me, isOwner);
   }
   function pSettingsAccount(v, me) {
-    var ids = [];
-    try { ids = J.DB.userOAuthIdentities(me.id); } catch (e) {}
-    var idLbl = { google: 'Google', facebook: 'Facebook', apple: 'Apple' };
     v.innerHTML = crumb('Conta') + '<div class="card"><h1>Conta</h1><p class="muted">Gerencie o acesso à sua conta do 2gtr.</p>' +
       '<p><b>' + esc(me.nome) + '</b><br><span class="muted">' + esc(me.email) + '</span></p>' +
-      '<p class="muted">Entrada: ' + (me.pass ? 'senha' : 'somente login social') + (ids.length ? ' • ' + ids.map(function (x) { return idLbl[x.provider] || x.provider; }).join(', ') : '') + '</p></div>' +
+      '<p class="muted">Entrada: e-mail e senha.</p></div>' +
       '<div class="card"><h2>Desativar conta</h2><p class="muted">Desative temporariamente sua conta. Seu perfil ficará indisponível até você entrar novamente. Nada é apagado.</p><button class="btn secondary" id="acc-deact" style="max-width:240px">Desativar conta</button></div>' +
       '<div class="card danger-zone"><h2>⛔ Excluir conta</h2><p class="muted">Exclua permanentemente sua conta e os dados associados. Seus dados pessoais somem; o casal e o histórico compartilhado ficam para seu parceiro. <b>Esta ação não poderá ser desfeita.</b></p><button class="btn danger" id="acc-del" style="max-width:240px">Excluir minha conta</button></div>';
     document.getElementById('acc-deact').onclick = function () { openDeactivateModal(me); };
@@ -6055,9 +5975,7 @@
     };
   }
   function openDeleteModal(me) {
-    var hasPass = !!me.pass, ids = [];
-    try { ids = J.DB.userOAuthIdentities(me.id); } catch (e) {}
-    var idLbl = { google: 'Google', facebook: 'Facebook', apple: 'Apple' };
+    var hasPass = !!me.pass;
     modalShell('<h2>Excluir minha conta</h2><div id="me"></div>' +
       '<div class="alert">Ação permanente: sua conta e seus dados pessoais serão apagados. O casal e o histórico compartilhado ficam para seu parceiro. Não há como desfazer.</div>' +
       '<label for="f-del">Digite <b>EXCLUIR</b> para continuar</label><input id="f-del" autocomplete="off" placeholder="EXCLUIR">' +
@@ -6080,26 +5998,9 @@
               closeModal(); location.hash = '#/landing'; toast('Conta excluída permanentemente.');
             } catch (e3) { document.getElementById('me').innerHTML = err(e3); unlock(b2); }
           };
-        } else if (ids.length) {
-          rz.innerHTML = '<p class="muted">Confirme com seu login social:</p>' + ids.map(function (x) {
-            return '<button class="btn soc" data-ra="' + x.provider + '" style="max-width:100%">' + socIcon(x.provider) + '<span>Confirmar com ' + (idLbl[x.provider] || x.provider) + '</span></button>';
-          }).join('') + '<div id="e2"></div>';
-          unlock(btn);
-          Array.prototype.forEach.call(rz.querySelectorAll('[data-ra]'), function (b) {
-            b.onclick = function () {
-              lock(b);
-              J.Auth.reauthenticateSocial(b.dataset.ra).then(function () {
-                try {
-                  J.Auth.deleteAccount(null);
-                  closeModal(); location.hash = '#/landing'; toast('Conta excluída permanentemente.');
-                } catch (e4) { document.getElementById('me').innerHTML = err(e4); unlock(b); }
-              }).catch(function (e5) {
-                document.getElementById('me').innerHTML = err(new Error(J.Auth.socialErrorMessage(b.dataset.ra, e5))); unlock(b);
-              });
-            };
-          });
         } else {
-          document.getElementById('me').innerHTML = err(new Error('Sua conta não tem senha nem login social. Fale com o suporte.')); unlock(btn);
+          rz.innerHTML = '<div class="alert">Sua conta ainda não tem senha. Use <a href="#/forgot-password">Esqueci minha senha</a> para definir uma (o código aparece na tela) e volte aqui para excluir.</div>';
+          unlock(btn);
         }
       } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
     };
