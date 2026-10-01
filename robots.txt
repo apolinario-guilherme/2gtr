@@ -5,5 +5,13 @@ Allow: /#/terms
 Disallow: /#/dashboard
 Disallow: /#/settings
 Disallow: /#/transactions
+Disallow: /#/accounts
+Disallow: /#/finance
+Disallow: /#/week
+Disallow: /#/monthly-review
+Disallow: /#/reports
+Disallow: /#/inbox
+Disallow: /#/assistant
+Disallow: /#/notifications
 Disallow: /#/login
 Disallow: /#/register

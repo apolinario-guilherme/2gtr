@@ -55,7 +55,7 @@ window.Juntos = window.Juntos || {};
   function genCode(db) {
     var c, tries = 0;
     do {
-      c = 'JNT-' + Array.from({ length: 6 }, function () { return 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 31)]; }).join('');
+      c = 'JNT-' + Array.from({ length: 6 }, function () { return 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[DB.randInt(31)]; }).join('');
       tries++;
     } while (db.invitations.some(function (i) { return i.code === c; }) && tries < 50);
     return c;
@@ -388,6 +388,23 @@ window.Juntos = window.Juntos || {};
 
   var DB = {
     all: read, save: write, parseAmount: parseAmount, parsePct: parsePct, shiftMonth: shiftMonth,
+    /* Sorteio com CSPRNG quando disponível (códigos/salts); fallback p/ Math.random. */
+    randInt: function (n) {
+      try {
+        var cryptoObj = (typeof window !== 'undefined' && (window.crypto || window.msCrypto)) || null;
+        if (cryptoObj && cryptoObj.getRandomValues) {
+          var buf = new Uint32Array(1);
+          cryptoObj.getRandomValues(buf);
+          return buf[0] % n;
+        }
+      } catch (e) {}
+      return Math.floor(Math.random() * n);
+    },
+    randDigits: function (len) {
+      var s = String(1 + DB.randInt(9));
+      for (var i = 1; i < len; i++) s += String(DB.randInt(10));
+      return s;
+    },
     // --- isolamento: resolve o casal do usuário logado, sem aceitar couple_id da UI ---
     myMembership: function (userId) {
       var db = read();
@@ -469,6 +486,7 @@ window.Juntos = window.Juntos || {};
       return db.invitations.filter(function (i) { return i.couple_id === cid; }).sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
     },
     acceptInvite: function (userId, code) {
+      try { DB.rateCheck('invite:' + userId, 10, 60000); } catch (e) { throw new Error('Muitas tentativas. Aguarde um momento.'); }
       var db = read();
       code = String(code || '').trim().toUpperCase();
       if (db.members.some(function (m) { return m.user_id === userId; })) throw new Error('Você já faz parte de um casal.');
@@ -723,13 +741,18 @@ window.Juntos = window.Juntos || {};
       });
       return { couple_id: cid, rows: computeSplits(toCents(amount), ids, mode, entries) };
     },
-    createTx: function (userId, data) {
+    createTx: function (userId, data, opt) {
       DB.requireAuthz(userId, 'create_transaction', null);
       var v = DB.validateTx(userId, data);
       var splitRows = null;
       if (v.type === 'expense' && v.is_shared) splitRows = DB.buildSplits(userId, v.amount, data.split).rows;
       var db = read();
-      var t = { id: id('tx'), couple_id: v.couple_id, created_by: userId, type: v.type, description: v.description, amount: v.amount, date: v.date, category_id: v.category_id, is_shared: v.is_shared, payer_user_id: v.payer_user_id, account_id: v.account_id || null, credit_card_id: v.credit_card_id || null, invoice_id: null, needs_review: false, notes: v.notes, created_at: now(), updated_at: now(), deleted_at: null };
+      opt = opt || {};
+      if (opt.idempotency_key) {
+        var dupTx = db.transactions.find(function (x) { return x.couple_id === v.couple_id && !x.deleted_at && x.idempotency_key === String(opt.idempotency_key); });
+        if (dupTx) return dupTx;
+      }
+      var t = { id: id('tx'), couple_id: v.couple_id, created_by: userId, type: v.type, description: v.description, amount: v.amount, date: v.date, category_id: v.category_id, is_shared: v.is_shared, payer_user_id: v.payer_user_id, account_id: v.account_id || null, credit_card_id: v.credit_card_id || null, invoice_id: null, needs_review: false, notes: v.notes, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, created_at: now(), updated_at: now(), deleted_at: null };
       if (t.credit_card_id) {
         var inv0 = findOrCreateInvoiceInDb(db, v.couple_id, t.credit_card_id, t.date);
         if (invoiceIsOpen(inv0)) t.invoice_id = inv0.id;
@@ -763,7 +786,7 @@ window.Juntos = window.Juntos || {};
       var splitRows = null;
       if (v.type === 'expense' && v.is_shared) splitRows = DB.buildSplits(userId, v.amount, data.split).rows;
       var oldInvId = t.invoice_id || null;
-      var oldInv = oldInvId ? db.invoices.find(function (x) { return x.id === oldInvId; }) : null;
+      var oldInv = oldInvId ? db.invoices.find(function (x) { return x.id === oldInvId && x.couple_id === cid; }) : null;
       var oldOpen = invoiceIsOpen(oldInv);
       var oldCat = t.category_id;
       t.type = v.type; t.description = v.description; t.amount = v.amount; t.date = v.date;
@@ -1092,10 +1115,10 @@ window.Juntos = window.Juntos || {};
       var db = read(), cid = DB.myCoupleId(userId);
       var rows = [];
       function catName(id) {
-        var c = db.categories.find(function (x) { return x.id === id; });
+        var c = db.categories.find(function (x) { return x.id === id && x.couple_id === cid; });
         if (!c) return '';
         if (!c.parent_category_id) return c ? (c.icon + ' ' + c.name) : '';
-        var p = db.categories.find(function (x) { return x.id === c.parent_category_id; });
+        var p = db.categories.find(function (x) { return x.id === c.parent_category_id && x.couple_id === cid; });
         return (c.icon + ' ' + c.name) + (p ? ' (' + p.name + ')' : '');
       }
       function userName(id) {
@@ -1104,12 +1127,12 @@ window.Juntos = window.Juntos || {};
       }
       function accName(id) {
         if (!id) return '';
-        var a = db.accounts.find(function (x) { return x.id === id; });
+        var a = db.accounts.find(function (x) { return x.id === id && x.couple_id === cid; });
         return a ? a.name : '';
       }
       function cardName(id) {
         if (!id) return '';
-        var c = db.credit_cards.find(function (x) { return x.id === id; });
+        var c = db.credit_cards.find(function (x) { return x.id === id && x.couple_id === cid; });
         return c ? c.name : '';
       }
       function dmy(s) { return String(s || '').slice(0, 10).split('-').reverse().join('/'); }
@@ -1606,6 +1629,9 @@ window.Juntos = window.Juntos || {};
       var db = read(), cid = DB.myCoupleId(userId);
       var o = db.recurring_occurrences.find(function (x) { return x.id === occId && x.couple_id === cid; });
       if (!o) throw new Error('Compromisso não encontrado.');
+      var occKey = 'occ:' + occId;
+      var dupOccTx = db.transactions.find(function (x) { return x.couple_id === cid && !x.deleted_at && x.idempotency_key === occKey; });
+      if (dupOccTx) return dupOccTx;
       if (o.status === 'paid') throw new Error('Esta conta já foi registrada como paga.');
       if (o.status !== 'pending') throw new Error('Somente compromissos pendentes podem ser pagos.');
       var r = db.recurring_transactions.find(function (x) { return x.id === o.recurring_transaction_id; });
@@ -1616,11 +1642,15 @@ window.Juntos = window.Juntos || {};
         category_id: r.category_id, payer_user_id: r.payer_user_id, is_shared: r.is_shared,
         notes: 'Conta recorrente • vencimento ' + o.due_date.split('-').reverse().join('/'),
         split: (r.is_shared && r.type === 'expense') ? { mode: r.split_mode, entries: r.split_entries } : undefined
-      });
+      }, { idempotency_key: occKey });
       try {
         var full = read();
         var row = full.recurring_occurrences.find(function (x) { return x.id === occId; });
         if (!row) throw new Error('Compromisso não encontrado.');
+        if (row.status === 'paid' && row.transaction_id && row.transaction_id !== t.id) {
+          try { DB.deleteTx(userId, t.id); } catch (eDel) {}
+          throw new Error('Esta conta já foi registrada como paga.');
+        }
         row.status = 'paid'; row.transaction_id = t.id; row.amount = amount; row.updated_at = now();
         logAudit(full, cid, userId, 'occurrence', occId, 'pay', { amount: amount, tx: t.id });
         write(full);
@@ -1795,11 +1825,16 @@ window.Juntos = window.Juntos || {};
       var date = cleanDate(data.date);
       return { couple_id: cid, from_account_id: from.id, to_account_id: to.id, amount: amount, date: date, description: String((data && data.description) || '').slice(0, 120) };
     },
-    createTransfer: function (userId, data) {
+    createTransfer: function (userId, data, opt) {
       DB.requireAuthz(userId, 'create_transfer', null);
       var v = DB.validateTransfer(userId, data);
       var db = read();
-      var t = { id: id('tr'), couple_id: v.couple_id, from_account_id: v.from_account_id, to_account_id: v.to_account_id, amount: v.amount, date: v.date, description: v.description, created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      opt = opt || {};
+      if (opt.idempotency_key) {
+        var dupTr = db.transfers.find(function (x) { return x.couple_id === v.couple_id && !x.deleted_at && x.idempotency_key === String(opt.idempotency_key); });
+        if (dupTr) return dupTr;
+      }
+      var t = { id: id('tr'), couple_id: v.couple_id, from_account_id: v.from_account_id, to_account_id: v.to_account_id, amount: v.amount, date: v.date, description: v.description, created_by: userId, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, created_at: now(), updated_at: now(), deleted_at: null };
       db.transfers.push(t); logAudit(db, v.couple_id, userId, 'transfer', t.id, 'create', { amount: t.amount }); var evT = DB.pushEventInDb(db, v.couple_id, userId, 'transfer.created', 'transfer', t.id, {}); write(db); DB.processRulesForEvent(userId, evT); return t;
     },
     getTransfer: function (userId, transferId) {
@@ -2294,10 +2329,15 @@ window.Juntos = window.Juntos || {};
     },
     /* Pagamento integral e atômico: 1 escrita (pagamento + fatura + parcelas).
        Nunca cria despesa, transferência ou settlement. */
-    payInvoice: function (userId, invoiceId, data) {
+    payInvoice: function (userId, invoiceId, data, opt) {
       DB.requireAuthz(userId, 'pay_invoice', null);
       var db = read(), cid = DB.myCoupleId(userId);
       if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
+      opt = opt || {};
+      if (opt.idempotency_key) {
+        var dupPay = db.invoice_payments.find(function (x) { return x.couple_id === cid && !x.deleted_at && x.idempotency_key === String(opt.idempotency_key); });
+        if (dupPay) return dupPay;
+      }
       var inv = db.invoices.find(function (i) { return i.id === invoiceId && i.couple_id === cid; });
       if (!inv) throw new Error('Fatura não encontrada.');
       if (inv.status === 'cancelled') throw new Error('Fatura cancelada não pode ser paga.');
@@ -2312,7 +2352,7 @@ window.Juntos = window.Juntos || {};
       var amount = toCents(parseAmount(data.amount));
       if (amount !== outstanding) throw new Error('Pagamento integral de ' + money(fromCents(outstanding)) + '.');
       var date = data.payment_date ? cleanDate(data.payment_date) : now().slice(0, 10);
-      var pay = { id: id('ip2'), couple_id: cid, invoice_id: invoiceId, payment_account_id: acc.id, amount: fromCents(amount), payment_date: date, notes: String((data && data.notes) || '').slice(0, 300), created_by: userId, created_at: now(), updated_at: now(), deleted_at: null };
+      var pay = { id: id('ip2'), couple_id: cid, invoice_id: invoiceId, payment_account_id: acc.id, amount: fromCents(amount), payment_date: date, notes: String((data && data.notes) || '').slice(0, 300), created_by: userId, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, created_at: now(), updated_at: now(), deleted_at: null };
       db.invoice_payments.push(pay);
       inv.paid_amount = fromCents(paid + amount);
       inv.status = 'paid'; inv.paid_at = now(); inv.payment_account_id = acc.id; inv.updated_at = now();
@@ -4730,7 +4770,7 @@ window.Juntos = window.Juntos || {};
     },
     analyticsFingerprint: function (db) {
       var n = 0, mx = '';
-      ['transactions', 'transfers', 'invoice_payments', 'installments', 'installment_purchases', 'invoices', 'budgets', 'goals', 'splits', 'recurring_transactions', 'recurring_occurrences'].forEach(function (k) {
+      ['transactions', 'transfers', 'invoice_payments', 'installments', 'installment_purchases', 'invoices', 'budgets', 'goals', 'splits', 'recurring_transactions', 'recurring_occurrences', 'agenda_events', 'tasks', 'habits', 'habit_completions', 'lists', 'list_items', 'routines', 'routine_executions', 'projects', 'project_links', 'inbox_items', 'weekly_plans', 'monthly_reviews'].forEach(function (k) {
         var arr = db[k] || []; n += arr.length * 7 + k.length;
         for (var i = 0; i < arr.length; i++) { var t = arr[i].updated_at || arr[i].created_at || arr[i].deleted_at || ''; if (t > mx) mx = t; }
       });
@@ -4844,7 +4884,7 @@ window.Juntos = window.Juntos || {};
       });
       if (f.payer_user_id && ids.indexOf(f.payer_user_id) < 0) throw new Error('Filtro inválido.');
       if (f.shared && ['shared', 'individual'].indexOf(f.shared) < 0) throw new Error('Filtro inválido.');
-      var cacheKey = JSON.stringify([cid, per.startDate, per.endDate, view, f, DB.analyticsEngineVersion()]);
+      var cacheKey = JSON.stringify([cid, userId, per.startDate, per.endDate, view, f, DB.analyticsEngineVersion()]);
       DB._acache = DB._acache || {};
       var fp = DB.analyticsFingerprint(db);
       var hit = DB._acache[cacheKey];
@@ -6005,6 +6045,17 @@ window.Juntos = window.Juntos || {};
       return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_multi', 'capture_cancel', 'capture_to_inbox', 'installment_create', 'week_set_priority', 'week_remove_priority', 'monthly_review_start', 'monthly_review_complete'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
+    /* Mapeamento vivo: leitura → READ_ONLY; escrita reversível de baixo risco → SAFE_WRITE
+       (execução direta documentada, sem movimentar dinheiro — verificado nos branches
+       de execução direta de aiPlanAction); demais writes → CONFIRMATION_REQUIRED;
+       fora da allowlist → RESTRICTED (negado em aiRequestAction). */
+    AI_SAFE_WRITE: function () { return ['habit_complete', 'task_create', 'task_complete', 'project_create', 'project_create_task', 'project_create_list', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'inbox_capture', 'inbox_dismiss', 'inbox_restore', 'inbox_archive', 'capture_cancel', 'capture_to_inbox']; },
+    aiPermissionOf: function (intent) {
+      if (DB.AI_READ_TOOLS().indexOf(intent) >= 0) return 'READ_ONLY';
+      if (DB.AI_SAFE_WRITE().indexOf(intent) >= 0) return 'SAFE_WRITE';
+      if (DB.AI_WRITE_TOOLS().indexOf(intent) >= 0) return 'CONFIRMATION_REQUIRED';
+      return 'RESTRICTED';
+    },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
     aiNorm: function (s) {
       s = String(s || '').toLowerCase();
@@ -6894,7 +6945,9 @@ window.Juntos = window.Juntos || {};
       var key = 'ai_action:' + convId + ':' + messageId;
       var dup = db.ai_actions.find(function (x) { return x.idempotency_key === key && x.status !== 'cancelled' && x.status !== 'expired'; });
       if (dup) return dup;
-      var row = { id: id('aa'), couple_id: cid, user_id: userId, conversation_id: convId, message_id: messageId, channel: opt.channel || 'web', external_message_id: opt.externalMessageId || null, action_type: actionType, status: 'pending_confirmation', confirmation_required: true, confirmation_expires_at: opt.expiresAt || null, confirmed_at: null, executed_at: null, idempotency_key: key, request_data: params, result_data: null, error_message: null, created_at: now(), updated_at: now() };
+      if (DB.aiPermissionOf(actionType) === 'RESTRICTED') throw new Error('Ação não permitida.');
+      if (!opt.expiresAt) opt.expiresAt = new Date(Date.now() + 60 * 60000).toISOString();
+      var row = { id: id('aa'), couple_id: cid, user_id: userId, conversation_id: convId, message_id: messageId, channel: opt.channel || 'web', external_message_id: opt.externalMessageId || null, action_type: actionType, status: 'pending_confirmation', confirmation_required: true, confirmation_expires_at: opt.expiresAt || null, confirmed_at: null, executed_at: null, idempotency_key: key, request_data: params, result_data: null, error_message: null, permission: DB.aiPermissionOf(actionType), created_at: now(), updated_at: now() };
       db.ai_actions.push(row);
       logAudit(db, cid, userId, 'ai_action', row.id, 'requested', { type: actionType, channel: opt.channel || 'web' });
       write(db);
@@ -7158,10 +7211,10 @@ window.Juntos = window.Juntos || {};
       try {
         var p = r.request_data || {}, res = null;
         if (r.action_type === 'create_transaction') {
-          var t = DB.createTx(userId, { type: p.type, description: p.description, amount: String(p.amount).replace('.', ','), date: p.date, category_id: p.category_id, payer_user_id: p.payer_user_id, is_shared: !!p.is_shared, account_id: p.account_id || null, credit_card_id: p.credit_card_id || null, notes: p.notes || '' });
+          var t = DB.createTx(userId, { type: p.type, description: p.description, amount: String(p.amount).replace('.', ','), date: p.date, category_id: p.category_id, payer_user_id: p.payer_user_id, is_shared: !!p.is_shared, account_id: p.account_id || null, credit_card_id: p.credit_card_id || null, notes: p.notes || '' }, { idempotency_key: 'ai:' + r.id });
           res = { transaction_id: t.id };
         } else if (r.action_type === 'create_transfer') {
-          var tr = DB.createTransfer(userId, { from_account_id: p.from_account_id, to_account_id: p.to_account_id, amount: String(p.amount).replace('.', ','), date: p.date, description: p.description || '' });
+          var tr = DB.createTransfer(userId, { from_account_id: p.from_account_id, to_account_id: p.to_account_id, amount: String(p.amount).replace('.', ','), date: p.date, description: p.description || '' }, { idempotency_key: 'ai:' + r.id });
           res = { transfer_id: tr.id };
         } else if (r.action_type === 'create_goal') {
           var g = DB.createGoal(userId, { name: p.name, target_amount: String(p.target_amount).replace('.', ','), current_amount: '0', deadline: p.deadline || '', description: '' });
@@ -7170,7 +7223,7 @@ window.Juntos = window.Juntos || {};
           var rc = DB.createRecurring(userId, { description: p.description, type: p.type, amount: String(p.amount).replace('.', ','), category_id: p.category_id, frequency: p.frequency, day_of_month: p.day_of_month, start_date: p.start_date, payer_user_id: p.payer_user_id, is_shared: !!p.is_shared, notes: '' });
           res = { recurring_id: rc.id };
         } else if (r.action_type === 'mark_invoice_paid') {
-          var pay = DB.payInvoice(userId, p.invoice_id, { payment_account_id: p.payment_account_id, amount: String(p.amount).replace('.', ','), payment_date: p.payment_date, notes: 'Via assistente.' });
+          var pay = DB.payInvoice(userId, p.invoice_id, { payment_account_id: p.payment_account_id, amount: String(p.amount).replace('.', ','), payment_date: p.payment_date, notes: 'Via assistente.' }, { idempotency_key: 'ai:' + r.id });
           res = { payment_id: pay.id };
         } else if (r.action_type === 'update_transaction') {
           var old = DB.getTx(userId, p.transaction_id);
@@ -7440,6 +7493,9 @@ window.Juntos = window.Juntos || {};
         return m;
       }
       var um = saveMsg('user', san.text);
+      if (san.injectionFlag) {
+        try { DB.logSecurityEvent(userId, 'ai_action', { action: 'prompt_injection_flagged', entity_type: 'ai_message', entity_id: um.id, metadata: { channel: channel, length: san.text.length } }); } catch (eI) {}
+      }
       var s = DB.aiNorm(san.text);
       function reply(o) {
         var draft = o.answer;
@@ -8035,7 +8091,7 @@ window.Juntos = window.Juntos || {};
             var createdL = DB.createList(userId, params, { source_type: (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI') });
             try { DB.logSecurityEvent(userId, 'ai_action', { action: 'list_created', entity_type: 'list', entity_id: createdL.id, metadata: { intent: det.intent, channel: (opts.channel || 'web') } }); } catch (eL2) {}
             try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', createdL.id, 30); } catch (eLCx) {}
-            return { answer: 'Lista "' + createdL.name + '" criada (' + (createdL.visibility === 'COUPLE' ? 'casal' : 'pessoal') + '). Confirmar?', facts: [{ label: 'lista', value: 1 }], tools: ['list_create'], intent: det.intent, domain: 'LISTS' };
+            return { answer: 'Lista "' + createdL.name + '" criada (' + (createdL.visibility === 'COUPLE' ? 'casal' : 'pessoal') + '). Já está valendo — quer adicionar itens?', facts: [{ label: 'lista', value: 1 }], tools: ['list_create'], intent: det.intent, domain: 'LISTS' };
           }
         } else if (det.intent === 'list_add_item') {
           var candL = DB.aiFindList(userId, rawText);
@@ -8955,7 +9011,7 @@ window.Juntos = window.Juntos || {};
     waGenerateLinkCode: function (userId) {
       var db = read(), cid = DB.myCoupleId(userId);
       if (!cid) throw new Error('Crie ou entre em um casal primeiro.');
-      var code = String(Math.floor(100000 + Math.random() * 900000));
+      var code = DB.randDigits(6);
       var exp = new Date(Date.now() + DB.WHATSAPP_CONFIG().linkCodeMin * 60000).toISOString();
       var row = { id: id('wl'), couple_id: cid, user_id: userId, code_hash: DB.waHash('wa-link:' + code), expires_at: exp, used_at: null, created_at: now() };
       db.whatsapp_link_codes.push(row);
@@ -8964,6 +9020,7 @@ window.Juntos = window.Juntos || {};
       return { code: code, expires_at: exp };
     },
     waConsumeLinkCode: function (phone, code, provider, opts) {
+      try { DB.rateCheck('wa-link:' + String(phone || '').slice(-8), 10, 60000); } catch (e) { throw new Error('Muitas tentativas. Aguarde um momento.'); }
       var db = read();
       opts = opts || {};
       var clean = String(code || '').replace(/\D/g, '').slice(-6);
@@ -13487,13 +13544,13 @@ window.Juntos = window.Juntos || {};
       } else if (dest === 'TRANSACTION') {
         if (draft.amount == null || !(Number(draft.amount) > 0)) throw new Error('Informe o valor da movimentação.');
         if (!draft.category_id) throw new Error('Escolha a categoria da movimentação.');
-        created = DB.createTx(userId, { type: draft.type === 'income' ? 'income' : 'expense', description: draft.description || it.content, amount: String(draft.amount), date: draft.date || DB.agendaToday(), category_id: draft.category_id, payer_user_id: userId, is_shared: false, account_id: draft.account_id || null });
+        created = DB.createTx(userId, { type: draft.type === 'income' ? 'income' : 'expense', description: draft.description || it.content, amount: String(draft.amount), date: draft.date || DB.agendaToday(), category_id: draft.category_id, payer_user_id: userId, is_shared: false, account_id: draft.account_id || null }, { idempotency_key: opt.idempotency_key ? 'ibtx:' + opt.idempotency_key : undefined });
       } else if (dest === 'GOAL') {
         if (draft.target == null || !(Number(draft.target) > 0)) throw new Error('Informe o valor da meta.');
         created = DB.createGoal(userId, { name: draft.name || it.content, target_amount: String(draft.target), current_amount: '0', deadline: draft.deadline || '' });
         if (draft.project_id) {
           try { DB.linkEntity(userId, draft.project_id, { entity_type: 'GOAL', entity_id: created.id, relationship_type: 'RELATED' }); }
-          catch (eG) { throw new Error('Meta criada, mas não foi possível vincular ao projeto: ' + (eG.message || '')); }
+          catch (eG) { try { DB.archiveGoal(userId, created.id); } catch (eG2) {} throw new Error('Meta criada e arquivada, pois não foi possível vincular ao projeto: ' + (eG.message || '')); }
         }
       }
       if (!created || !created.id) throw new Error('Não foi possível organizar este item. Sua captura continua salva na Inbox.');
@@ -14502,19 +14559,41 @@ window.Juntos = window.Juntos || {};
         var row = { id: x.id, date: x.event_date, title: x.title, amount: x.amount, kind: kind, status: x.status, route: x.route, related_entity_type: x.related_entity_type, related_entity_id: x.related_entity_id };
         if (x.is_realized) { realizedCount++; return; }
         if (x.is_planned) { planned.push(row); return; }
+        /* Fechamento de fatura é só informativo (sem obrigação); só o vencimento
+           (metadata.kind 'due') entra como compromisso — igual a Day/PeriodSummary. */
+        if (x.event_type === 'invoice' && (!x.metadata || x.metadata.kind !== 'due')) return;
         if (['invoice', 'installment', 'recurring', 'expense', 'income', 'planning_item', 'settlement', 'goal', 'budget'].indexOf(x.event_type) >= 0 || x.is_projected) upcoming.push(row);
       });
-      function money(v) { return Math.round(v * 100) / 100; }
-      var exp = 0, inc = 0;
+      /* Realizado com a mesma semântica do dashboardCalc (oficial): casal = valor
+         cheio 1x (cartão incluído como despesa); eu = recebidos + individuais +
+         responsabilidade nos compartilhados. Soma em centavos. */
+      var expC = 0, incC = 0;
       try {
+        var dbW = read(), idsW = orderedMemberIds(dbW, DB.myCoupleId(userId));
+        var splitMapW = {};
+        (dbW.splits || []).forEach(function (s) { (splitMapW[s.transaction_id] = splitMapW[s.transaction_id] || []).push(s); });
         DB.listTx(userId, {}).forEach(function (t) {
           if (t.deleted_at || t.date < from || t.date > to) return;
-          if (t.credit_card_id) return;
-          if (vis === 'me' && !t.is_shared && t.payer_user_id !== userId) return;
-          if (t.type === 'income') inc = money(inc + t.amount); else exp = money(exp + t.amount);
+          if (t.type === 'income') {
+            if (vis === 'couple' || t.payer_user_id === userId) incC += toCents(t.amount);
+          } else {
+            var ve = 0;
+            if (vis === 'couple') ve = toCents(t.amount);
+            else if (!t.is_shared) ve = (t.payer_user_id === userId) ? toCents(t.amount) : 0;
+            else {
+              var ss = splitMapW[t.id] || [], hit = false;
+              for (var i = 0; i < ss.length; i++) if (ss[i].user_id === userId) { ve = toCents(ss[i].calculated_amount); hit = true; break; }
+              if (!hit) {
+                var nW = idsW.length || 1, idxW = idsW.indexOf(userId);
+                var totW = toCents(t.amount);
+                ve = idxW < 0 ? 0 : ((idxW === idsW.length - 1 || nW === 1) ? totW - Math.floor(totW / nW) * (nW - 1) : Math.floor(totW / nW));
+              }
+            }
+            expC += ve;
+          }
         });
       } catch (e2) {}
-      realized = { income: inc, expense: exp, count: realizedCount };
+      realized = { income: fromCents(incC), expense: fromCents(expC), count: realizedCount };
       upcoming.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
       planned.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
       var settlement = null;
@@ -18822,7 +18901,7 @@ window.Juntos = window.Juntos || {};
     audioGet: function (userId, audioId) {
       var db = read(), cid = DB.myCoupleId(userId);
       var r = db.audio_messages.find(function (x) { return x.id === audioId && x.couple_id === cid; });
-      if (!r) throw new Error('Áudio não encontrado.');
+      if (!r || r.user_id !== userId) throw new Error('Áudio não encontrado.');
       return r;
     },
     audioValidateFile: function (meta) {
@@ -19020,7 +19099,7 @@ window.Juntos = window.Juntos || {};
     imageGet: function (userId, imageId) {
       var db = read(), cid = DB.myCoupleId(userId);
       var r = db.image_messages.find(function (x) { return x.id === imageId && x.couple_id === cid; });
-      if (!r) throw new Error('Imagem não encontrada.');
+      if (!r || r.user_id !== userId) throw new Error('Imagem não encontrada.');
       return r;
     },
     imageValidateFile: function (meta) {
@@ -19300,7 +19379,7 @@ window.Juntos = window.Juntos || {};
       source = source || {};
       var db = read(), cid = DB.myCoupleId(userId);
       var inp = db.multimodal_inputs.find(function (x) { return x.id === inputId && x.couple_id === cid; });
-      if (!inp) throw new Error('Entrada não encontrada.');
+      if (!inp || inp.user_id !== userId) throw new Error('Entrada não encontrada.');
       var row = {
         id: id('ev'), couple_id: cid, input_id: inputId, field_name: String(field).slice(0, 60),
         extracted_value: DB.imageRedactPan(String(value == null ? '' : (typeof value === 'object' ? JSON.stringify(value) : value))).slice(0, 300),
@@ -19317,6 +19396,8 @@ window.Juntos = window.Juntos || {};
     },
     inputListEvidence: function (userId, inputId) {
       var db = read(), cid = DB.myCoupleId(userId);
+      var inp0 = db.multimodal_inputs.find(function (x) { return x.id === inputId && x.couple_id === cid; });
+      if (!inp0 || inp0.user_id !== userId) throw new Error('Entrada não encontrada.');
       return db.input_evidence.filter(function (r) { return r.couple_id === cid && r.input_id === inputId; })
         .sort(function (a, b) { return (a.created_at + a.id).localeCompare(b.created_at + b.id); });
     },
@@ -19324,7 +19405,7 @@ window.Juntos = window.Juntos || {};
     docGet: function (userId, docId) {
       var db = read(), cid = DB.myCoupleId(userId);
       var r = db.financial_documents.find(function (x) { return x.id === docId && x.couple_id === cid; });
-      if (!r) throw new Error('Documento não encontrado.');
+      if (!r || r.user_id !== userId) throw new Error('Documento não encontrado.');
       return r;
     },
     docValidateFile: function (meta) {

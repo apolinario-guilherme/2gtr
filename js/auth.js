@@ -4,11 +4,26 @@
   var SKEY = 'juntos_session_v1';
   function sess() { try { return JSON.parse(localStorage.getItem(SKEY)); } catch (e) { return null; } }
   function setS(s) { s ? localStorage.setItem(SKEY, JSON.stringify(s)) : localStorage.removeItem(SKEY); }
-  // hash demonstrativo com salt (NÃO usar em produção com dados reais)
+  // hash demonstrativo com salt (NÃO usar em produção com dados reais;
+  // produção exige backend com bcrypt/scrypt/argon2 — este adapter é local).
   function hash(pw, salt) {
     var h1 = 0x811c9dc5, h2 = 0x01000193, s = salt + '::' + pw;
     for (var i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619); h2 = Math.imul(h2 + s.charCodeAt(i), 31); }
     return (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
+  }
+  function randHex(n) {
+    try {
+      var c = (typeof window !== 'undefined' && (window.crypto || window.msCrypto)) || null;
+      if (c && c.getRandomValues) {
+        var b = new Uint8Array(n), out = '';
+        c.getRandomValues(b);
+        for (var i = 0; i < n; i++) out += ('0' + b[i].toString(16)).slice(-2);
+        return out.slice(0, n * 2);
+      }
+    } catch (e) {}
+    var s = '';
+    for (var j = 0; j < n * 2; j++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+    return s;
   }
   var Auth = {
     current: function () {
@@ -23,7 +38,7 @@
       if (String(pass || '').length < 6) throw new Error('A senha precisa de pelo menos 6 caracteres.');
       var db = J.DB.all();
       if (db.users.some(function (u) { return u.email === email; })) throw new Error('Este e-mail já está cadastrado. Tente entrar.');
-      var u = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nome, email: email, salt: Math.random().toString(36).slice(2), avatar: null, created_at: new Date().toISOString() };
+      var u = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: nome, email: email, salt: randHex(16), avatar: null, created_at: new Date().toISOString() };
       u.pass = hash(pass, u.salt);
       db.users.push(u); J.DB.save(db); setS({ userId: u.id });
       try { J.DB.logSecurityEvent(u.id, 'register', { action: 'register', metadata: {} }); } catch (e) {}
@@ -46,7 +61,7 @@
       try { var me = Auth.current(); if (me) J.DB.logSecurityEvent(me.id, 'logout', { action: 'logout', metadata: {} }); } catch (e) {}
       setS(null);
       /* Limpa preferências de interface (filtros/visões) p/ não vazar contexto entre usuários. */
-      try { ['juntos_dash_v3', 'juntos_ov_v1'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e2) {}
+      try { ['juntos_dash_v3', 'juntos_ov_v1', 'juntos_sb_v1'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e2) {}
       try { if (J.Ctx) J.Ctx.clear(); } catch (e3) {}
       location.hash = '#/login';
     },
@@ -56,13 +71,14 @@
       var db = J.DB.all();
       var u = db.users.find(function (x) { return x.email === email; });
       if (!u) throw new Error('Se este e-mail existir, enviaremos as instruções.'); // anti-enumeração
-      var code = String(Math.floor(100000 + Math.random() * 900000));
+      var code = J.DB.randDigits(6);
       db.resets = db.resets.filter(function (r) { return r.email !== email; });
       db.resets.push({ email: email, code: code, exp: Date.now() + 30 * 60e3 });
       J.DB.save(db); return code; // nesta etapa: exibir na tela (sem envio de e-mail)
     },
     reset: function (email, code, npass) {
       email = String(email || '').trim().toLowerCase();
+      try { J.DB.rateCheck('reset:' + email, 10, 60000); } catch (e) { throw new Error('Muitas tentativas. Aguarde um momento.'); }
       var db = J.DB.all();
       var r = db.resets.find(function (x) { return x.email === email && x.code === String(code).trim(); });
       if (!r || r.exp < Date.now()) throw new Error('Código inválido ou expirado.');

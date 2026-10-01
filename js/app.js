@@ -1472,12 +1472,29 @@
   }
 
   /* ---------- modal (bottom-sheet no mobile) ---------- */
+  var _lastFocus = null;
   function modalShell(inner) {
+    try { _lastFocus = document.activeElement; } catch (e) { _lastFocus = null; }
     var r = document.getElementById('modal-root');
-    r.innerHTML = '<div class="sheet-bg" id="mbg"><div class="sheet" role="dialog">' + inner + '</div></div>';
+    r.innerHTML = '<div class="sheet-bg" id="mbg"><div class="sheet" role="dialog" aria-modal="true">' + inner + '</div></div>';
     document.getElementById('mbg').onclick = function (e) { if (e.target.id === 'mbg') closeModal(); };
+    document.onkeydown = function (e) {
+      if ((e.key === 'Escape' || e.key === 'Esc') && document.getElementById('mbg')) { closeModal(); }
+    };
+    try {
+      var sheet = r.querySelector('.sheet');
+      var h = sheet.querySelector('h1,h2');
+      if (h) { if (!h.id) h.id = 'modal-title'; sheet.setAttribute('aria-labelledby', 'modal-title'); }
+      var f = sheet.querySelector('input,select,textarea,button');
+      if (f) f.focus();
+    } catch (e2) {}
   }
-  function closeModal() { var r = document.getElementById('modal-root'); if (r) r.innerHTML = ''; editingId = null; }
+  function closeModal() {
+    var r = document.getElementById('modal-root'); if (r) r.innerHTML = ''; editingId = null;
+    document.onkeydown = null;
+    try { if (_lastFocus && _lastFocus.focus) _lastFocus.focus(); } catch (e) {}
+    _lastFocus = null;
+  }
 
   /* Pessoas do casal em ordem determinística (p/ divisão e arredondamento). */
   function couplePeople(me) {
@@ -4066,7 +4083,7 @@
   }
   function wkMRender(me, ov) {
     var steps = ['Visão geral', 'Agenda', 'Tarefas', 'Hábitos e rotinas', 'Projetos', 'Finanças', 'Prioridades', 'Confirmar'];
-    var st = wk.m.step, h = '<h2>Planejar minha semana</h2><div id="me"></div><p class="muted">Passo ' + (st + 1) + ' de 8 • ' + steps[st] + '</p>';
+    var st = wk.m.step, h = '<h2>Planejar minha semana</h2><div id="me"></div><p class="muted" role="status">Passo ' + (st + 1) + ' de 8 • ' + steps[st] + '</p>';
     if (st === 0) {
       var tk = (ov.tasks && ov.tasks.ok) ? ov.tasks.data : { overdue: [], upcoming: [] };
       var ag = (ov.agenda && ov.agenda.ok) ? ov.agenda.data : [];
@@ -4273,7 +4290,8 @@
       html += '<ol class="steps" aria-label="Etapas do fechamento">' + steps.map(function (s, ix) {
         var cls = (ix + 1) < st ? 'done' : ((ix + 1) === st ? 'now' : 'todo');
         var mark = (ix + 1) < st ? '✓ ' : '';
-        return '<li class="' + cls + '">' + (ix + 1 === st ? '<b>' + mark + esc(s) + '</b>' : mark + esc(s)) + '</li>';
+        if (ix + 1 === st) return '<li class="' + cls + '" aria-current="step"><b>' + mark + esc(s) + '</b></li>';
+        return '<li class="' + cls + '">' + mark + esc(s) + '</li>';
       }).join('') + '</ol>';
       if (rev.status === 'COMPLETED' && rev.review_summary_snapshot) html += '<p class="muted">Dados referentes ao fechamento realizado em ' + esc(String(rev.completed_at || '').slice(0, 10)) + '.</p>';
       try {
@@ -4475,7 +4493,7 @@
         ? J.DB.getUnifiedCalendar(me.id, Object.assign({}, F, { from: r.from, to: r.to }))
         : J.DB.getCalendarEvents(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
       sum = J.DB.calculatePeriodSummary(me.id, Object.assign({}, F, { from: r.from, to: r.to }));
-    } catch (e) { v.innerHTML = '<div class="card"><h1>Calendário financeiro</h1></div>' + err(e); return; }
+    } catch (e) { v.innerHTML = '<div class="card"><h1>Calendário financeiro</h1></div>' + err(e) + '<button class="btn ghost" id="cal-retry">Tentar novamente</button>'; var cr = document.getElementById('cal-retry'); if (cr) cr.onclick = function () { render('calendar'); }; return; }
     var partnerId = J.DB.memberIds(me.id).filter(function (x) { return x !== me.id; })[0] || null;
     var vMe = esc(me.nome.split(' ')[0]), vPa = partnerId ? esc(firstShort(me, partnerId)) : 'Parceiro';
     var accs = J.DB.listAccounts(me.id, 'all'), cards = J.DB.listCards(me.id, 'all'), cats = J.DB.myCategories(me.id, '');
@@ -5893,7 +5911,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/week">📅 Minha Semana <span>›</span></a><a href="#/monthly-review">📊 Fechamento Mensal <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/week">📅 Minha Semana <span>›</span></a><a href="#/monthly-review">📊 Fechamento Mensal <span>›</span></a><a href="#/finance">💰 Finanças <span>›</span></a><a href="#/installments">🗓️ Parceladas <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };
@@ -6394,7 +6412,7 @@
       b.onclick = function () {
         var host = document.getElementById('ofd-' + b.dataset.ofdet);
         try {
-          var t = J.DB.all().openfinance_bank_transactions.filter(function (x) { return x.id === b.dataset.ofdet; })[0];
+          var t = J.DB.all().openfinance_bank_transactions.filter(function (x) { return x.id === b.dataset.ofdet && x.couple_id === J.DB.myCoupleId(me.id); })[0];
           var cands = J.DB.ofFindCandidates(me.id, t.id, 5);
           host.innerHTML = '<div class="card" style="margin:8px 0;background:#fafaf9"><div class="row"><div style="flex:1"><b>OPEN FINANCE</b><p class="muted">' + esc(t.description) + '<br>' + esc(dueLabel(t.date)) + ' • <b>' + BRL(t.amount) + '</b><br>ID externo: ' + esc(t.external_id) + '</p></div>' +
             '<div style="flex:1"><b>SISTEMA</b>' + (cands.length ? cands.map(function (c) {
@@ -6405,7 +6423,7 @@
               try {
                 var p = u.dataset.ofuse.split('|');
                 J.DB.ofCreateMatchSuggestion(me.id, p[0], p[1], p[2]);
-                var m = J.DB.all().reconciliation_matches.filter(function (x) { return x.source_record_id === p[0] && x.status === 'pending'; }).slice(-1)[0];
+                var m = J.DB.all().reconciliation_matches.filter(function (x) { return x.source_record_id === p[0] && x.status === 'pending' && x.couple_id === J.DB.myCoupleId(me.id); }).slice(-1)[0];
                 if (m) J.DB.ofResolveMatch(me.id, m.id, true);
                 toast('Conciliado!');
                 render('openfinance');
@@ -6425,7 +6443,7 @@
     });
     Array.prototype.forEach.call(v.querySelectorAll('[data-ofign]'), function (b) {
       b.onclick = function () {
-        try { J.DB.ofCreateException(me.id, (J.DB.all().openfinance_bank_transactions.filter(function (x) { return x.id === b.dataset.ofign; })[0] || {}).connection_id, b.dataset.ofign, null, 'manual_review_required', 'info', 'Ignorado pelo usuário na central.'); toast('Ignorado.'); render('openfinance'); }
+        try { J.DB.ofCreateException(me.id, ((J.DB.all().openfinance_bank_transactions.filter(function (x) { return x.id === b.dataset.ofign && x.couple_id === J.DB.myCoupleId(me.id); })[0] || {}).connection_id), b.dataset.ofign, null, 'manual_review_required', 'info', 'Ignorado pelo usuário na central.'); toast('Ignorado.'); render('openfinance'); }
         catch (e) { toast('Não foi possível.'); }
       };
     });
