@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>t57</title><link rel="stylesheet" href="css/styles.css"></head><body>
+<div id="shell"><aside id="sidebar"><nav id="side-nav" aria-label="Navegação principal"><a href="#/dashboard" data-r="dashboard"><span class="nl">Visão geral</span></a><span class="nav-group">Minha vida</span><a href="#/inbox" data-r="inbox"><span class="nl">Inbox</span></a><a href="#/agenda" data-r="agenda"><span class="nl">Agenda</span></a><a href="#/tasks" data-r="tasks"><span class="nl">Tarefas</span></a><a href="#/lists" data-r="lists"><span class="nl">Listas</span></a><a href="#/routines" data-r="routines"><span class="nl">Rotinas</span></a><a href="#/projects" data-r="projects"><span class="nl">Projetos</span></a><a href="#/habits" data-r="habits"><span class="nl">Hábitos</span></a></nav><div class="side-foot"><button class="sb-toggle" id="sb-toggle">‹</button></div></aside><div class="main"><header id="topbar"><strong id="page-title">x</strong><span><button id="avatar-btn">A</button></span></header><main id="view"></main></div></div>
+<nav id="bottomnav"><a href="#/dashboard" data-r="dashboard"><span>Início</span></a><button id="fab">+</button><a href="#/more" data-r="more"><span>Mais</span></a></nav>
+<div id="toasts"></div><div id="modal-root"></div><div id="o7">...</div>
+<script src="js/db.js?cb=906"></script>
+<script src="js/auth.js?cb=906"></script>
+<script src="js/router.js?cb=906"></script>
+<script src="js/app.js?cb=906"></script>
+<script>
+(function(){
+var DB=window.Juntos.DB, Auth=window.Juntos.Auth, App=window.Juntos.App;
+var P=0,F=0,L=[];
+function ok(c,m){if(c){P++;}else{F++;L.push('FAIL '+m);}}
+function eq(a,b,m){ok(a===b,m+' [esp '+JSON.stringify(b)+' veio '+JSON.stringify(a)+']');}
+function throws(fn,m){var t=false;try{fn();}catch(e){t=true;}ok(t,m);}
+function html(){return document.getElementById('view').innerHTML;}
+function shows(t,m){ok(html().indexOf(t)>=0,m);}
+function hides(t,m){ok(html().indexOf(t)<0,m);}
+function as(uid){localStorage.setItem('juntos_session_v1',JSON.stringify({userId:uid}));}
+try{localStorage.clear();}catch(e){}
+window.scrollTo=function(){};
+DB.AI_CONFIG=function(){return {provider:'local-deterministic',model:'local-v1',maxTokens:500,temperature:0,timeoutMs:15000,maxContext:10,maxMessageChars:10000,ratePerMinute:100000};};
+DB._waOutbox=[];
+try{ App.boot(); }catch(e){ L.push('FAIL boot '+e.message); }
+try{
+var A=Auth.register('Ana I','ana.i@t.t','senha123');
+var B=Auth.register('Bruno I','bruno.i@t.t','senha123');
+DB.createCouple(A.id,'Casal I');
+var inv=DB.createInvite(A.id); DB.acceptInvite(B.id,inv.code);
+as(A.id);
+var TODAY=DB.agendaToday(), SOON=DB.agendaAddDays(TODAY,3);
+/* --- captura simples + save-first --- */
+var c1=DB.captureItem(A.id,{content:'Comprar ração amanhã'});
+eq(c1.visibility,'PERSONAL','default personal');
+ok(['UNPROCESSED','SUGGESTED'].indexOf(c1.status)>=0,'status inicial');
+eq(DB.getInboxItem(A.id,c1.id).suggested_entity_type,'TASK','sugere tarefa');
+throws(function(){DB.captureItem(A.id,{content:'x'});},'texto curto');
+var cU=DB.captureItem(A.id,{content:'blorp xyz wibble'});
+ok(!!DB.getInboxItem(A.id,cU.id),'desconhecido salvo');
+eq(DB.getInboxItem(A.id,cU.id).suggested_entity_type,'UNKNOWN','unknown');
+/* --- falha da IA nao perde captura --- */
+var _cls=DB.classifyInboxItem;
+DB.classifyInboxItem=function(){throw new Error('IA fora');};
+var cF=DB.captureItem(A.id,{content:'Comprar ração amanhã'});
+DB.classifyInboxItem=_cls;
+eq(DB.getInboxItem(A.id,cF.id).status,'UNPROCESSED','falha mantem captura');
+/* --- processar como tarefa (atomico + idempotente) --- */
+var d1=DB.prepareInboxDraft(A.id,c1.id,'TASK',{});
+ok(d1.draft.title.length>=2,'draft titulo');
+var r1=DB.confirmInboxProcessing(A.id,c1.id,'TASK',{title:'Comprar ração',due_date:SOON,visibility:'PERSONAL'},{expected_version:c1.version,idempotency_key:'k1'});
+eq(DB.getInboxItem(A.id,c1.id).status,'PROCESSED','processado');
+ok(!!DB.getTask(A.id,r1.entity_id),'tarefa criada');
+var nT0=DB.aiFindTask(A.id,'Comprar ração').length;
+var r1b=DB.confirmInboxProcessing(A.id,c1.id,'TASK',{title:'Comprar ração'},{idempotency_key:'k1'});
+eq(r1b.already,true,'duplo vira already');
+eq(DB.aiFindTask(A.id,'Comprar ração').length,nT0,'sem duplicar');
+throws(function(){DB.confirmInboxProcessing(A.id,c1.id,'TASK',{title:'X'},{expected_version:1});},'versao obsoleta');
+/* --- agenda + ambiguidade --- */
+var cA=DB.captureItem(A.id,{content:'Dentista sexta às 15h'});
+eq(DB.getInboxItem(A.id,cA.id).suggested_entity_type,'AGENDA_EVENT','sugere agenda');
+var cAm=DB.captureItem(A.id,{content:'Marcar dentista sexta'});
+var sugAm=DB.getInboxItem(A.id,cAm.id);
+ok(sugAm.suggested_entity_type==='AGENDA_EVENT'&&sugAm.alternates.indexOf('TASK')>=0,'ambiguidade com alternativa');
+DB.confirmInboxProcessing(A.id,cAm.id,'AGENDA_EVENT',{title:'Dentista',date:SOON,visibility:'PERSONAL'},{});
+ok(DB.getAgendaEvent(A.id,DB.getInboxItem(A.id,cAm.id).processed_entity_id).title==='Dentista','compromisso criado');
+/* --- pagar x paguei --- */
+var cTx=DB.captureItem(A.id,{content:'Paguei R$ 120 de internet'});
+eq(DB.getInboxItem(A.id,cTx.id).suggested_entity_type,'TRANSACTION','sugere transacao');
+throws(function(){DB.confirmInboxProcessing(A.id,cTx.id,'TRANSACTION',{description:'Internet',amount:120,date:TODAY},{});},'sem categoria bloqueia');
+var cat=DB.myCategories(A.id,'').filter(function(c){return c.type==='expense'||c.type==='both';})[0];
+ok(!!cat,'categoria seed');
+var tx0=DB.listTx(A.id,{}).length;
+DB.confirmInboxProcessing(A.id,cTx.id,'TRANSACTION',{description:'Internet',amount:120,date:TODAY,category_id:cat.id},{});
+eq(DB.listTx(A.id,{}).length,tx0+1,'transacao via oficial');
+var cFut=DB.captureItem(A.id,{content:'Pagar internet amanhã'});
+eq(DB.getInboxItem(A.id,cFut.id).suggested_entity_type,'TASK','futuro nao e despesa');
+/* --- lista, item, habito, rotina, projeto, meta --- */
+var cL=DB.captureItem(A.id,{content:'Lista da viagem: passaporte, carregador e adaptador'});
+eq(DB.getInboxItem(A.id,cL.id).suggested_entity_type,'LIST','sugere lista');
+DB.confirmInboxProcessing(A.id,cL.id,'LIST',{name:'Viagem',items:['Passaporte','Carregador','Adaptador']},{});
+var lFound=DB.getLists(A.id,{}).filter(function(l){return l.name==='Viagem';})[0];
+ok(!!lFound&&DB.getListItems(A.id,lFound.id,{}).length===3,'lista com itens');
+var mk=DB.createList(A.id,{name:'Mercado'});
+var cLI=DB.captureItem(A.id,{content:'Adicionar café no mercado'});
+eq(DB.getInboxItem(A.id,cLI.id).suggested_entity_type,'LIST_ITEM','sugere item');
+DB.confirmInboxProcessing(A.id,cLI.id,'LIST_ITEM',{list_id:mk.id,title:'Café'},{});
+ok(DB.searchListItems(A.id,'Café').length>=1,'item adicionado');
+var cH=DB.captureItem(A.id,{content:'Quero ler 20 minutos todos os dias'});
+eq(DB.getInboxItem(A.id,cH.id).suggested_entity_type,'HABIT','sugere habito');
+DB.confirmInboxProcessing(A.id,cH.id,'HABIT',{name:'Leitura'},{});
+ok(DB.getHabits(A.id,{}).some(function(h){return h.name==='Leitura';}),'habito criado');
+var cR=DB.captureItem(A.id,{content:'Todo domingo quero revisar agenda'});
+eq(DB.getInboxItem(A.id,cR.id).suggested_entity_type,'ROUTINE','sugere rotina');
+DB.confirmInboxProcessing(A.id,cR.id,'ROUTINE',{name:'Revisão domingo'},{});
+ok(DB.searchRoutines(A.id,'Revisão domingo').length>=1,'rotina criada');
+var cP=DB.captureItem(A.id,{content:'Quero organizar uma viagem, projeto Itália em dezembro'});
+eq(DB.getInboxItem(A.id,cP.id).suggested_entity_type,'PROJECT','sugere projeto');
+DB.confirmInboxProcessing(A.id,cP.id,'PROJECT',{name:'Viagem Itália'},{});
+ok(DB.searchProjects(A.id,'Itália').length>=1,'projeto criado');
+var cG=DB.captureItem(A.id,{content:'Quero juntar 10000 para viagem'});
+eq(DB.getInboxItem(A.id,cG.id).suggested_entity_type,'GOAL','sugere meta');
+DB.confirmInboxProcessing(A.id,cG.id,'GOAL',{name:'Viagem',target:10000},{});
+ok(DB.analyticsGoals(A.id).some(function(g){return g.name==='Viagem';}),'meta criada');
+/* --- projeto contextual: task + link --- */
+var pj=DB.createProject(A.id,{name:'Viagem Itália',visibility:'COUPLE'});
+var cPJ=DB.captureItem(A.id,{content:'Comprar adaptador para a viagem',visibility:'COUPLE'});
+DB.confirmInboxProcessing(A.id,cPJ.id,'TASK',{title:'Comprar adaptador',project_id:pj.id},{});
+var linked=DB.getProjectLinks(A.id,pj.id).filter(function(l){return l.entity_type==='TASK';});
+eq(linked.length,1,'task vinculada ao projeto');
+/* --- privacidade --- */
+as(B.id);
+throws(function(){DB.getInboxItem(B.id,c1.id);},'parceiro nao ve personal');
+eq(DB.getInboxItems(B.id,{}).items.some(function(x){return x.id===c1.id;}),false,'lista exclui');
+as(A.id);
+var cC=DB.captureItem(A.id,{content:'Comprar ração',visibility:'COUPLE'});
+as(B.id);
+var dC=DB.prepareInboxDraft(B.id,cC.id,'TASK',{});
+DB.confirmInboxProcessing(B.id,cC.id,'TASK',{title:'Comprar ração'},{});
+as(A.id);
+var done=DB.getInboxItem(A.id,cC.id);
+eq(done.status,'PROCESSED','B processou, A ve');
+eq(done.processed_by,B.id,'processed_by');
+/* --- descartar/restaurar/arquivar --- */
+var cD=DB.captureItem(A.id,{content:'Ideia maluca'});
+DB.dismissInboxItem(A.id,cD.id);
+eq(DB.getInboxItem(A.id,cD.id).status,'DISMISSED','descarta');
+DB.restoreInboxItem(A.id,cD.id);
+ok(['UNPROCESSED','SUGGESTED'].indexOf(DB.getInboxItem(A.id,cD.id).status)>=0,'restaura');
+DB.archiveInboxItem(A.id,cD.id);
+eq(DB.getInboxItem(A.id,cD.id).status,'ARCHIVED','arquiva');
+/* --- entidade excluida depois --- */
+var tDel=DB.getTask(A.id,r1.entity_id);
+DB.deleteTask(A.id,tDel.id);
+eq(DB.inboxProcessedTarget(A.id,c1.id).available,false,'destino ausente');
+/* --- IA --- */
+var conv=DB.aiCreateConversation(A.id,'IB');
+function ask(t){return DB.aiProcessMessage(A.id,conv.id,t,{channel:'web'});}
+var q1=ask('Guarda isso na Inbox: pesquisar seguro viagem.');
+eq(q1.intent,'inbox_capture','intent captura');
+ok(DB.getUnprocessedInboxItems(A.id,{limit:50}).some(function(x){return x.content.indexOf('seguro viagem')>=0;}),'capturado via IA');
+var q2=ask('Mostra minha Inbox.');
+eq(q2.intent,'inbox_list','intent lista');
+var q3=ask('O primeiro vira tarefa.');
+eq(q3.intent,'inbox_process','intent ordinal');
+ok(!!q3.pendingAction,'draft confirma');
+var ctx0=DB.convGetContext(A.id,conv.id,'INBOX_LIST');
+var firstId=String(ctx0.entity_id).split(',')[0];
+var tasksBefore=JSON.parse(localStorage.getItem('juntos_db_v1')).tasks.length;
+ask('sim');
+eq(DB.getInboxItem(A.id,firstId).status,'PROCESSED','ordinal processado');
+eq(JSON.parse(localStorage.getItem('juntos_db_v1')).tasks.length,tasksBefore+1,'tarefa criada');
+var q4=ask('Descarta o segundo.');
+eq(q4.intent,'inbox_dismiss','intent descarta');
+/* --- audio e imagem --- */
+var au=DB.audioReceive(A.id,{mime:'audio/webm',size:50000,durationSec:10,name:'nota.webm'}, {});
+DB.audioTranscribe(A.id,au.id,{provider:'local-sim',transcript:'Guarda na Inbox isso: comprar adaptador'});
+var ar=DB.audioToAssistant(A.id,au.id,{});
+eq(ar.intent,'inbox_capture','audio vira captura');
+ok(DB.getUnprocessedInboxItems(A.id,{limit:50}).some(function(x){return x.input_type==='AUDIO';}),'item audio');
+var imr=DB.aiProcessMessage(A.id,DB.aiCreateConversation(A.id,'IM').id,'Guarda isso para depois.',{channel:'web',imageMessageId:'im_fake'});
+eq(imr.intent,'inbox_capture','imagem vira captura');
+/* --- whatsapp --- */
+var PHONE='+5511999990006';
+var lk=DB.waGenerateLinkCode(A.id);
+DB.waConsumeLinkCode(PHONE,lk.code);
+function wa(t,iid){return DB.whatsappWebhookReceive('local-sim',{messageId:iid,from:PHONE,type:'text',text:t});}
+var w1=wa('/inbox','wi1');
+eq(w1.intent,'inbox_list','wa inbox');
+var w2=wa('Guarda na Inbox: pesquisar hotel em Roma.','wi2');
+eq(w2.intent,'inbox_capture','wa captura');
+var w3=wa('Mostra minha Inbox.','wi3');
+eq(w3.intent,'inbox_list','wa lista');
+/* --- UI --- */
+location.hash='#/inbox';
+App.render('inbox');
+shows('Inbox','pagina');
+shows('O que você quer guardar?','quick capture');
+document.getElementById('ib-quick').value='Lembrar guarda-chuva';
+document.getElementById('ib-quickf').onsubmit({preventDefault:function(){}});
+shows('guarda-chuva','capturado via UI');
+document.querySelector('[data-iborg]').onclick();
+ok(!!document.getElementById('f-le')||!!document.querySelector('[data-dest]'),'organizar abre');
+document.querySelector('[data-dest="TASK"]').onclick();
+document.getElementById('sv').onclick();
+ok(DB.aiFindTask(A.id,'guarda-chuva').length>=1,'tarefa via UI');
+App.render('dashboard');
+shows('organizar','dash card');
+App.render('more');
+shows('Inbox','mais');
+ok(document.querySelector('#side-nav a[data-r="inbox"]'),'sidebar');
+as(B.id);
+App.render('inbox');
+hides('Comprar ração amanhã','B nao ve personal');
+as(A.id);
+/* --- regressao --- */
+App.render('agenda'); shows('Agenda','agenda ok');
+App.render('tasks'); shows('Tarefas','tasks ok');
+App.render('lists'); shows('Listas','lists ok');
+App.render('habits'); shows('Meus hábitos','habitos ok');
+App.render('routines'); shows('Rotinas','routines ok');
+App.render('projects'); shows('Projetos','projects ok');
+App.render('transactions'); shows('Receitas','tx ok');
+App.render('reports'); shows('Relatórios','reports ok');
+App.render('notifications'); shows('Notificações','notif ok');
+eq(DB.ofIsEnabled(),false,'OF off');
+eq(DB.diagnose(A.id).length,0,'diagnose');
+ok(document.documentElement.scrollWidth<=window.innerWidth+1,'sem overflow');
+}catch(e){L.push('FAIL ex '+e.message);}
+document.getElementById('o7').innerHTML='<p>PASS '+P+' / FAIL '+F+'</p>'+L.map(function(x){return '<p>'+x+'</p>';}).join('');
+})();
+</script></body></html>

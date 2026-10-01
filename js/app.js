@@ -57,7 +57,7 @@
     document.getElementById('shell').classList.remove('hidden');
     closeModal();
     var parts = String(route || 'dashboard').split('/');
-    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
+    var fn = { landing: pLanding, privacy: pPrivacy, terms: pTerms, finance: pFinanceHub, forbidden: pForbidden, notfound: pNotFound, login: pLogin, register: pRegister, 'forgot-password': pForgot, onboarding: pOnboarding, dashboard: pDash, transactions: pTrans, accounts: (parts[1] ? function (vv, mm) { pAccountDetail(vv, mm, parts[1]); } : pAccounts), cards: (parts[1] ? function (vv, mm) { pCardDetail(vv, mm, parts[1]); } : pCards), installments: pInstallments, invoices: (parts[1] ? function (vv, mm) { pInvoiceDetail(vv, mm, parts[1]); } : pInvoices), imports: (parts[1] ? function (vv, mm) { pImportDetail(vv, mm, parts[1]); } : pImports), insights: pInsights, assistant: pAssistant, notifications: pNotifications, planning: (parts[1] ? function (vv, mm) { pPlanningDetail(vv, mm, parts[1]); } : pPlanning), agenda: pAgenda, tasks: pTasks, lists: (parts[1] ? function (vv, mm) { pListDetail(vv, mm, parts[1]); } : pLists), routines: (parts[1] ? function (vv, mm) { pRoutineDetail(vv, mm, parts[1]); } : pRoutines), projects: (parts[1] ? function (vv, mm) { pProjectDetail(vv, mm, parts[1]); } : pProjects), habits: (parts[1] ? function (vv, mm) { pHabitDetail(vv, mm, parts[1]); } : pHabits), budget: pBudget, goals: pGoals, settlements: pSettle, recurring: pRecurring, calendar: pCalendar, reports: pReports, more: pMore, inbox: pInbox, settings: (parts[1] ? function (vv, mm) { pSettingsSub(vv, mm, parts[1]); } : pSettings), profile: function (vv, mm) { location.hash = '#/settings/profile'; return pSettingsProfile(vv, mm); }, couple: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, invite: function (vv, mm) { location.hash = '#/settings/couple'; return pSettingsCouple(vv, mm); }, openfinance: function (vv, mm) { location.hash = '#/dashboard'; return pDash(vv, mm); } }[parts[0]] || pNotFound;
     try { fn(v, me); } catch (e) {
       if (/acesso negado/i.test(e.message || '')) { pForbidden(v); return; }
       v.innerHTML = err(e) + '<button class="btn" id="retry">Tentar novamente</button>';
@@ -72,6 +72,14 @@
       } else if (bell) bell.style.display = 'none';
     } catch (e2) { /* badge nunca quebra a página */ }
     try { paintShell(me); } catch (e3) { /* shell nunca quebra a página */ }
+    try {
+      var ibl = document.querySelector('#side-nav a[data-r="inbox"] .nl');
+      if (ibl && me) {
+        var ibq = 0;
+        try { ibq = J.DB.getInboxSummary(me.id).pending || 0; } catch (eix) {}
+        ibl.textContent = 'Inbox' + (ibq > 0 ? ' ' + ibq : '');
+      }
+    } catch (e4) { /* badge nunca quebra a página */ }
     window.scrollTo(0, 0);
   }
   /* Moldura estática = MemberLayout (só apresentação: nomes vindos dos serviços). */
@@ -925,7 +933,7 @@
     // Hoje (resumo rápido)
     s += blk('Hoje', function () {
       var nx = day.next ? '<br>Próximo: <b>' + esc((day.next.start || '') + (day.next.start ? ' • ' : '') + day.next.title) + '</b>' : '<br><span class="muted">Sem próximos compromissos.</span>';
-      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.tasks.total + '</b> tarefas • <b>' + ((day.routines || []).length) + '</b> rotinas • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
+      return '<div class="card"><b>Hoje</b><p><b>' + day.agenda.length + '</b> compromissos • <b>' + day.tasks.total + '</b> tarefas • <b>' + ((day.routines || []).length) + '</b> rotinas • <b>' + ((day.inbox && day.inbox.pending) || 0) + '</b> na Inbox • <b>' + day.habits.done + '/' + day.habits.total + '</b> hábitos • <b>' + day.finance.count + '</b> movimentações' + nx + '</p></div>';
     });
     // Próximo compromisso (destaque)
     s += blk('Próximo', function () {
@@ -942,6 +950,7 @@
     s += blk('Listas', function () { return ovListsCard(me, day); });
     s += blk('Rotinas', function () { return ovRoutinesCard(me, day); });
     s += blk('Projetos', function () { return ovProjectsCard(me, day); });
+    s += blk('Inbox', function () { return ovInboxCard(me, day); });
     s += blk('Finanças', function () { return ovFinDayCard(day); });
     var pair2 = '';
     pair2 += blk('Timeline', function () { return ovTimelineCard(day); });
@@ -3545,6 +3554,269 @@
     var top = lst[0];
     return '<div class="card"><b>🗂 ' + esc(top.name) + '</b><p class="muted">' + top.taskDone + '/' + top.taskTotal + ' tarefas' + (top.upcoming && top.upcoming.length ? ' • Próximo: ' + esc(pjNextLbl(top.upcoming[0])) : '') + ' • <a href="#/projects/' + top.id + '">Ver projeto ›</a></p></div>';
   }
+  /* ============ INBOX (só apresentação sobre InboxService) ============
+     Capturar primeiro, organizar depois. Sugestão em linguagem humana. */
+  var ibx = { tab: 'pending', vis: 'all', q: '', limit: 30 };
+  function ibStatusLbl(s) {
+    return { UNPROCESSED: 'Pendente', SUGGESTED: 'Pendente', AWAITING_CONFIRMATION: 'Aguardando', PROCESSED: 'Organizado', DISMISSED: 'Descartado', ARCHIVED: 'Arquivado' }[s] || s;
+  }
+  function ibDestLbl(t) {
+    return { TASK: 'Tarefa', AGENDA_EVENT: 'Compromisso', HABIT: 'Hábito', LIST: 'Lista', LIST_ITEM: 'Item de lista', ROUTINE: 'Rotina', PROJECT: 'Projeto', TRANSACTION: 'Movimentação', GOAL: 'Meta', UNKNOWN: 'A escolher' }[t] || t;
+  }
+  function ibWhen(iso) {
+    try { var d = String(iso || '').slice(0, 10); if (!d) return ''; return d.split('-').reverse().join('/'); } catch (e) { return ''; }
+  }
+  function pInbox(v, me) {
+    var sum = { pending: 0 };
+    try { sum = J.DB.getInboxSummary(me.id); } catch (e) {}
+    var tabs = [['pending', 'Pendentes'], ['processed', 'Processados'], ['dismissed', 'Descartados']];
+    var html = '<div class="card"><div class="row between" style="flex-wrap:wrap"><h1 style="margin:0">Inbox</h1><span class="pill">' + sum.pending + (sum.pending === 1 ? ' item' : ' itens') + '</span></div>' +
+      '<p class="muted">Capture rápido. Organize depois.</p>' +
+      '<form id="ib-quickf"><div class="row"><input id="ib-quick" placeholder="O que você quer guardar?" autocomplete="off" aria-label="Captura rápida" style="flex:1;min-width:0"><button class="btn sm" id="ib-quickgo" style="max-width:130px">Capturar</button></div></form></div>' +
+      '<div class="card"><div class="seg-scroll"><div class="seg" role="tablist" aria-label="Estado">' +
+      tabs.map(function (x) { return '<button data-ibtab="' + x[0] + '" class="' + (ibx.tab === x[0] ? 'on' : '') + '" role="tab">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="seg" role="group" aria-label="Visibilidade"><button data-ibvis="all" class="' + (ibx.vis === 'all' ? 'on' : '') + '">Todas</button><button data-ibvis="PERSONAL" class="' + (ibx.vis === 'PERSONAL' ? 'on' : '') + '">Pessoais</button><button data-ibvis="COUPLE" class="' + (ibx.vis === 'COUPLE' ? 'on' : '') + '">Casal</button></div>' +
+      '<input id="ib-q" placeholder="🔍 Buscar na Inbox" value="' + esc(ibx.q) + '" aria-label="Buscar na Inbox"></div>';
+    var rows = [], total = 0, errMsg = null;
+    try {
+      var f = { search: ibx.q || undefined, limit: ibx.limit + 1 };
+      if (ibx.vis !== 'all') f.visibility = ibx.vis;
+      if (ibx.tab === 'pending') {
+        var seen = {};
+        ['UNPROCESSED', 'SUGGESTED', 'AWAITING_CONFIRMATION'].forEach(function (st) {
+          J.DB.getInboxItems(me.id, Object.assign({}, f, { status: st, limit: ibx.limit + 1 })).items.forEach(function (it) { if (!seen[it.id]) { seen[it.id] = true; rows.push(it); } });
+        });
+        rows.sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+        total = rows.length;
+      } else if (ibx.tab === 'processed') {
+        var r1 = J.DB.getInboxItems(me.id, Object.assign({}, f, { status: 'PROCESSED', limit: ibx.limit + 1 }));
+        rows = r1.items; total = r1.total;
+      } else {
+        var r2 = J.DB.getInboxItems(me.id, Object.assign({}, f, { status: 'DISMISSED', limit: ibx.limit + 1 }));
+        rows = r2.items; total = r2.total;
+      }
+    } catch (e2) { errMsg = e2; }
+    if (errMsg) { v.innerHTML = html + '<div class="card"><div class="alert">Não foi possível carregar sua Inbox.</div><button class="btn ghost" data-ibretry>Tentar novamente</button></div>'; bindInbox(v, me); return; }
+    if (!rows.length) {
+      var emptyTxt = ibx.tab === 'pending' ? 'Sua Inbox está vazia. Use este espaço para capturar rapidamente algo que você quer organizar depois.' : ibx.tab === 'processed' ? 'Nada organizado por aqui ainda.' : 'Nenhum item pendente para organizar.';
+      html += '<div class="card empty"><div class="ico">📥</div><h2>' + esc(emptyTxt) + '</h2><button class="btn" id="ib-new2" style="max-width:220px;margin:0 auto">Capturar algo</button></div>';
+    } else {
+      html += rows.slice(0, ibx.limit).map(function (it) {
+        var sug = '';
+        try { sug = J.DB.inboxSuggestionText(it); } catch (e3) { sug = ''; }
+        var dest = '';
+        if (it.status === 'PROCESSED' && it.processed_entity_type) {
+          var tgt = null;
+          try { tgt = J.DB.inboxProcessedTarget(me.id, it.id); } catch (e4) {}
+          dest = tgt && tgt.available ? '<br><a href="' + tgt.route + '">Ver destino ›</a>' : '<br><span class="muted">O item foi processado anteriormente, mas o destino não está mais disponível.</span>';
+        }
+        var acts = '';
+        if (it.status === 'PROCESSED') acts = '<button class="btn ghost sm" data-ibarch="' + it.id + '">Arquivar</button>';
+        else if (it.status === 'DISMISSED' || it.status === 'ARCHIVED') acts = '<button class="btn ghost sm" data-ibrestore="' + it.id + '">Restaurar</button>';
+        else acts = '<button class="btn sm" data-iborg="' + it.id + '" style="max-width:130px">Organizar</button> <button class="btn ghost sm" data-ibedit="' + it.id + '">Editar</button> <button class="btn ghost sm" data-ibdis="' + it.id + '">Descartar</button>';
+        return '<div class="card"><div class="row between"><b style="flex:1;min-width:0">' + esc(it.content) + '</b><span class="pill">' + (it.visibility === 'COUPLE' ? '❤️ Casal' : '👤 Pessoal') + '</span></div>' +
+          '<p class="muted">' + esc(ibWhen(it.created_at)) + ' • ' + esc(ibStatusLbl(it.status)) + (sug ? ' • ' + esc(sug) : '') + dest + '</p>' +
+          '<div class="row"><button class="btn ghost sm" data-ibopen="' + it.id + '">Detalhes</button> ' + acts + '</div></div>';
+      }).join('');
+      if (total > ibx.limit) html += '<div class="card center"><button class="btn ghost" id="ib-more">Carregar mais</button></div>';
+    }
+    v.innerHTML = html;
+    bindInbox(v, me);
+  }
+  function bindInbox(v, me) {
+    var qf = document.getElementById('ib-quickf');
+    if (qf) qf.onsubmit = function (ev) {
+      ev.preventDefault();
+      var inp = document.getElementById('ib-quick');
+      if (!inp || !inp.value.trim()) return;
+      try {
+        var it = J.DB.captureItem(me.id, { content: inp.value.trim(), visibility: 'PERSONAL', source: 'WEB' }, {});
+        toast('Capturado! ' + (it.suggested_entity_type && it.suggested_entity_type !== 'UNKNOWN' ? J.DB.inboxSuggestionText(it) : ''));
+        render('inbox');
+      } catch (e) { toast('Não foi possível capturar.'); }
+    };
+    var nw2 = document.getElementById('ib-new2'); if (nw2) nw2.onclick = function () { openQuickCapture(me); };
+    var more = document.getElementById('ib-more'); if (more) more.onclick = function () { ibx.limit += 30; render('inbox'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibtab]'), function (b) { b.onclick = function () { ibx.tab = b.dataset.ibtab; ibx.limit = 30; render('inbox'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibvis]'), function (b) { b.onclick = function () { ibx.vis = b.dataset.ibvis; render('inbox'); }; });
+    var q = document.getElementById('ib-q'); if (q) q.onchange = function (e) { ibx.q = e.target.value; render('inbox'); };
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibretry]'), function (b) { b.onclick = function () { render('inbox'); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibopen]'), function (b) { b.onclick = function () { openInboxDetail(me, b.dataset.ibopen); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-iborg]'), function (b) { b.onclick = function () { openInboxOrganize(me, b.dataset.iborg); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibedit]'), function (b) { b.onclick = function () { openInboxEditModal(me, b.dataset.ibedit); }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibdis]'), function (b) { b.onclick = function () { try { J.DB.dismissInboxItem(me.id, b.dataset.ibdis); toast('Descartado. Dá para restaurar depois.'); render('inbox'); } catch (e2) { toast('Não foi possível.'); } }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibrestore]'), function (b) { b.onclick = function () { try { J.DB.restoreInboxItem(me.id, b.dataset.ibrestore); toast('Restaurado!'); render('inbox'); } catch (e3) { toast('Não foi possível.'); } }; });
+    Array.prototype.forEach.call(v.querySelectorAll('[data-ibarch]'), function (b) { b.onclick = function () { try { J.DB.archiveInboxItem(me.id, b.dataset.ibarch); render('inbox'); } catch (e4) { toast('Não foi possível.'); } }; });
+  }
+  function openQuickCapture(me, preset) {
+    preset = preset || {};
+    modalShell('<h2>Capturar</h2><div id="me"></div>' +
+      '<label>O que você quer guardar?</label><input id="f-cap" maxlength="500" value="' + esc(preset.content || '') + '" aria-label="O que você quer guardar?">' +
+      '<div class="row"><label class="check"><input type="radio" name="capvis" value="PERSONAL" checked> Pessoal</label><label class="check"><input type="radio" name="capvis" value="COUPLE"> Do casal</label></div>' +
+      '<p class="muted">Vai para a Inbox. Você organiza depois.</p>' +
+      '<button class="btn" id="sv">Capturar</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    var inp = document.getElementById('f-cap'); if (inp) inp.focus();
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var vs = document.querySelector('input[name="capvis"]:checked');
+        var it = J.DB.captureItem(me.id, { content: document.getElementById('f-cap').value, visibility: vs ? vs.value : 'PERSONAL', source: 'QUICK_CAPTURE' }, {});
+        closeModal();
+        toast('Capturado! ' + J.DB.inboxSuggestionText(it));
+        render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function openInboxDetail(me, itemId) {
+    var it;
+    try { it = J.DB.getInboxItem(me.id, itemId); } catch (e) { toast('Item não encontrado.'); return; }
+    var sug = '';
+    try { sug = J.DB.inboxSuggestionText(it); } catch (e2) {}
+    var dest = '';
+    if (it.status === 'PROCESSED' && it.processed_entity_type) {
+      var tgt = null;
+      try { tgt = J.DB.inboxProcessedTarget(me.id, it.id); } catch (e3) {}
+      dest = tgt && tgt.available ? '<p><b>Organizado como:</b> ' + esc(ibDestLbl(it.processed_entity_type)) + ' • <a href="' + tgt.route + '">Ver ›</a></p>' : '<p class="muted">O item foi processado anteriormente, mas o destino não está mais disponível.</p>';
+    }
+    var acts = '';
+    if (it.status === 'PROCESSED') acts = '<button class="btn ghost sm" id="d-arch">Arquivar</button>';
+    else if (it.status === 'DISMISSED' || it.status === 'ARCHIVED') acts = '<button class="btn sm" id="d-re">Restaurar</button>';
+    else acts = '<button class="btn sm" id="d-org">Organizar</button> <button class="btn ghost sm" id="d-ed">Editar</button> <button class="btn ghost sm" id="d-dis">Descartar</button>';
+    modalShell('<h2>Captura</h2><div id="me"></div>' +
+      '<p style="font-size:17px"><b>' + esc(it.content) + '</b></p>' +
+      '<p class="muted">Capturado: ' + esc(ibWhen(it.created_at)) + '<br>Origem: ' + esc({ WEB: 'Na Inbox', QUICK_CAPTURE: 'Captura rápida', WHATSAPP: 'WhatsApp', AI_ASSISTANT: 'Assistente' }[it.source] || it.source) + '<br>Sugestão: ' + esc(sug) + '</p>' + dest +
+      '<div class="row">' + acts + '</div><button class="btn ghost" id="cl">Fechar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    var o1 = document.getElementById('d-org'); if (o1) o1.onclick = function () { openInboxOrganize(me, it.id); };
+    var o2 = document.getElementById('d-ed'); if (o2) o2.onclick = function () { openInboxEditModal(me, it.id); };
+    var o3 = document.getElementById('d-dis'); if (o3) o3.onclick = function () { try { J.DB.dismissInboxItem(me.id, it.id); closeModal(); toast('Descartado.'); render(here()); } catch (e4) { document.getElementById('me').innerHTML = err(e4); } };
+    var o4 = document.getElementById('d-re'); if (o4) o4.onclick = function () { try { J.DB.restoreInboxItem(me.id, it.id); closeModal(); toast('Restaurado!'); render(here()); } catch (e5) { document.getElementById('me').innerHTML = err(e5); } };
+    var o5 = document.getElementById('d-arch'); if (o5) o5.onclick = function () { try { J.DB.archiveInboxItem(me.id, it.id); closeModal(); render(here()); } catch (e6) {} };
+  }
+  function openInboxOrganize(me, itemId) {
+    var it;
+    try { it = J.DB.getInboxItem(me.id, itemId); } catch (e) { toast('Item não encontrado.'); return; }
+    var sug = '';
+    try { sug = J.DB.inboxSuggestionText(it); } catch (e2) {}
+    var dests = [['TASK', '☑ Tarefa'], ['AGENDA_EVENT', '📅 Compromisso'], ['HABIT', '🌱 Hábito'], ['LIST', '📝 Nova lista'], ['LIST_ITEM', '➕ Item de lista'], ['ROUTINE', '🔁 Rotina'], ['PROJECT', '🗂 Projeto'], ['TRANSACTION', '💸 Movimentação'], ['GOAL', '🎯 Meta']];
+    modalShell('<h2>Organizar</h2><div id="me"></div>' +
+      '<p class="muted">"' + esc(it.content.slice(0, 80)) + '"<br>' + esc(sug) + '</p>' +
+      dests.map(function (d) {
+        var star = (it.suggested_entity_type === d[0] || (it.suggested_entity_type === 'UNKNOWN' && false)) ? ' ★' : '';
+        return '<button class="btn ghost" data-dest="' + d[0] + '" style="margin-bottom:6px">' + d[1] + star + '</button>';
+      }).join('') +
+      '<button class="btn ghost" id="cl">Manter na Inbox</button>');
+    document.getElementById('cl').onclick = closeModal;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dest]'), function (b) {
+      b.onclick = function () { openInboxDraft(me, it.id, b.dataset.dest, it.version); };
+    });
+  }
+  function openInboxDraft(me, itemId, dest, version) {
+    var prep;
+    try { prep = J.DB.prepareInboxDraft(me.id, itemId, dest, { hold: true }); }
+    catch (e) { toast(e.message || 'Não foi possível.'); return; }
+    var d = prep.draft || {}, it = null;
+    try { it = J.DB.getInboxItem(me.id, itemId); } catch (e2) {}
+    var vis = d.visibility || (it ? it.visibility : 'PERSONAL');
+    var h = '<h2>' + esc({ TASK: 'Nova tarefa', AGENDA_EVENT: 'Novo compromisso', HABIT: 'Novo hábito', LIST: 'Nova lista', LIST_ITEM: 'Item de lista', ROUTINE: 'Nova rotina', PROJECT: 'Novo projeto', TRANSACTION: 'Nova movimentação', GOAL: 'Nova meta' }[dest] || 'Organizar') + '</h2><div id="me"></div>';
+    function visRow() {
+      return '<label>Visibilidade</label><div class="row"><label class="check"><input type="radio" name="dvis" value="PERSONAL"' + (vis !== 'COUPLE' ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="dvis" value="COUPLE"' + (vis === 'COUPLE' ? ' checked' : '') + '> Do casal</label></div>';
+    }
+    if (dest === 'TASK') {
+      var tpros = [];
+      try { tpros = J.DB.getProjects(me.id, { limit: 50 }); } catch (e3) {}
+      h += '<label>Título</label><input id="d-title" maxlength="120" value="' + esc(d.title || '') + '">' +
+        '<div class="row"><div><label>Prazo</label><input id="d-date" type="date" value="' + esc(d.due_date || '') + '"></div>' +
+        '<div><label>Horário</label><input id="d-time" type="time" value="' + esc(d.due_time || '') + '"></div></div>' +
+        '<label>Projeto (opcional)</label><select id="d-proj"><option value="">Sem projeto</option>' + tpros.map(function (p) { return '<option value="' + p.id + '"' + (d.project_id === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select>' + visRow();
+    } else if (dest === 'AGENDA_EVENT') {
+      h += '<label>Título</label><input id="d-title" maxlength="120" value="' + esc(d.title || '') + '">' +
+        '<div class="row"><div><label>Data *</label><input id="d-date" type="date" value="' + esc(d.date || '') + '"></div>' +
+        '<div><label>Horário</label><input id="d-time" type="time" value="' + esc(d.start_time || '') + '"></div></div>' + visRow();
+    } else if (dest === 'HABIT') {
+      h += '<label>Nome do hábito</label><input id="d-title" maxlength="80" value="' + esc(d.name || '') + '"><p class="muted">Frequência: todos os dias. Ajuste depois em Hábitos.</p>';
+    } else if (dest === 'LIST') {
+      h += '<label>Nome da lista</label><input id="d-title" maxlength="60" value="' + esc(d.name || '') + '">' +
+        '<label>Itens (um por linha)</label><textarea id="d-items" rows="4">' + esc((d.items || []).join('\n')) + '</textarea>' + visRow();
+    } else if (dest === 'LIST_ITEM') {
+      var lrows = [];
+      try { lrows = J.DB.getLists(me.id, { limit: 100 }); } catch (e4) {}
+      h += '<label>Lista *</label><select id="d-list">' + lrows.map(function (l) { return '<option value="' + l.id + '"' + (d.list_id === l.id ? ' selected' : '') + '>' + esc(l.name) + '</option>'; }).join('') + '</select>' +
+        '<label>Item</label><input id="d-title" maxlength="140" value="' + esc(d.title || '') + '">';
+    } else if (dest === 'ROUTINE') {
+      h += '<label>Nome da rotina</label><input id="d-title" maxlength="80" value="' + esc(d.name || '') + '"><p class="muted">Frequência: todo dia. Ajuste depois em Rotinas.</p>' + visRow();
+    } else if (dest === 'PROJECT') {
+      h += '<label>Nome do projeto</label><input id="d-title" maxlength="80" value="' + esc(d.name || '') + '">' +
+        '<label>Prazo (opcional)</label><input id="d-date" type="date" value="' + esc(d.target_date || '') + '">' + visRow();
+    } else if (dest === 'TRANSACTION') {
+      var cats = [], accs = [];
+      try { cats = J.DB.myCategories(me.id, ''); } catch (e5) {}
+      try { accs = J.DB.listAccounts(me.id, 'all'); } catch (e6) {}
+      h += '<div class="row"><div><label>Tipo</label><select id="d-type"><option value="expense"' + (d.type !== 'income' ? ' selected' : '') + '>Despesa</option><option value="income"' + (d.type === 'income' ? ' selected' : '') + '>Receita</option></select></div>' +
+        '<div><label>Valor (R$) *</label><input id="d-amount" inputmode="decimal" value="' + esc(d.amount != null ? String(d.amount).replace('.', ',') : '') + '"></div></div>' +
+        '<label>Descrição</label><input id="d-title" maxlength="120" value="' + esc(d.description || '') + '">' +
+        '<div class="row"><div><label>Data</label><input id="d-date" type="date" value="' + esc(d.date || '') + '"></div>' +
+        '<div><label>Categoria *</label><select id="d-cat"><option value="">Escolher…</option>' + cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select></div></div>' +
+        '<label>Conta (opcional)</label><select id="d-acc"><option value="">Sem conta</option>' + accs.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join('') + '</select>' +
+        '<p class="muted">Será registrada via serviço financeiro oficial, com confirmação.</p>';
+    } else if (dest === 'GOAL') {
+      var gpros = [];
+      try { gpros = J.DB.getProjects(me.id, { limit: 50 }); } catch (e7) {}
+      h += '<label>Nome da meta</label><input id="d-title" maxlength="80" value="' + esc(d.name || '') + '">' +
+        '<label>Objetivo (R$) *</label><input id="d-amount" inputmode="decimal" value="' + esc(d.target != null ? String(d.target).replace('.', ',') : '') + '">' +
+        '<label>Vincular ao projeto (opcional)</label><select id="d-proj"><option value="">Sem projeto</option>' + gpros.map(function (p) { return '<option value="' + p.id + '"' + (d.project_id === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select>';
+    }
+    h += '<div class="row"><button class="btn" id="sv">Confirmar</button><button class="btn ghost" id="bk">Voltar</button><button class="btn ghost" id="cl">Cancelar</button></div>';
+    modalShell(h);
+    document.getElementById('cl').onclick = function () { try { J.DB.cancelInboxProcessing(me.id, itemId); } catch (e8) {} closeModal(); render(here()); };
+    document.getElementById('bk').onclick = function () { openInboxOrganize(me, itemId); };
+    function gv(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    function gvis() { var vs = document.querySelector('input[name="dvis"]:checked'); return vs ? vs.value : vis; }
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var nd = { visibility: ['TASK', 'AGENDA_EVENT', 'LIST', 'ROUTINE', 'PROJECT', 'TRANSACTION'].indexOf(dest) >= 0 ? gvis() : vis };
+        if (dest === 'TASK') { nd.title = gv('d-title'); nd.due_date = gv('d-date') || null; nd.due_time = gv('d-time') || null; nd.project_id = gv('d-proj') || null; }
+        else if (dest === 'AGENDA_EVENT') { nd.title = gv('d-title'); nd.date = gv('d-date') || null; nd.start_time = gv('d-time') || null; }
+        else if (dest === 'HABIT') { nd.name = gv('d-title'); }
+        else if (dest === 'LIST') { nd.name = gv('d-title'); nd.items = gv('d-items').split('\n'); }
+        else if (dest === 'LIST_ITEM') { nd.list_id = gv('d-list'); nd.title = gv('d-title'); }
+        else if (dest === 'ROUTINE') { nd.name = gv('d-title'); }
+        else if (dest === 'PROJECT') { nd.name = gv('d-title'); nd.target_date = gv('d-date') || null; }
+        else if (dest === 'TRANSACTION') { nd.type = gv('d-type'); nd.amount = gv('d-amount').replace(/\./g, '').replace(',', '.'); nd.description = gv('d-title'); nd.date = gv('d-date') || null; nd.category_id = gv('d-cat') || null; nd.account_id = gv('d-acc') || null; }
+        else if (dest === 'GOAL') { nd.name = gv('d-title'); nd.target = gv('d-amount').replace(/\./g, '').replace(',', '.'); nd.project_id = gv('d-proj') || null; }
+        var r = J.DB.confirmInboxProcessing(me.id, itemId, dest, nd, { expected_version: version, idempotency_key: 'web:' + itemId + ':' + Date.now() });
+        closeModal();
+        toast(r.already ? 'Este item já foi organizado.' : 'Organizado! 🎉');
+        render(here());
+      } catch (e9) { document.getElementById('me').innerHTML = err(e9) + '<p><button class="btn ghost sm" id="retry">Tentar novamente</button></p>'; unlock(btn); }
+    };
+  }
+  function openInboxEditModal(me, itemId) {
+    var it;
+    try { it = J.DB.getInboxItem(me.id, itemId); } catch (e) { toast('Item não encontrado.'); return; }
+    modalShell('<h2>Editar captura</h2><div id="me"></div>' +
+      '<label>Texto</label><input id="f-cap" maxlength="500" value="' + esc(it.content) + '">' +
+      '<div class="row"><label class="check"><input type="radio" name="capvis" value="PERSONAL"' + (it.visibility !== 'COUPLE' ? ' checked' : '') + '> Pessoal</label><label class="check"><input type="radio" name="capvis" value="COUPLE"' + (it.visibility === 'COUPLE' ? ' checked' : '') + '> Do casal</label></div>' +
+      '<button class="btn" id="sv">Salvar</button><button class="btn ghost" id="cl">Cancelar</button>');
+    document.getElementById('cl').onclick = closeModal;
+    document.getElementById('sv').onclick = function () {
+      var btn = this; lock(btn);
+      try {
+        var vs = document.querySelector('input[name="capvis"]:checked');
+        J.DB.updateInboxItem(me.id, itemId, { content: document.getElementById('f-cap').value, visibility: vs ? vs.value : undefined });
+        closeModal(); toast('Captura atualizada!'); render(here());
+      } catch (e2) { document.getElementById('me').innerHTML = err(e2); unlock(btn); }
+    };
+  }
+  function ovInboxCard(me, day) {
+    var ib = (day && day.inbox) || { pending: 0, items: [] };
+    if (!ib.pending) return '';
+    return '<div class="card"><div class="row between"><b>📥 Inbox</b><a href="#/inbox">Ver Inbox ›</a></div>' +
+      '<p><b>' + ib.pending + '</b>' + (ib.pending === 1 ? ' item para organizar' : ' itens para organizar') + '</p>' +
+      (ib.items || []).slice(0, 2).map(function (it) { return '<p class="muted">• ' + esc(it.content) + '</p>'; }).join('') + '</div>';
+  }
   var calYM = '', calView = 'month', calVision = 'couple', calType = '', calState = '', calAccount = '', calCard = '', calCat = '', calSub = '', calPerson = '', calSearch = '', calPlan = '', calCash = false, calHabits = false;
   function calFilters() {
     var o = { vision: calVision || 'couple', today: todayISO() };
@@ -5012,7 +5284,7 @@
   function pMore(v) {
     var me = J.Auth.current();
     v.innerHTML = '<div class="card"><h1>Mais</h1><p class="muted">Atalhos e ajustes.</p></div>' +
-      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
+      '<div class="menu"><a href="#/tasks">☑ Tarefas <span>›</span></a><a href="#/lists">📝 Listas <span>›</span></a><a href="#/routines">🔁 Rotinas <span>›</span></a><a href="#/projects">🗂 Projetos <span>›</span></a><a href="#/inbox">📥 Inbox <span>›</span></a><a href="#/insights">💡 Insights <span>›</span></a><a href="#/assistant">🤖 Assistente <span>›</span></a><a href="#/notifications">🔔 Notificações <span>›</span></a><a href="#/calendar">📅 Calendário <span>›</span></a><a href="#/recurring">🔁 Recorrentes <span>›</span></a><a href="#/imports">📥 Importar extrato <span>›</span></a><a href="#/settings">⚙️ Configurações <span>›</span></a></div>' +
       (me ? '<button class="btn ghost" id="more-out">Sair da conta</button>' : '');
     var out = document.getElementById('more-out');
     if (out) out.onclick = function () { J.Auth.logout(); };
@@ -6864,6 +7136,7 @@
       var me = J.Auth.current();
       if (!me || !J.DB.myCoupleId(me.id)) { toast('Crie ou entre em um casal primeiro ❤️'); return; }
       modalShell('<h2>O que deseja criar?</h2><div id="me"></div>' +
+        '<button class="btn" id="fb-x">✨ Capturar na Inbox</button>' +
         '<button class="btn" id="fb-r">+ Receita</button>' +
         '<button class="btn" id="fb-e">− Despesa</button>' +
         '<button class="btn ghost" id="fb-a">📅 Novo compromisso</button>' +
@@ -6873,6 +7146,7 @@
         '<button class="btn ghost" id="fb-c">🔁 Nova conta recorrente</button>' +
         '<button class="btn ghost" id="cl">Cancelar</button>');
       document.getElementById('cl').onclick = closeModal;
+      document.getElementById('fb-x').onclick = function () { closeModal(); openQuickCapture(me); };
       document.getElementById('fb-r').onclick = function () { closeModal(); openTxModal(me, null, 'income'); };
       document.getElementById('fb-e').onclick = function () { closeModal(); openTxModal(me, null, 'expense'); };
       document.getElementById('fb-a').onclick = function () { closeModal(); openAgendaModal(me, null, null); };

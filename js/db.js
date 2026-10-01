@@ -11,7 +11,7 @@
 window.Juntos = window.Juntos || {};
 (function (J) {
   var KEY = 'juntos_db_v1';
-  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [] }; }
+  function blank() { return { users: [], couples: [], members: [], invitations: [], resets: [], categories: [], transactions: [], splits: [], budgets: [], goals: [], goal_events: [], recurring_transactions: [], recurring_occurrences: [], settlements: [], accounts: [], transfers: [], credit_cards: [], installment_purchases: [], installments: [], invoices: [], invoice_payments: [], audit_logs: [], automation_jobs: [], automation_executions: [], financial_events: [], automation_rules: [], automation_rule_executions: [], category_suggestions: [], category_feedback: [], import_batches: [], imported_transactions: [], import_mappings: [], reconciliation_matches: [], financial_insights: [], financial_insight_preferences: [], ai_conversations: [], ai_messages: [], ai_actions: [], whatsapp_connections: [], whatsapp_link_codes: [], whatsapp_messages: [], whatsapp_preferences: [], whatsapp_message_failures: [], notifications: [], notification_preferences: [], notification_deliveries: [], notification_decisions: [], notification_digests: [], financial_plans: [], financial_plan_items: [], financial_plan_scenarios: [], financial_plan_scenario_items: [], saved_reports: [], security_audit_logs: [], financial_integrity_checks: [], audio_messages: [], image_messages: [], financial_documents: [], multimodal_inputs: [], multimodal_contexts: [], input_evidence: [], openfinance_connections: [], openfinance_bank_accounts: [], openfinance_bank_transactions: [], open_finance_sync_runs: [], open_finance_transaction_versions: [], open_finance_reconciliation_exceptions: [], open_finance_balance_snapshots: [], agenda_events: [], habits: [], habit_completions: [], tasks: [], lists: [], list_items: [], routines: [], routine_items: [], routine_executions: [], routine_item_executions: [], routine_contexts: [], projects: [], project_links: [], inbox_items: [] }; }
   function read() {
     try {
       var db = JSON.parse(localStorage.getItem(KEY)) || blank();
@@ -231,6 +231,7 @@ window.Juntos = window.Juntos || {};
     if (!db.routine_contexts) { db.routine_contexts = []; changed = true; }
     if (!db.projects) { db.projects = []; changed = true; }
     if (!db.project_links) { db.project_links = []; changed = true; }
+    if (!db.inbox_items) { db.inbox_items = []; changed = true; }
     db.categories.forEach(function (c) { // subcategorias: sem campo = categoria principal
       if (c.parent_category_id === undefined) { c.parent_category_id = null; changed = true; }
     });
@@ -5959,6 +5960,11 @@ window.Juntos = window.Juntos || {};
         { key: 'routine_complete', kind: 'write' }, { key: 'routine_pause', kind: 'write' },
         { key: 'routine_resume', kind: 'write' }, { key: 'routine_update', kind: 'write' },
         { key: 'routine_link', kind: 'write' },
+        { key: 'inbox_capture', kind: 'write' }, { key: 'inbox_list', kind: 'read' },
+        { key: 'inbox_detail', kind: 'read' }, { key: 'inbox_process', kind: 'write' },
+        { key: 'inbox_choose_destination', kind: 'write' }, { key: 'inbox_edit', kind: 'write' },
+        { key: 'inbox_dismiss', kind: 'write' }, { key: 'inbox_restore', kind: 'write' },
+        { key: 'inbox_archive', kind: 'write' },
         { key: 'project_list', kind: 'read' }, { key: 'project_detail', kind: 'read' },
         { key: 'project_summary', kind: 'read' }, { key: 'project_upcoming', kind: 'read' },
         { key: 'project_create', kind: 'write' }, { key: 'project_create_task', kind: 'write' },
@@ -5972,10 +5978,10 @@ window.Juntos = window.Juntos || {};
       ];
     },
     AI_READ_TOOLS: function () {
-      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
+      return ['financial_summary', 'expenses', 'income', 'category_analysis', 'budget_status', 'goal_status', 'account_balances', 'card_status', 'invoice_status', 'installment_summary', 'recurring_summary', 'settlement_status', 'cash_flow', 'financial_insights', 'search_transactions', 'agenda_events', 'agenda_today', 'agenda_tomorrow', 'agenda_week', 'agenda_month', 'agenda_search', 'agenda_detail', 'overview_day', 'overview_tomorrow', 'overview_week', 'overview_month', 'overview_upcoming', 'habit_list', 'habit_today', 'habit_status', 'habit_history', 'habit_stats', 'task_list', 'task_today', 'task_tomorrow', 'task_week', 'task_upcoming', 'task_overdue', 'task_detail', 'list_view', 'list_search', 'routine_list', 'routine_today', 'routine_detail', 'project_list', 'project_detail', 'project_summary', 'project_upcoming', 'inbox_list', 'inbox_detail', 'planning_status', 'notification_status', 'product_navigation', 'money_mode_status', 'whatsapp_status', 'openfinance_status', 'openfinance_sync_status', 'openfinance_reconciliation', 'openfinance_pending'];
     },
     AI_WRITE_TOOLS: function () {
-      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive'];
+      return ['create_transaction', 'create_transfer', 'create_goal', 'contribute_goal', 'create_recurring', 'mark_invoice_paid', 'update_transaction', 'create_agenda_event', 'update_agenda_event', 'cancel_agenda_event', 'habit_create', 'habit_complete', 'habit_remove_completion', 'habit_pause', 'habit_resume', 'task_create', 'task_complete', 'task_reopen', 'task_cancel', 'task_update', 'task_assign', 'task_archive', 'list_create', 'list_add_item', 'list_check_item', 'list_uncheck_item', 'routine_create', 'routine_start', 'routine_complete_item', 'routine_skip_item', 'routine_complete', 'routine_pause', 'routine_resume', 'routine_update', 'routine_link', 'project_create', 'project_create_task', 'project_link_task', 'project_create_list', 'project_link_list', 'project_link_agenda', 'project_link_routine', 'project_link_goal', 'project_link_financial_plan', 'project_unlink_entity', 'project_pause', 'project_resume', 'project_complete', 'project_reopen', 'project_archive', 'inbox_capture', 'inbox_process', 'inbox_choose_destination', 'inbox_edit', 'inbox_dismiss', 'inbox_restore', 'inbox_archive'];
     },
     AI_PERMISSIONS: function () { return ['READ_ONLY', 'SAFE_WRITE', 'CONFIRMATION_REQUIRED', 'RESTRICTED']; },
     /* Normalização pt-BR p/ NLU (só para interpretar; original preservado). */
@@ -6235,6 +6241,16 @@ window.Juntos = window.Juntos || {};
       else if ((has(['retoma', 'retomar', 'volta com', 'voltar com', 'reativa']) && hasAny(HBW))) out.intent = 'habit_resume';
       else if (has(['criar habito', 'cria um habito', 'crie um habito', 'novo habito', 'nova rotina'])) out.intent = 'habit_create';
       else if (/(adicion|aport|coloca|colocar|deposita).{0,20}meta\b/.test(s) || /(na|para) (a )?meta\b/.test(s)) out.intent = 'contribute_goal';
+      else if ((has(['inbox', 'caixa de entrada', 'caixinha']) && has(['guarda', 'guardar', 'guarde', 'anota', 'anotar', 'anote', 'salva', 'salvar', 'joga', 'jogar'])) || /(guarda|anota|salva|joga).{0,30}(na |nesta |nessa )?inbox/.test(s) || /guarda (isso|isto|essa|esta) para (depois|organizar)/.test(s)) out.intent = 'inbox_capture';
+      else if (has(['inbox', 'caixa de entrada']) && has(['mostra', 'mostre', 'lista', 'liste', 'quais', 'tenho', 'temos', 'minha', 'pendente', 'pendentes', 'abrir', 'ver'])) out.intent = 'inbox_list';
+      else if (/^(descarta|descartar|apaga|apagar|joga fora)\b.{0,25}(o primeiro|o segundo|o terceiro|o quarto|primeiro|segundo|terceiro|1º|2º|3º|4º|esse|este|essa|desse)\b/.test(s) && DB.inboxHasListContext(userId)) out.intent = 'inbox_dismiss';
+      else if (/^(arquiva|arquivar)\b.{0,25}(o primeiro|o segundo|o terceiro|primeiro|segundo|terceiro|1º|2º|3º|esse|este)\b/.test(s) && DB.inboxHasListContext(userId)) out.intent = 'inbox_archive';
+      else if (/^(o primeiro|o segundo|o terceiro|o quarto|primeiro|segundo|terceiro|quarto|1º|2º|3º|4º|esse|este|essa|desse|o da)\b/.test(s) && DB.inboxHasListContext(userId) && has(['vira', 'transforma', 'tarefa', 'compromisso', 'habito', 'lista', 'rotina', 'projeto', 'despesa', 'receita', 'meta'])) out.intent = 'inbox_process';
+      else if (/^(o primeiro|o segundo|o terceiro|primeiro|segundo|terceiro|1º|2º|3º|esse|este)\b.{0,20}(vira|transforma)\b/.test(s) && DB.inboxHasListContext(userId)) out.intent = 'inbox_choose_destination';
+      else if (/^(e o|mostra|mostre|o que e|detalhe)\b.{0,20}(primeiro|segundo|terceiro|quarto|1º|2º|3º|4º)\b/.test(s) && DB.inboxHasListContext(userId)) out.intent = 'inbox_detail';
+      else if (/^(descarta|descartar|restaura|restaurar|arquiva|arquivar|edita|editar|muda|mudar)\b/.test(s) && has(['inbox', 'caixa de entrada'])) out.intent = (/^(restaura|restaurar)\b/.test(s) ? 'inbox_restore' : (/^(arquiva|arquivar)\b/.test(s) ? 'inbox_archive' : (/^(edita|editar|muda|mudar)\b/.test(s) ? 'inbox_edit' : 'inbox_dismiss')));
+      else if (has(['inbox', 'caixa de entrada']) && has(['edita', 'editar', 'muda', 'mudar', 'corrige', 'restaura', 'restaurar', 'arquiva', 'arquivar', 'detalhe', 'detalhes'])) out.intent = 'inbox_list';
+      else if (has(['inbox', 'caixa de entrada'])) out.intent = 'inbox_list';
       else if ((has(['projeto', 'projetos']) && has(['pausa', 'pausar', 'pause'])) || /(pausa|pausar).{0,40}projeto/.test(s)) out.intent = 'project_pause';
       else if ((has(['projeto', 'projetos']) && has(['retoma', 'retomar', 'reativa', 'volta'])) || /(retoma|reativa).{0,40}projeto/.test(s)) out.intent = 'project_resume';
       else if ((has(['projeto', 'projetos']) && has(['conclui', 'concluir', 'finaliza', 'termina'])) || /(conclui|finaliza|termina).{0,40}projeto/.test(s)) out.intent = 'project_complete';
@@ -6447,6 +6463,7 @@ window.Juntos = window.Juntos || {};
       if (/^list_/.test(intent)) return 'LISTS';
       if (/^routine_/.test(intent)) return 'ROUTINES';
       if (/^project_/.test(intent)) return 'PROJECTS';
+      if (/^inbox_/.test(intent)) return 'INBOX';
       if (/^(account_|card_|invoice_|installment_|recurring_|settlement_|cash_flow|transaction_|category_|budget_|financial_|income_|expense_|report_|openfinance_|planning_question|create_|mark_|update_)/.test(intent)) return 'FINANCE';
       if (/^(goal_|contribute_)/.test(intent)) return 'GOALS';
       if (/^planning_/.test(intent)) return 'PLANNING';
@@ -6519,6 +6536,7 @@ window.Juntos = window.Juntos || {};
         { match: ['lista', 'listas', 'mercado', 'checklist'], label: 'Listas', route: '#/lists' },
         { match: ['rotina', 'rotinas'], label: 'Rotinas', route: '#/routines' },
         { match: ['projeto', 'projetos'], label: 'Projetos', route: '#/projects' },
+        { match: ['inbox', 'caixa de entrada', 'captura'], label: 'Inbox', route: '#/inbox' },
         { match: ['cartao', 'cartoes'], label: 'Cartões', route: '#/cards' },
         { match: ['habito', 'habitos'], label: 'Hábitos', route: '#/habits' },
         { match: ['notifica'], label: 'Notificações', route: '#/notifications' },
@@ -6722,6 +6740,16 @@ window.Juntos = window.Juntos || {};
         var pu = DB.aiFindProject(userId, args.project_name || '')[0];
         if (!pu) throw new Error('Projeto não encontrado.');
         out = { project: { id: pu.id, name: pu.name }, items: DB.getProjectUpcoming(userId, pu.id, { days: 30, limit: 10 }) };
+      } else if (name === 'inbox_list') {
+        var ib = DB.getUnprocessedInboxItems(userId, { limit: 10 });
+        out = {
+          items: ib.map(function (it) { return { id: it.id, content: it.content.slice(0, 80), status: it.status, suggestion: it.suggested_entity_type }; }),
+          inbox_ids: ib.map(function (it) { return it.id; }),
+          pending: DB.getInboxSummary(userId).pending
+        };
+      } else if (name === 'inbox_detail') {
+        var ibd = DB.getInboxItem(userId, args.inbox_id);
+        out = { id: ibd.id, content: ibd.content, status: ibd.status, visibility: ibd.visibility, suggestion: ibd.suggested_entity_type, source: ibd.source, processed_entity_type: ibd.processed_entity_type, processed_entity_id: ibd.processed_entity_id };
       } else if (name === 'list_view' || name === 'list_search') {
         var lq = args.list_name || args.query || '';
         var lrows = lq ? DB.searchLists(userId, lq, 10) : DB.getLists(userId, { status: 'ACTIVE', limit: 10 });
@@ -6918,6 +6946,22 @@ window.Juntos = window.Juntos || {};
       } else if (actionType === 'project_pause' || actionType === 'project_resume' || actionType === 'project_archive' || actionType === 'project_complete' || actionType === 'project_reopen') {
         var pr2 = db.projects.find(function (x) { return x.id === p.project_id && x.couple_id === cid && !x.deleted_at; });
         if (!pr2 || !DB.projectCanAct(db, userId, pr2)) throw new Error('Projeto inválido.');
+      } else if (actionType === 'inbox_capture') {
+        var cc = DB.inboxClean(p.content, 500);
+        if (cc.length < 2) throw new Error('Escreva o que você quer guardar.');
+        if (p.visibility && ['PERSONAL', 'COUPLE'].indexOf(String(p.visibility).toUpperCase()) < 0) throw new Error('Visibilidade inválida.');
+      } else if (actionType === 'inbox_process' || actionType === 'inbox_choose_destination') {
+        var pi = db.inbox_items.find(function (x) { return x.id === p.inbox_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pi || !DB.inboxCanAct(db, userId, pi)) throw new Error('Item da Inbox inválido.');
+        if (pi.status === 'PROCESSED') throw new Error('Item já organizado.');
+        if (p.dest && DB.INBOX_ENTITY_TYPES().indexOf(String(p.dest).toUpperCase()) < 0) throw new Error('Destino inválido.');
+      } else if (actionType === 'inbox_edit') {
+        var pe = db.inbox_items.find(function (x) { return x.id === p.inbox_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pe || !DB.inboxCanAct(db, userId, pe)) throw new Error('Item da Inbox inválido.');
+        if (pe.status === 'PROCESSED') throw new Error('Item já organizado.');
+      } else if (actionType === 'inbox_dismiss' || actionType === 'inbox_restore' || actionType === 'inbox_archive') {
+        var pd = db.inbox_items.find(function (x) { return x.id === p.inbox_id && x.couple_id === cid && !x.deleted_at; });
+        if (!pd || !DB.inboxCanAct(db, userId, pd)) throw new Error('Item da Inbox inválido.');
       } else if (actionType === 'list_create') {
         DB.validateList(userId, { name: p.name, description: p.description, list_type: p.list_type, visibility: p.visibility || 'PERSONAL' });
       } else if (actionType === 'list_add_item') {
@@ -7081,6 +7125,21 @@ window.Juntos = window.Juntos || {};
         } else if (r.action_type === 'project_archive') {
           DB.archiveProject(userId, p.project_id);
           res = { project_id: p.project_id };
+        } else if (r.action_type === 'inbox_process' || r.action_type === 'inbox_choose_destination') {
+          var ipr = DB.confirmInboxProcessing(userId, p.inbox_id, p.dest, p.draft || {}, { idempotency_key: 'ai:' + r.id, expected_version: p.expected_version });
+          res = { inbox_id: p.inbox_id, entity_type: ipr.entity_type, entity_id: ipr.entity_id, already: !!ipr.already };
+        } else if (r.action_type === 'inbox_edit') {
+          DB.updateInboxItem(userId, p.inbox_id, { content: p.content, visibility: p.visibility });
+          res = { inbox_id: p.inbox_id };
+        } else if (r.action_type === 'inbox_dismiss') {
+          DB.dismissInboxItem(userId, p.inbox_id);
+          res = { inbox_id: p.inbox_id };
+        } else if (r.action_type === 'inbox_restore') {
+          DB.restoreInboxItem(userId, p.inbox_id);
+          res = { inbox_id: p.inbox_id };
+        } else if (r.action_type === 'inbox_archive') {
+          DB.archiveInboxItem(userId, p.inbox_id);
+          res = { inbox_id: p.inbox_id };
         } else if (r.action_type === 'routine_create') {
           var srcR = r.channel === 'whatsapp' ? 'WHATSAPP' : 'AI';
           var nr = DB.createRoutine(userId, { name: p.name, description: p.description, visibility: p.visibility || 'PERSONAL', frequency_type: p.frequency_type, frequency_config: p.frequency_config, preferred_time: p.preferred_time, start_date: p.start_date }, { source_type: srcR });
@@ -7218,6 +7277,9 @@ window.Juntos = window.Juntos || {};
         var final = val.ok ? prov.answer : draft;
         if ((o.intent === 'list_view' || o.intent === 'list_search') && o.toolOutput && o.toolOutput.lists && o.toolOutput.lists.length === 1 && o.toolOutput.items) {
           try { DB.convSetContext(userId, conv.id, channel, 'LIST', o.toolOutput.lists[0].id, 30); } catch (eRL) {}
+        }
+        if ((o.intent === 'inbox_list' || o.intent === 'inbox_detail') && o.toolOutput && o.toolOutput.inbox_ids && o.toolOutput.inbox_ids.length) {
+          try { DB.convSetContext(userId, conv.id, channel, 'INBOX_LIST', o.toolOutput.inbox_ids.slice(0, 10).join(','), 30); } catch (eIL) {}
         }
         var am = saveMsg('assistant', final, { intent: o.intent, tool: (o.tools || []).join(','), input: o.toolInput || null, output: o.toolOutput || null });
         return { answer: final, facts: o.facts || [], sources: o.tools || [], actions: o.actions || [], follow_up: o.follow_up || null, intent: o.intent, domain: o.domain || DB.aiDomainOf(o.intent), confirmationRequired: !!o.confirmationRequired, suggestedReplies: o.suggestedReplies || null, navigationTarget: o.navigationTarget || null, messageId: am.id, userMessageId: um.id, conversationId: conv.id, pendingAction: o.pendingAction || null, factsValid: val.ok };
@@ -7851,6 +7913,69 @@ window.Juntos = window.Juntos || {};
             try { DB.convSetContext(userId, convId, opts.channel || 'web', 'LIST', one.list_id, 30); } catch (eLUx) {}
             return { answer: 'Desmarquei "' + one.title + '".', facts: [], tools: ['list_uncheck_item'], intent: det.intent, domain: 'LISTS' };
           }
+        } else if (det.intent === 'inbox_capture') {
+          var capRaw = rawText.replace(/(guarda|guardar|guarde|anota|anotar|anote|salva|salvar|joga|jogar)\s*(isso|isto|essa|esta|na|no|pra|para)?\s*(na |no |pra |para )?(inbox|caixa de entrada|caixinha)\s*:?/i, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+          if (capRaw.length < 2) throw { clarification: 'O que você quer guardar na Inbox?' };
+          var capCouple = /(precisamos|vamos|nosso|nossa|juntos|casal|para nos|pra nos|do casal|compartilhada)\b/.test(s);
+          var capType = opts.audioMessageId ? 'AUDIO' : opts.imageMessageId ? 'IMAGE' : opts.documentMessageId ? 'DOCUMENT' : 'TEXT';
+          var capKey = opts.externalMessageId ? 'wa:' + opts.externalMessageId : 'ai:' + messageId;
+          var capMeta = {};
+          if (opts.audioMessageId) capMeta.audio_message_id = opts.audioMessageId;
+          if (opts.imageMessageId) capMeta.image_message_id = opts.imageMessageId;
+          if (opts.documentMessageId) capMeta.document_message_id = opts.documentMessageId;
+          var capSrc = (opts.channel === 'whatsapp' ? 'WHATSAPP' : 'AI_ASSISTANT');
+          var capIt = DB.captureItem(userId, { content: capRaw, visibility: 'PERSONAL', input_type: capType, source: capSrc, processing_metadata: capMeta }, { idempotency_key: capKey });
+          try { DB.convSetContext(userId, convId, opts.channel || 'web', 'INBOX_ITEM', capIt.id, 30); } catch (eCX) {}
+          var capSug = capIt.suggested_entity_type && capIt.suggested_entity_type !== 'UNKNOWN' ? ' ' + DB.inboxSuggestionText(capIt) : '';
+          return { answer: 'Guardei na sua Inbox: "' + capIt.content + '".' + capSug + (capCouple ? ' Quer que eu compartilhe com o casal?' : ''), facts: [{ label: 'captura', value: 1 }], tools: ['inbox_capture'], intent: det.intent, domain: 'INBOX' };
+        } else if (det.intent === 'inbox_process' || det.intent === 'inbox_choose_destination') {
+          var prIt = DB.aiResolveInboxItem(userId, rawText, convId);
+          if (prIt.status === 'PROCESSED') {
+            var tgt = DB.inboxProcessedTarget(userId, prIt.id);
+            return { answer: 'Este item já foi organizado.' + (tgt.available ? '' : ''), facts: [], tools: [], intent: det.intent, domain: 'INBOX' };
+          }
+          var prDest = DB.inboxDestFromText(rawText);
+          if (!prDest && prIt.suggested_entity_type && prIt.suggested_entity_type !== 'UNKNOWN') prDest = prIt.suggested_entity_type;
+          if (!prDest) throw { clarification: 'Como você quer organizar "' + prIt.content.slice(0, 60) + '"? Tarefa, compromisso, hábito, lista, rotina, projeto, movimentação ou meta?' };
+          var prPrep = DB.prepareInboxDraft(userId, prIt.id, prDest, {});
+          var prDraft = prPrep.draft;
+          if (prDest === 'TASK' && !prDraft.due_date) {
+            try { var _w = DB.aiParseAgendaWhen(rawText, today); if (!_w.clarification && _w.date) { prDraft.due_date = _w.date; prDraft.due_time = _w.start || null; } } catch (eW) {}
+          }
+          if (prDest === 'TRANSACTION' && (prDraft.amount == null || !prDraft.category_id)) {
+            var miss = [];
+            if (prDraft.amount == null) miss.push('o valor');
+            if (!prDraft.category_id) {
+              var cats = [];
+              try { cats = read().categories.filter(function (c) { return c.couple_id === cid && c.active && (c.type === 'both' || c.type === prDraft.type); }).slice(0, 4).map(function (c) { return c.name; }); } catch (eC) {}
+              miss.push('a categoria' + (cats.length ? ' (' + cats.join(', ') + ')' : ''));
+            }
+            throw { clarification: 'Para registrar a movimentação, me diga ' + miss.join(' e ') + '.' };
+          }
+          params = { inbox_id: prIt.id, dest: prDest, draft: prDraft, expected_version: prIt.version };
+          label = 'Organizar "' + prIt.content.slice(0, 50) + '" como ' + ({ TASK: 'tarefa', AGENDA_EVENT: 'compromisso', HABIT: 'hábito', LIST: 'lista', LIST_ITEM: 'item de lista', ROUTINE: 'rotina', PROJECT: 'projeto', TRANSACTION: prDraft.type === 'income' ? 'receita' : 'despesa', GOAL: 'meta' }[prDest] || prDest.toLowerCase());
+        } else if (det.intent === 'inbox_edit') {
+          var edIt = DB.aiResolveInboxItem(userId, rawText, convId);
+          var edNew = rawText.replace(/(edita|editar|muda|mudar|corrige|corrija|inbox|caixa de entrada|o primeiro|o segundo|o terceiro|primeiro|segundo|terceiro|esse|este|para)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+          var edPatch = {};
+          if (edNew.length >= 2) edPatch.content = edNew;
+          if (/(casal|compartilha|do casal)\b/.test(s)) edPatch.visibility = 'COUPLE';
+          else if (/(pessoal|privado|só eu|so eu)\b/.test(s)) edPatch.visibility = 'PERSONAL';
+          if (!edPatch.content && !edPatch.visibility) throw { clarification: 'O que mudar no item "' + edIt.content.slice(0, 50) + '"?' };
+          params = { inbox_id: edIt.id, content: edPatch.content, visibility: edPatch.visibility, expected_version: edIt.version };
+          label = 'Editar item da Inbox';
+        } else if (det.intent === 'inbox_dismiss' || det.intent === 'inbox_restore' || det.intent === 'inbox_archive') {
+          var drIt = DB.aiResolveInboxItem(userId, rawText, convId, det.intent === 'inbox_restore' ? ['DISMISSED', 'ARCHIVED'] : undefined);
+          if (det.intent === 'inbox_dismiss') {
+            DB.dismissInboxItem(userId, drIt.id);
+            return { answer: 'Descartado. "' + drIt.content.slice(0, 60) + '" foi para os descartados; dá para restaurar depois.', facts: [], tools: ['inbox_dismiss'], intent: det.intent, domain: 'INBOX' };
+          } else if (det.intent === 'inbox_restore') {
+            DB.restoreInboxItem(userId, drIt.id);
+            return { answer: 'Restaurei "' + drIt.content.slice(0, 60) + '" para pendentes.', facts: [], tools: ['inbox_restore'], intent: det.intent, domain: 'INBOX' };
+          } else {
+            DB.archiveInboxItem(userId, drIt.id);
+            return { answer: 'Arquivei "' + drIt.content.slice(0, 60) + '".', facts: [], tools: ['inbox_archive'], intent: det.intent, domain: 'INBOX' };
+          }
         } else throw new Error('Ação não permitida.');
         var aopt = {};
         if (opts.channel && opts.channel !== 'web') {
@@ -7904,6 +8029,12 @@ window.Juntos = window.Juntos || {};
         routine_resume: 'Rotina retomada.',
         routine_update: 'Rotina atualizada.',
         routine_link: 'Item vinculado à rotina.',
+        inbox_process: 'Item da Inbox organizado.',
+        inbox_choose_destination: 'Item da Inbox organizado.',
+        inbox_edit: 'Item da Inbox atualizado.',
+        inbox_dismiss: 'Item descartado. Dá para restaurar depois.',
+        inbox_restore: 'Item restaurado para pendentes.',
+        inbox_archive: 'Item arquivado.',
         project_create: 'Projeto "' + (p.name || '') + '" criado.',
         project_create_task: 'Tarefa "' + (p.title || '') + '" criada no projeto "' + (p.project_name || '') + '".',
         project_create_list: 'Lista "' + (p.name || '') + '" criada no projeto "' + (p.project_name || '') + '".',
@@ -8232,6 +8363,25 @@ window.Juntos = window.Juntos || {};
           answer = puT.items.length ? 'Próximos de "' + puN.name + '": ' + puT.items.slice(0, 5).map(function (i) { return i.title + ' em ' + String(i.date).split('-').reverse().join('/'); }).join('; ') + '.' : 'Nada futuro vinculado a "' + puN.name + '".';
         }
         navTarget = '#/projects';
+      } else if (det.intent === 'inbox_list') {
+        var ibres = DB.aiRunTool(userId, 'inbox_list', {});
+        tools.push('inbox_list'); toolOut = ibres;
+        if (!ibres.items.length) answer = 'Sua Inbox está vazia. Use este espaço para capturar rapidamente algo que você quer organizar depois.';
+        else {
+          F('pendentes', ibres.pending);
+          answer = 'Você tem ' + ibres.pending + (ibres.pending === 1 ? ' item pendente' : ' itens pendentes') + ':\n' + ibres.items.slice(0, 8).map(function (it, ix) { return (ix + 1) + '. ' + it.content.slice(0, 60); }).join('\n');
+        }
+        navTarget = '#/inbox';
+      } else if (det.intent === 'inbox_detail') {
+        var ibd = null;
+        try { ibd = DB.aiResolveInboxItem(userId, rawText, convId); } catch (eID) { answer = (eID && eID.clarification) || 'Qual item da Inbox?'; }
+        if (ibd) {
+          var ibt = DB.aiRunTool(userId, 'inbox_detail', { inbox_id: ibd.id });
+          tools.push('inbox_detail'); toolOut = ibt;
+          answer = '"' + ibt.content + '"\n' + (ibt.suggestion && ibt.suggestion !== 'UNKNOWN' ? DB.inboxSuggestionText({ suggested_entity_type: ibt.suggestion }) : 'Como você quer organizar isso? Tarefa, compromisso, hábito, lista, rotina, projeto, movimentação ou meta?');
+          try { var _icl = DB.aiListConversations(userId); if (_icl.length) DB.convSetContext(userId, _icl[0].id, _icl[0].channel || 'web', 'INBOX_ITEM', ibd.id, 30); } catch (eIC) {}
+        }
+        navTarget = '#/inbox';
       } else if (det.intent === 'routine_today' || det.intent === 'routine_list') {
         var rres = DB.aiRunTool(userId, det.intent === 'routine_today' ? 'routine_today' : 'routine_list', {});
         tools.push(det.intent === 'routine_today' ? 'routine_today' : 'routine_list'); toolOut = rres;
@@ -8684,7 +8834,7 @@ window.Juntos = window.Juntos || {};
       userId = conn.user_id;
       /* atalhos */
       var t0 = String(text || '').trim();
-      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
+      var quick = { '/resumo': 'como está meu dia?', '/hoje': 'como está meu dia?', '/semana': 'como está minha semana?', '/agenda': 'quais compromissos tenho essa semana?', '/habitos': 'quais hábitos tenho hoje?', '/tarefas': 'quais tarefas tenho hoje?', '/listas': 'quais listas eu tenho?', '/mercado': 'mostra a lista do mercado', '/rotinas': 'quais rotinas tenho hoje?', '/rotina': 'quais rotinas tenho hoje?', '/projetos': 'quais projetos tenho?', '/inbox': 'mostra minha inbox', '/gastos': 'quanto gastamos esse mês?', '/orcamento': 'como está o orçamento?', '/fatura': 'qual a próxima fatura?', '/metas': 'como estão as metas?', '/insights': 'o que merece atenção?', '/ajuda': 'ajuda' };
       if (quick[t0.toLowerCase()]) text = quick[t0.toLowerCase()];
       /* conversa do canal */
       var conv = DB.waResolveConversation(userId, row.phone_hash);
@@ -9525,10 +9675,15 @@ window.Juntos = window.Juntos || {};
       try { rtn = DB.getRelevantRoutines(userId, 3); } catch (eR) {}
       var pjt = [];
       try { pjt = DB.getRelevantProjects(userId, 3); } catch (ePj) {}
+      var ibx = { pending: 0, items: [] };
+      try {
+        ibx.pending = DB.getInboxSummary(userId).pending;
+        ibx.items = DB.getUnprocessedInboxItems(userId, { limit: 3 }).map(function (it) { return { id: it.id, content: it.content.slice(0, 60) }; });
+      } catch (eIx) {}
       var recent = DB.listTx(userId, { from: d.slice(0, 7), to: d.slice(0, 7) }).filter(function (t) { return t.date <= d; }).slice(0, 4).map(function (t) {
         return { id: t.id, date: t.date, description: t.description, amount: t.amount, type: t.type, category_id: t.category_id };
       });
-      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, next: next, commitments: finCom, recent: recent };
+      return { date: d, finance: fin, agenda: agd.map(function (o) { return DB.agendaOccurrencePublic(userId, o); }), habits: { total: hab.total, done: hab.done, items: hab.items }, tasks: { total: tsk.total, done: tsk.done, overdue: tsk.overdue, items: tsk.items }, lists: lst, routines: rtn, projects: pjt, inbox: ibx, next: next, commitments: finCom, recent: recent };
     },
     getOverviewWeek: function (userId, date, vision) {
       var cid = DB.myCoupleId(userId);
@@ -9595,7 +9750,7 @@ window.Juntos = window.Juntos || {};
     },
     getOverviewSummary: function (userId, date) {
       var d = DB.getOverviewDay(userId, date, 'couple');
-      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], routines: (d.routines || []).length, projects: (d.projects || []).length, tx: d.finance.count, next: d.next };
+      return { date: d.date, agenda: d.agenda.length, habits_total: d.habits.total, habits_done: d.habits.done, tasks_total: d.tasks.total, tasks_done: d.tasks.done, lists: d.lists || [], routines: (d.routines || []).length, projects: (d.projects || []).length, inbox_pending: (d.inbox && d.inbox.pending) || 0, tx: d.finance.count, next: d.next };
     },
     /* ============ HÁBITOS (rotina pessoal; sem finanças) ============
        Fonte própria (habits + habit_completions). Tudo por user_id do
@@ -11759,6 +11914,40 @@ window.Juntos = window.Juntos || {};
       var et = k === 'list' ? 'LIST' : String(kind || '').toUpperCase();
       return DB.convGetContext(userId, null, et);
     },
+    inboxHasListContext: function (userId) {
+      try { return !!DB.convGetContext(userId, null, 'INBOX_LIST'); } catch (e) { return false; }
+    },
+    inboxResolveOrdinal: function (userId, rawText, convId) {
+      var s = DB.aiNorm(rawText || '');
+      var idx = -1;
+      var m = s.match(/(primeiro|segundo|terceiro|quarto|quinto|1º|2º|3º|4º|5º|\b1\b|\b2\b|\b3\b|\b4\b|\b5\b)/);
+      if (m) {
+        var w = m[1];
+        idx = (w === 'primeiro' || w === '1º' || w === '1') ? 0 : (w === 'segundo' || w === '2º' || w === '2') ? 1 : (w === 'terceiro' || w === '3º' || w === '3') ? 2 : (w === 'quarto' || w === '4º' || w === '4') ? 3 : 4;
+      }
+      var ctx = null;
+      try { ctx = DB.convGetContext(userId, convId || null, 'INBOX_LIST'); } catch (e) {}
+      if (!ctx || !ctx.entity_id) throw { clarification: 'Qual item da Inbox? Mostre a lista primeiro ("mostra minha inbox").' };
+      var ids = String(ctx.entity_id).split(',').filter(function (x) { return x; }).slice(0, 10);
+      if (idx < 0) {
+        var rest = s.replace(/(o primeiro|o segundo|o terceiro|o quarto|o quinto|primeiro|segundo|terceiro|quarto|quinto|1º|2º|3º|4º|5º|esse|este|essa|desse|o da|e o|vira|vira?|transforma|mostra|mostre|detalhe|descarta|descartar|apaga|apagar|arquiva|arquivar|restaura|tarefa|compromisso|habito|lista|rotina|projeto|despesa|receita|meta|para|pra|inbox|esse|este)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+        var words = rest.split(' ').filter(function (w) { return w.length >= 3; });
+        var found = null;
+        ids.forEach(function (idv) {
+          if (found) return;
+          try {
+            var it = DB.getInboxItem(userId, idv);
+            var cn = DB.aiNorm(it.content);
+            if (words.length && words.every(function (w) { return cn.indexOf(w) >= 0; })) found = it;
+          } catch (e2) {}
+        });
+        if (!found) throw { clarification: 'Qual item da Inbox? Diga "o primeiro", "o segundo"...' };
+        return found;
+      }
+      if (idx >= ids.length) throw { clarification: 'Só há ' + ids.length + (ids.length === 1 ? ' item' : ' itens') + ' na lista mostrada.' };
+      try { return DB.getInboxItem(userId, ids[idx]); }
+      catch (e3) { throw { clarification: 'Esse item não está mais acessível.' }; }
+    },
     routineSetContext: function (userId, conversationId, channel, executionId, ttlMin) {
       var db = read(), cid = DB.myCoupleId(userId);
       if (!cid) return null;
@@ -12351,6 +12540,40 @@ window.Juntos = window.Juntos || {};
         });
       } catch (e) { return []; }
     },
+    inboxDestFromText: function (rawText) {
+      var s = DB.aiNorm(rawText || '');
+      if (/(compromisso|reuniao|consulta|dentista|agendar)\b/.test(s)) return 'AGENDA_EVENT';
+      if (/(habito)\b/.test(s)) return 'HABIT';
+      if (/(rotina)\b/.test(s)) return 'ROUTINE';
+      if (/(projeto)\b/.test(s)) return 'PROJECT';
+      if (/(despesa|receita|gasto|movimentacao|movimentação|lancamento|pagamento)\b/.test(s)) return 'TRANSACTION';
+      if (/(meta)\b/.test(s)) return 'GOAL';
+      if (/(tarefa)\b/.test(s)) return 'TASK';
+      if (/(lista)\b/.test(s)) return 'LIST';
+      return null;
+    },
+    aiResolveInboxItem: function (userId, rawText, convId, statuses) {
+      statuses = statuses || ['UNPROCESSED', 'SUGGESTED', 'AWAITING_CONFIRMATION'];
+      function pool() {
+        var out = [], seen = {};
+        statuses.forEach(function (st) { DB.getInboxItems(userId, { status: st, limit: 100 }).items.forEach(function (it) { if (!seen[it.id]) { seen[it.id] = true; out.push(it); } }); });
+        return out;
+      }
+      try {
+        var o = DB.inboxResolveOrdinal(userId, rawText, convId);
+        if (statuses.indexOf(o.status) >= 0) return o;
+        throw { clarification: 'Esse item não está mais pendente.' };
+      } catch (e) {
+        if (e && e.clarification && !/Qual item|acessível|pendente|lista primeiro/.test(e.clarification || '')) throw e;
+        var s = DB.aiNorm(rawText || '');
+        var stop = ['inbox', 'caixa', 'entrada', 'esse', 'este', 'essa', 'desse', 'primeiro', 'segundo', 'terceiro', 'quarto', 'quinto', 'vira', 'transforma', 'mostra', 'mostre', 'detalhe', 'descarta', 'descartar', 'apaga', 'apagar', 'arquiva', 'arquivar', 'restaura', 'restaurar', 'edita', 'editar', 'muda', 'mudar', 'para', 'como', 'tarefa', 'compromisso', 'habito', 'lista', 'rotina', 'projeto', 'despesa', 'receita', 'meta', 'uma', 'esse'];
+        var words = s.split(' ').filter(function (w) { return w.length >= 4 && stop.indexOf(w) < 0; });
+        var hits = pool().filter(function (it) { var c = DB.aiNorm(it.content); return words.length > 0 && words.every(function (w) { return c.indexOf(w) >= 0; }); });
+        if (hits.length === 1) return hits[0];
+        if (!hits.length) throw { clarification: 'Qual item da Inbox? Diga "o primeiro" ou parte do texto.' };
+        throw { clarification: 'Qual deles? ' + hits.slice(0, 3).map(function (x) { return '"' + x.content.slice(0, 40) + '"'; }).join(', ') + '?' };
+      }
+    },
     aiResolveProject: function (userId, rawText, convId) {
       var cands = DB.aiFindProject(userId, rawText);
       if (cands.length === 1) return cands[0];
@@ -12368,6 +12591,529 @@ window.Juntos = window.Juntos || {};
       var rows = DB.getProjects(userId, { limit: 100 });
       var nq = DB.aiNorm(q);
       return rows.filter(function (p) { var n = DB.aiNorm(p.name); return n.length >= 3 && (nq.indexOf(n) >= 0 || n.indexOf(nq) >= 0); });
+    },
+    /* ============ INBOX (zona temporaria de captura; fonte oficial InboxService) ============
+       Capturar primeiro, organizar depois, nunca perder a informacao.
+       Save-first: persiste UNPROCESSED antes de qualquer IA; falha de
+       classificacao nunca apaga a captura. Processamento delega SEMPRE aos
+       servicos oficiais (nunca escreve direto em transacoes etc.) de forma
+       atomica e idempotente. Classificacao e so sugestao em linguagem humana. */
+    INBOX_STATUSES: function () { return ['UNPROCESSED', 'SUGGESTED', 'AWAITING_CONFIRMATION', 'PROCESSED', 'DISMISSED', 'ARCHIVED']; },
+    INBOX_INPUT_TYPES: function () { return ['TEXT', 'AUDIO', 'IMAGE', 'DOCUMENT', 'MULTIMODAL']; },
+    INBOX_SOURCES: function () { return ['WEB', 'WHATSAPP', 'QUICK_CAPTURE', 'AI_ASSISTANT']; },
+    INBOX_ENTITY_TYPES: function () { return ['TASK', 'AGENDA_EVENT', 'HABIT', 'LIST_ITEM', 'LIST', 'ROUTINE', 'PROJECT', 'TRANSACTION', 'GOAL', 'UNKNOWN']; },
+    inboxClean: function (s, max) {
+      s = String(s == null ? '' : s);
+      var out = '';
+      for (var i = 0; i < s.length && out.length < (max || 500); i++) {
+        var c = s.charCodeAt(i);
+        if (c < 32 || c === 127) { if (out.charAt(out.length - 1) !== ' ') out += ' '; continue; }
+        out += s.charAt(i);
+      }
+      return out.replace(/\s+/g, ' ').trim();
+    },
+    inboxVisible: function (db, userId, it) {
+      if (!it || it.deleted_at) return false;
+      if (it.visibility === 'COUPLE') return db.members.some(function (m) { return m.user_id === userId; });
+      return it.user_id === userId;
+    },
+    inboxCanAct: function (db, userId, it) {
+      if (!DB.inboxVisible(db, userId, it)) return false;
+      if (it.visibility === 'COUPLE') return true;
+      return it.user_id === userId;
+    },
+    inboxWriteGuard: function (db, userId, itemId) {
+      var cid = DB.myCoupleId(userId);
+      var it = db.inbox_items.find(function (x) { return x.id === itemId && x.couple_id === cid && !x.deleted_at; });
+      if (!it || !DB.inboxCanAct(db, userId, it)) {
+        try { DB.logAuthorizationFailure(userId, 'inbox_write', { entity_type: 'inbox_item', entity_id: itemId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return it;
+    },
+    captureItem: function (userId, data, opt) {
+      DB.requireAuthz(userId, 'inbox_capture', null);
+      opt = opt || {};
+      data = data || {};
+      var content = DB.inboxClean(data.content, 500);
+      if (content.length < 2) throw new Error('Escreva o que você quer guardar.');
+      var vis = String(data.visibility || 'PERSONAL').toUpperCase();
+      if (['PERSONAL', 'COUPLE'].indexOf(vis) < 0) throw new Error('Visibilidade inválida.');
+      var tp = String(data.input_type || opt.input_type || 'TEXT').toUpperCase();
+      if (DB.INBOX_INPUT_TYPES().indexOf(tp) < 0) tp = 'TEXT';
+      var src = String(data.source || opt.source || 'WEB').toUpperCase();
+      if (DB.INBOX_SOURCES().indexOf(src) < 0) src = 'WEB';
+      var db = read();
+      if (opt.idempotency_key) {
+        var dup = db.inbox_items.find(function (x) { return x.couple_id === DB.myCoupleId(userId) && !x.deleted_at && x.idempotency_key === String(opt.idempotency_key).slice(0, 120); });
+        if (dup) return dup;
+      }
+      var cid = DB.myCoupleId(userId);
+      var it = { id: id('ib'), user_id: userId, couple_id: cid, visibility: vis, content: content, input_type: tp, source: src, status: 'UNPROCESSED', suggested_entity_type: null, confidence: null, suggested_visibility: null, processed_entity_type: null, processed_entity_id: null, processed_by: null, processing_metadata: data.processing_metadata || opt.processing_metadata || null, processing_key: null, last_processing_key: null, last_processing_at: null, idempotency_key: opt.idempotency_key ? String(opt.idempotency_key).slice(0, 120) : null, version: 1, created_at: now(), updated_at: now(), processed_at: null, dismissed_at: null, archived_at: null, deleted_at: null };
+      db.inbox_items.push(it);
+      logAudit(db, cid, userId, 'inbox_item', it.id, 'captured', { source: src, input_type: tp });
+      write(db);
+      try { DB.logSecurityEvent(userId, 'inbox', { action: 'inbox_item_captured', entity_type: 'inbox_item', entity_id: it.id }); } catch (e) {}
+      try { DB.emitInboxEvent(userId, 'inbox_item_captured', it, {}); } catch (e2) {}
+      try { DB.suggestDestination(userId, it.id, {}); } catch (e3) { /* falha de IA nunca perde a captura */ }
+      return DB.getItem_inboxSafe(userId, it.id);
+    },
+    getItem_inboxSafe: function (userId, itemId) {
+      var db = read(), cid = DB.myCoupleId(userId);
+      var it = db.inbox_items.find(function (x) { return x.id === itemId && x.couple_id === cid && !x.deleted_at; });
+      if (!it || !DB.inboxVisible(db, userId, it)) {
+        try { DB.logAuthorizationFailure(userId, 'inbox_read', { entity_type: 'inbox_item', entity_id: itemId }); } catch (e) {}
+        throw new Error('Acesso negado.');
+      }
+      return it;
+    },
+    getInboxItem: function (userId, itemId) { return DB.getItem_inboxSafe(userId, itemId); },
+    updateInboxItem: function (userId, itemId, data) {
+      DB.requireAuthz(userId, 'inbox_edit', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status === 'PROCESSED') throw new Error('Item já organizado. Desvincule ou crie nova captura para alterar.');
+      data = data || {};
+      var changed = false;
+      if (data.content !== undefined) {
+        var c = DB.inboxClean(data.content, 500);
+        if (c.length < 2) throw new Error('Escreva o que você quer guardar.');
+        if (c !== it.content) { it.content = c; changed = true; }
+      }
+      if (data.visibility !== undefined) {
+        var v = String(data.visibility).toUpperCase();
+        if (['PERSONAL', 'COUPLE'].indexOf(v) < 0) throw new Error('Visibilidade inválida.');
+        if (v !== it.visibility) {
+          var before = it.visibility;
+          it.visibility = v; changed = true;
+          try { DB.logSecurityEvent(userId, 'inbox', { action: v === 'COUPLE' ? 'inbox_shared' : 'inbox_privatized', entity_type: 'inbox_item', entity_id: it.id, metadata: { from: before, to: v } }); } catch (e) {}
+        }
+      }
+      if (changed) {
+        it.suggested_entity_type = null; it.confidence = null; it.suggested_visibility = null;
+        it.processing_metadata = null;
+        it.status = 'UNPROCESSED'; it.version += 1; it.updated_at = now();
+        logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'updated', {});
+        write(db);
+        try { DB.suggestDestination(userId, it.id, {}); } catch (e2) {}
+      }
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    getInboxItems: function (userId, f) {
+      f = f || {};
+      var db = read(), cid = DB.myCoupleId(userId);
+      if (!cid) return [];
+      var rows = db.inbox_items.filter(function (it) {
+        if (it.couple_id !== cid || it.deleted_at) return false;
+        if (!DB.inboxVisible(db, userId, it)) return false;
+        if (f.status && it.status !== String(f.status).toUpperCase()) return false;
+        if (f.visibility && it.visibility !== String(f.visibility).toUpperCase()) return false;
+        if (f.source && it.source !== String(f.source).toUpperCase()) return false;
+        if (f.suggested && it.suggested_entity_type !== String(f.suggested).toUpperCase()) return false;
+        if (f.search) {
+          if (it.content.toLowerCase().indexOf(String(f.search).toLowerCase()) < 0) return false;
+        }
+        return true;
+      });
+      var oldest = !!f.oldest_first;
+      rows.sort(function (a, b) {
+        var r = oldest ? (a.created_at + a.id).localeCompare(b.created_at + b.id) : (b.created_at + b.id).localeCompare(a.created_at + a.id);
+        return r;
+      });
+      var total = rows.length;
+      if (f.offset) rows = rows.slice(f.offset);
+      if (f.limit) rows = rows.slice(0, f.limit);
+      return { total: total, items: rows };
+    },
+    getUnprocessedInboxItems: function (userId, f) {
+      var out = [], seen = {};
+      ['UNPROCESSED', 'SUGGESTED', 'AWAITING_CONFIRMATION'].forEach(function (st) {
+        DB.getInboxItems(userId, Object.assign({}, f, { status: st, limit: 200 })).items.forEach(function (it) {
+          if (!seen[it.id]) { seen[it.id] = true; out.push(it); }
+        });
+      });
+      out.sort(function (a, b) { return (b.created_at + b.id).localeCompare(a.created_at + a.id); });
+      return out.slice(0, (f && f.limit) || 50);
+    },
+    getInboxSummary: function (userId) {
+      function count(st) { return DB.getInboxItems(userId, { status: st, limit: 1 }).total; }
+      var pending = count('UNPROCESSED') + count('SUGGESTED') + count('AWAITING_CONFIRMATION');
+      return { pending: pending, unprocessed: count('UNPROCESSED'), suggested: count('SUGGESTED'), processed: count('PROCESSED'), dismissed: count('DISMISSED') };
+    },
+    suggestDestination: function (userId, itemId, opt) {
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status === 'PROCESSED' || it.status === 'DISMISSED' || it.status === 'ARCHIVED') return it;
+      var cls = DB.classifyInboxItem(userId, it.content);
+      it.suggested_entity_type = cls.entity_type;
+      it.confidence = cls.confidence;
+      it.alternates = cls.alternates || [];
+      it.suggested_visibility = cls.visibility_hint && cls.visibility_hint !== it.visibility ? cls.visibility_hint : null;
+      if (!it.processing_metadata || !it.processing_metadata.kept) {
+        it.processing_metadata = Object.assign({}, it.processing_metadata, cls.fields, { classificationVersion: 1 });
+      }
+      it.status = 'SUGGESTED';
+      it.version += 1; it.updated_at = now();
+      logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'classified', { suggestion: cls.entity_type });
+      write(db);
+      try { DB.emitInboxEvent(userId, 'inbox_item_classified', it, {}); } catch (e) {}
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    /* ============ InboxClassificationService (sugere; nunca executa) ============
+       Sinais deterministicos em pt-BR + contexto (listas/projetos existentes).
+       confidence e interno e nunca exibido como numero. */
+    classifyInboxItem: function (userId, content) {
+      var raw = String(content || '');
+      var s = DB.aiNorm(raw);
+      var today = DB.agendaToday();
+      var out = { entity_type: 'UNKNOWN', confidence: 0.15, fields: {}, alternates: [], visibility_hint: null };
+      if (/(precisamos|vamos|nosso|nossa|nossos|nossas|juntos|juntas|casal|para nos|pra nos|do casal|compartilhada|compartilhado)\b/.test(s)) out.visibility_hint = 'COUPLE';
+      var amount = null;
+      try { amount = DB.aiParseAmount(raw); } catch (e) {}
+      var when = null;
+      try { var w = DB.aiParseAgendaWhen(raw, today); if (!w.clarification && w.date) when = { date: w.date, start: w.start || null }; } catch (e2) {}
+      var pastPay = /(paguei|pago|paguei|gastei|gastei|recebi|paguei|quitei)\b/.test(s);
+      var futurePay = /(pagar|paga|vencendo|vence)\b/.test(s);
+      var timeWords = /(todo dia|todos os dias|diariamente|todo domingo|toda segunda|toda terca|toda quarta|toda quinta|toda sexta|toda sabado|sempre)\b/.test(s);
+      var clockTime = /(\d{1,2})\s*h(\d{2})?\b/.test(s);
+      var m = raw.match(/lista\s*([^:]{1,60}):\s*(.+)$/i);
+      var parts = raw.split(/[,;]/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; });
+      var andParts = raw.split(/\be\b/i).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; });
+      function projRef() {
+        try {
+          var hits = DB.aiFindProject ? [] : [];
+          void hits;
+        } catch (e3) {}
+        var out2 = [];
+        try {
+          var rows = DB.getProjects(userId, { limit: 100 });
+          var words = s.split(' ');
+          rows.forEach(function (p) {
+            var nw = DB.aiNorm(p.name).split(' ').filter(function (w) { return w.length >= 5; });
+            if (nw.some(function (w) { return words.indexOf(w) >= 0; })) out2.push(p);
+          });
+        } catch (e4) {}
+        return out2.slice(0, 3);
+      }
+      if (amount && pastPay && !futurePay) {
+        out.entity_type = 'TRANSACTION';
+        out.confidence = 0.85;
+        out.fields = { amount: amount, date: (when && when.date) || today, type: /(recebi|salario|renda|recebimento)\b/.test(s) ? 'income' : 'expense', description: raw.replace(/(r\$\s?[\d\.,]+|\d+\s?(reais|real)|paguei|pago|hoje|ontem)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) };
+        return out;
+      }
+      if (/(juntar|junta|meta|economizar|guardar.*(para|pra)|poupar)\b/.test(s) && amount) {
+        out.entity_type = 'GOAL';
+        out.confidence = 0.8;
+        out.fields = { target: amount, name: raw.replace(/(quero|juntar|junta|meta|economizar|guardar|para|pra|r\$\s?[\d\.,]+|\d+\s?(reais|real|mil))/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) };
+        var pj = projRef();
+        if (pj.length === 1) out.fields.project_id = pj[0].id;
+        return out;
+      }
+      if (m && m[2]) {
+        var items = m[2].split(/,|\be\b/i).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 1; }).slice(0, 20);
+        if (items.length >= 2) {
+          out.entity_type = 'LIST';
+          out.confidence = 0.8;
+          out.fields = { name: m[1].trim().slice(0, 60), items: items };
+          return out;
+        }
+      }
+      if (/(adiciona|adicionar|adicione|coloca|colocar|coloco|acrescenta)\b/.test(s)) {
+        var found = [];
+        try {
+          DB.getLists(userId, { status: 'ACTIVE', limit: 100 }).forEach(function (l) {
+            var n = DB.aiNorm(l.name);
+            if (n.length >= 3 && s.indexOf(n) >= 0) found.push(l);
+          });
+        } catch (e5) {}
+        if (found.length === 1) {
+          out.entity_type = 'LIST_ITEM';
+          out.confidence = 0.8;
+          out.fields = { list_id: found[0].id, list_name: found[0].name, title: raw.replace(/(adiciona|adicionar|adicione|coloca|colocar|coloco|acrescenta|no|na|em|lista|mercado|por favor)/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) };
+          return out;
+        }
+      }
+      if (/(rotina|todo domingo|revisao semanal|revisão semanal)\b/.test(s) || (timeWords && /(revisar|organizar|preparar|conferir)\b/.test(s))) {
+        out.entity_type = 'ROUTINE';
+        out.confidence = 0.7;
+        out.fields = {};
+        return out;
+      }
+      if (/\bprojeto\b/.test(s)) {
+        out.entity_type = 'PROJECT';
+        out.confidence = 0.7;
+        out.fields = {};
+        return out;
+      }
+      if (timeWords && !when) {
+        out.entity_type = 'HABIT';
+        out.confidence = 0.7;
+        out.fields = { frequency: 'daily' };
+        return out;
+      }
+      if (/(habito|quero ler|quero meditar|quero correr|quero estudar|todo dia|todos os dias|diariamente)\b/.test(s)) {
+        out.entity_type = 'HABIT';
+        out.confidence = 0.7;
+        out.fields = { frequency: 'daily' };
+        return out;
+      }
+      if ((when || clockTime) && /(dentista|medico|consulta|reuniao|voo|exame|jantar|aniversario|show|prova|entrevista)\b/.test(s)) {
+        out.entity_type = 'AGENDA_EVENT';
+        out.confidence = 0.75;
+        out.fields = { date: when.date, start: when.start };
+        out.alternates = ['TASK'];
+        return out;
+      }
+      if (when && /(marcar|agendar|ligar|comprar|pagar|fazer|levar|buscar|resolver|marcar|pesquisar)\b/.test(s)) {
+        out.entity_type = 'TASK';
+        out.confidence = 0.7;
+        out.fields = { date: when.date, start: when.start };
+        if (when.start) out.alternates = ['AGENDA_EVENT'];
+        var pj2 = projRef();
+        if (pj2.length === 1) out.fields.project_id = pj2[0].id;
+        return out;
+      }
+      if (parts.length >= 3 || (parts.length >= 2 && andParts.length >= 3)) {
+        out.entity_type = 'LIST';
+        out.confidence = 0.55;
+        out.fields = { name: '', items: parts.concat(andParts).filter(function (x, ix, a) { return a.indexOf(x) === ix; }).slice(0, 12) };
+        return out;
+      }
+      if (futurePay && !amount) {
+        out.entity_type = 'TASK';
+        out.confidence = 0.6;
+        out.fields = { date: (when && when.date) || null };
+        return out;
+      }
+      if (amount && !pastPay) {
+        out.entity_type = 'TRANSACTION';
+        out.confidence = 0.45;
+        out.fields = { amount: amount, date: (when && when.date) || today, type: 'expense', description: raw.slice(0, 120) };
+        return out;
+      }
+      return out;
+    },
+    inboxSuggestionText: function (it) {
+      var map = { TASK: 'Parece uma tarefa.', AGENDA_EVENT: 'Parece um compromisso.', HABIT: 'Parece um hábito.', LIST: 'Parece uma lista.', LIST_ITEM: 'Pode ir para uma lista.', ROUTINE: 'Parece uma rotina.', PROJECT: 'Parece um projeto.', TRANSACTION: 'Parece uma movimentação.', GOAL: 'Parece uma meta.', UNKNOWN: 'Não tenho certeza de onde organizar isso.' };
+      var t = map[it.suggested_entity_type] || map.UNKNOWN;
+      var alt = it.alternates || [];
+      if (it.suggested_entity_type && it.suggested_entity_type !== 'UNKNOWN' && alt.length) {
+        var names = { TASK: 'tarefa', AGENDA_EVENT: 'compromisso', HABIT: 'hábito', LIST: 'lista', LIST_ITEM: 'item de lista', ROUTINE: 'rotina', PROJECT: 'projeto', TRANSACTION: 'movimentação', GOAL: 'meta' };
+        t += ' Também pode ser ' + alt.map(function (a) { return names[a] || a.toLowerCase(); }).join(' ou ') + '.';
+      }
+      return t;
+    },
+    prepareInboxDraft: function (userId, itemId, destType, opt) {
+      opt = opt || {};
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      var dest = String(destType || it.suggested_entity_type || 'UNKNOWN').toUpperCase();
+      if (DB.INBOX_ENTITY_TYPES().indexOf(dest) < 0) throw new Error('Destino inválido.');
+      if (dest === 'UNKNOWN') throw new Error('Escolha um destino para organizar.');
+      var meta = it.processing_metadata || {};
+      var content = it.content;
+      var draft = { visibility: it.visibility };
+      if (dest === 'TASK') {
+        draft.title = String(opt.title || content).slice(0, 120);
+        draft.description = '';
+        draft.due_date = opt.due_date !== undefined ? opt.due_date : (meta.date || null);
+        draft.due_time = opt.due_time !== undefined ? opt.due_time : (meta.start || null);
+        if (opt.project_id) draft.project_id = opt.project_id;
+        else if (meta.project_id) draft.project_id = meta.project_id;
+      } else if (dest === 'AGENDA_EVENT') {
+        draft.title = String(opt.title || content).slice(0, 120);
+        draft.date = opt.date !== undefined ? opt.date : (meta.date || null);
+        draft.start_time = opt.start_time !== undefined ? opt.start_time : (meta.start || null);
+      } else if (dest === 'HABIT') {
+        draft.name = String(opt.name || content).slice(0, 80);
+        draft.frequency_type = 'daily';
+      } else if (dest === 'LIST') {
+        draft.name = String(opt.name || meta.name || content).slice(0, 60) || 'Nova lista';
+        draft.list_type = 'GENERAL';
+        draft.items = Array.isArray(opt.items) ? opt.items : (Array.isArray(meta.items) ? meta.items : []);
+      } else if (dest === 'LIST_ITEM') {
+        draft.list_id = opt.list_id || meta.list_id || null;
+        draft.title = String(opt.title || content).slice(0, 140);
+        if (draft.list_id) { try { DB.getList(userId, draft.list_id); } catch (eL0) { throw new Error('A lista de destino não existe mais.'); } }
+      } else if (dest === 'ROUTINE') {
+        draft.name = String(opt.name || content).slice(0, 80);
+        draft.frequency_type = 'DAILY';
+      } else if (dest === 'PROJECT') {
+        draft.name = String(opt.name || content).slice(0, 80);
+        draft.target_date = opt.target_date !== undefined ? opt.target_date : null;
+      } else if (dest === 'TRANSACTION') {
+        draft.type = opt.type || meta.type || 'expense';
+        draft.description = String(opt.description || meta.description || content).slice(0, 120);
+        draft.amount = opt.amount !== undefined ? opt.amount : (meta.amount != null ? meta.amount : null);
+        draft.date = opt.date !== undefined ? opt.date : (meta.date || DB.agendaToday());
+        draft.category_id = opt.category_id || null;
+        draft.account_id = opt.account_id || null;
+        draft.payer_user_id = userId;
+      } else if (dest === 'GOAL') {
+        draft.name = String(opt.name || meta.name || content).slice(0, 80);
+        draft.target = opt.target !== undefined ? opt.target : (meta.target != null ? meta.target : null);
+        if (opt.project_id) draft.project_id = opt.project_id;
+        else if (meta.project_id) draft.project_id = meta.project_id;
+      }
+      if (opt.hold) {
+        var db2 = read();
+        var it2 = DB.inboxWriteGuard(db2, userId, itemId);
+        it2.status = 'AWAITING_CONFIRMATION'; it2.updated_at = now();
+        logAudit(db2, it2.couple_id, userId, 'inbox_item', it2.id, 'processing_started', { dest: dest });
+        write(db2);
+        try { DB.emitInboxEvent(userId, 'inbox_item_processing_started', it2, {}); } catch (e) {}
+      }
+      return { dest: dest, draft: draft };
+    },
+    cancelInboxProcessing: function (userId, itemId) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status === 'AWAITING_CONFIRMATION') {
+        it.status = 'SUGGESTED'; it.updated_at = now();
+        logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'processing_cancelled', {});
+        write(db);
+      }
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    /* Processamento atomico e idempotente: cria a entidade oficial primeiro
+       (releitura apos escrita externa p/ nao perder nada) e so entao marca
+       PROCESSED. Falha mantem a captura com mensagem de retry. */
+    confirmInboxProcessing: function (userId, itemId, destType, draft, opt) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      opt = opt || {};
+      draft = draft || {};
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status === 'PROCESSED') return { already: true, entity_type: it.processed_entity_type, entity_id: it.processed_entity_id };
+      if (it.status === 'DISMISSED' || it.status === 'ARCHIVED') throw new Error('Item descartado ou arquivado. Restaure para organizar.');
+      if (opt.expected_version != null && it.version !== opt.expected_version) throw new Error('Este item mudou enquanto você decidia. Recarregue para continuar.');
+      if (opt.idempotency_key && it.last_processing_key === String(opt.idempotency_key).slice(0, 120) && it.last_processing_at) {
+        var age = Date.now() - Date.parse(it.last_processing_at);
+        if (age >= 0 && age < 120000 && it.status === 'PROCESSED') return { already: true, entity_type: it.processed_entity_type, entity_id: it.processed_entity_id };
+      }
+      var dest = String(destType || it.suggested_entity_type || '').toUpperCase();
+      if (DB.INBOX_ENTITY_TYPES().indexOf(dest) < 0 || dest === 'UNKNOWN') throw new Error('Escolha um destino para organizar.');
+      var vis = draft.visibility === 'COUPLE' && it.visibility === 'COUPLE' ? 'COUPLE' : (draft.visibility === 'COUPLE' ? 'COUPLE' : it.visibility);
+      if (draft.visibility === 'COUPLE' && it.visibility !== 'COUPLE') {
+        try { DB.logSecurityEvent(userId, 'inbox', { action: 'inbox_entity_shared', entity_type: 'inbox_item', entity_id: it.id }); } catch (eS) {}
+      }
+      var created = null, ctype = dest;
+      if (dest === 'TASK') {
+        created = DB.createTask(userId, { title: draft.title || it.content, description: draft.description || '', visibility: vis, priority: 'NORMAL', due_date: draft.due_date || null, due_time: draft.due_time || null, assigned_to: draft.assigned_to || undefined });
+        if (draft.project_id) {
+          try { DB.linkEntity(userId, draft.project_id, { entity_type: 'TASK', entity_id: created.id, relationship_type: 'RELATED' }); }
+          catch (eL) { try { DB.deleteTask(userId, created.id); } catch (eL2) {} throw new Error('Não foi possível vincular ao projeto: ' + (eL.message || '')); }
+        }
+      } else if (dest === 'AGENDA_EVENT') {
+        created = DB.createAgendaEvent(userId, { title: draft.title || it.content, date: draft.date, start_time: draft.due_time || draft.start_time || null, visibility: vis });
+      } else if (dest === 'HABIT') {
+        created = DB.createHabit(userId, { name: draft.name || it.content, frequency_type: 'daily' });
+      } else if (dest === 'LIST') {
+        created = DB.createList(userId, { name: draft.name || it.content, visibility: vis }, {});
+        var items = Array.isArray(draft.items) ? draft.items.filter(function (x) { return String(x || '').trim().length >= 1; }).slice(0, 30).map(function (x) { return { title: String(x).trim().slice(0, 140) }; }) : [];
+        if (items.length) { try { DB.addItemsBulk(userId, created.id, items, { idempotency_key: opt.idempotency_key ? 'ib:' + opt.idempotency_key : undefined }); } catch (eI) {} }
+      } else if (dest === 'LIST_ITEM') {
+        if (!draft.list_id) throw new Error('Escolha a lista de destino.');
+        created = DB.addItem(userId, draft.list_id, { title: draft.title || it.content });
+        ctype = 'LIST_ITEM';
+      } else if (dest === 'ROUTINE') {
+        created = DB.createRoutine(userId, { name: draft.name || it.content, visibility: vis, frequency_type: 'DAILY' }, {});
+        var ritems = Array.isArray(draft.items) ? draft.items.filter(function (x) { return String(x || '').trim().length >= 1; }).slice(0, 30) : [];
+        ritems.forEach(function (t) { try { DB.addRoutineItem(userId, created.id, { title: String(t).trim().slice(0, 140) }); } catch (eR) {} });
+      } else if (dest === 'PROJECT') {
+        created = DB.createProject(userId, { name: draft.name || it.content, visibility: vis, target_date: draft.target_date || null }, {});
+      } else if (dest === 'TRANSACTION') {
+        if (draft.amount == null || !(Number(draft.amount) > 0)) throw new Error('Informe o valor da movimentação.');
+        if (!draft.category_id) throw new Error('Escolha a categoria da movimentação.');
+        created = DB.createTx(userId, { type: draft.type === 'income' ? 'income' : 'expense', description: draft.description || it.content, amount: String(draft.amount), date: draft.date || DB.agendaToday(), category_id: draft.category_id, payer_user_id: userId, is_shared: false, account_id: draft.account_id || null });
+      } else if (dest === 'GOAL') {
+        if (draft.target == null || !(Number(draft.target) > 0)) throw new Error('Informe o valor da meta.');
+        created = DB.createGoal(userId, { name: draft.name || it.content, target_amount: String(draft.target), current_amount: '0', deadline: draft.deadline || '' });
+        if (draft.project_id) {
+          try { DB.linkEntity(userId, draft.project_id, { entity_type: 'GOAL', entity_id: created.id, relationship_type: 'RELATED' }); }
+          catch (eG) { throw new Error('Meta criada, mas não foi possível vincular ao projeto: ' + (eG.message || '')); }
+        }
+      }
+      if (!created || !created.id) throw new Error('Não foi possível organizar este item. Sua captura continua salva na Inbox.');
+      var fresh = read();
+      var it2 = fresh.inbox_items.find(function (x) { return x.id === itemId && !x.deleted_at; });
+      if (!it2) throw new Error('Captura não encontrada após processamento.');
+      var g2 = null;
+      try { g2 = DB.inboxWriteGuard(fresh, userId, itemId); } catch (eG2) { throw new Error('Sem permissão para concluir.'); }
+      if (g2.status === 'PROCESSED' && g2.processed_entity_id) return { already: true, entity_type: g2.processed_entity_type, entity_id: g2.processed_entity_id };
+      g2.status = 'PROCESSED';
+      g2.processed_entity_type = ctype;
+      g2.processed_entity_id = created.id;
+      g2.processed_by = userId;
+      g2.processed_at = now();
+      g2.version += 1; g2.updated_at = now();
+      if (opt.idempotency_key) { g2.last_processing_key = String(opt.idempotency_key).slice(0, 120); g2.last_processing_at = now(); }
+      logAudit(fresh, g2.couple_id, userId, 'inbox_item', g2.id, 'processed', { dest: ctype, entity_id: created.id });
+      write(fresh);
+      try { DB.logSecurityEvent(userId, ctype === 'TRANSACTION' ? 'financial_action' : 'inbox', { action: ctype === 'TRANSACTION' ? 'inbox_transaction_created' : 'inbox_item_processed', entity_type: 'inbox_item', entity_id: g2.id, metadata: { dest: ctype } }); } catch (eS2) {}
+      try { DB.emitInboxEvent(userId, 'inbox_item_processed', g2, {}); } catch (eE) {}
+      return { entity_type: ctype, entity_id: created.id };
+    },
+    dismissInboxItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status === 'PROCESSED') throw new Error('Item já organizado.');
+      it.status = 'DISMISSED'; it.dismissed_at = now(); it.version += 1; it.updated_at = now();
+      logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'dismissed', {});
+      write(db);
+      try { DB.emitInboxEvent(userId, 'inbox_item_dismissed', it, {}); } catch (e) {}
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    restoreInboxItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      if (it.status !== 'DISMISSED' && it.status !== 'ARCHIVED') throw new Error('Só itens descartados ou arquivados podem ser restaurados.');
+      it.status = 'UNPROCESSED'; it.dismissed_at = null; it.version += 1; it.updated_at = now();
+      logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'restored', {});
+      write(db);
+      try { DB.emitInboxEvent(userId, 'inbox_item_restored', it, {}); } catch (e) {}
+      try { DB.suggestDestination(userId, it.id, {}); } catch (e2) {}
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    archiveInboxItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      it.status = 'ARCHIVED'; it.archived_at = now(); it.version += 1; it.updated_at = now();
+      logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'archived', {});
+      write(db);
+      try { DB.emitInboxEvent(userId, 'inbox_item_archived', it, {}); } catch (e) {}
+      return DB.getItem_inboxSafe(userId, itemId);
+    },
+    deleteInboxItem: function (userId, itemId) {
+      DB.requireAuthz(userId, 'inbox_process', null);
+      var db = read();
+      var it = DB.inboxWriteGuard(db, userId, itemId);
+      it.deleted_at = now(); it.updated_at = now();
+      logAudit(db, it.couple_id, userId, 'inbox_item', it.id, 'deleted', {});
+      write(db);
+      return true;
+    },
+    inboxProcessedTarget: function (userId, itemId) {
+      var it = DB.getItem_inboxSafe(userId, itemId);
+      if (it.status !== 'PROCESSED' || !it.processed_entity_id) return { available: false };
+      var map = { TASK: 'tasks', AGENDA_EVENT: 'agenda', HABIT: 'habits', LIST: 'lists', LIST_ITEM: 'lists', ROUTINE: 'routines', PROJECT: 'projects', TRANSACTION: 'transactions', GOAL: 'goals' };
+      var base = map[it.processed_entity_type] || 'dashboard';
+      var withId = (it.processed_entity_type === 'LIST' || it.processed_entity_type === 'ROUTINE' || it.processed_entity_type === 'PROJECT');
+      return { available: true, entity_type: it.processed_entity_type, entity_id: it.processed_entity_id, route: '#/' + base + (withId ? '/' + it.processed_entity_id : '') };
+    },
+    emitInboxEvent: function (userId, kind, item, extra) {
+      extra = extra || {};
+      var allowed = ['inbox_item_captured', 'inbox_item_classified', 'inbox_item_processing_started', 'inbox_item_processed', 'inbox_item_dismissed', 'inbox_item_restored', 'inbox_item_archived'];
+      if (allowed.indexOf(kind) < 0) return null;
+      var db = read();
+      logAudit(db, item.couple_id, userId, 'inbox_item', item.id, kind, {});
+      write(db);
+      try { DB.logSecurityEvent(userId, 'inbox', { action: kind, entity_type: 'inbox_item', entity_id: item.id }); } catch (e) {}
+      return true;
     },
     /* ============ PROMPT 24: NOTIFICATION ENGINE (entrega, sem IA) ============
        Eventos/serviços → decisão (prefs/cooldown/quiet/idempotência) →
@@ -12420,7 +13166,8 @@ window.Juntos = window.Juntos || {};
         { key: 'routine_due', priority: 'info', channels: ['in_app', 'whatsapp'], cooldownH: 20, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
         { key: 'routine_reminder', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 12, expiresInH: 36, retry: false, maxAttempts: 1, route: 'routines' },
         { key: 'routine_assigned_item', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'routines' },
-        { key: 'project_deadline_approaching', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'projects' }
+        { key: 'project_deadline_approaching', priority: 'attention', channels: ['in_app', 'whatsapp'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'projects' },
+        { key: 'inbox_digest', priority: 'info', channels: ['in_app'], cooldownH: 24, expiresInH: 72, retry: false, maxAttempts: 1, route: 'inbox' }
       ];
     },
     notifTypeDef: function (type) {
@@ -12906,6 +13653,19 @@ window.Juntos = window.Juntos || {};
           var madeP = DB.projectProcessDue(userId, opt.nowISO || now());
           madeP.forEach(function (id) { made.push(id); });
         } catch (eP2) { /* projetos indisponiveis: segue */ }
+      }
+      if (types.indexOf('inbox_digest') >= 0) {
+        try {
+          var dbd = read(), cidd = DB.myCoupleId(userId);
+          var dpref = dbd.notification_preferences.filter(function (x) { return x.couple_id === cidd && x.notification_type === 'inbox_digest' && (x.user_id === userId || x.user_id === null) && x.enabled; })[0] || null;
+          if (dpref) {
+            var dpend = DB.getInboxSummary(userId).pending;
+            if (dpend >= 5) {
+              var dg = DB.notifCreate(userId, { type: 'inbox_digest', title: 'Inbox para organizar', body: 'Você tem ' + dpend + ' itens para organizar na Inbox.', priority: 'info', user_id: userId, related_entity_type: 'inbox', related_entity_id: null, idempotency_key: ['inbox', 'digest', cidd, (opt.nowISO || now()).slice(0, 10)].join('|'), payload: { pending: dpend } });
+              if (dg && dg.id) made.push(dg.id);
+            }
+          }
+        } catch (eD2) { /* inbox indisponivel: segue */ }
       }
       if (types.indexOf('routine_due') >= 0 || types.indexOf('routine_reminder') >= 0 || types.indexOf('routine_assigned_item') >= 0) {
         try {
@@ -15415,7 +16175,7 @@ window.Juntos = window.Juntos || {};
        contexto autenticado → Authorization → Validation → serviço financeiro
        oficial → persistência → auditoria. Nenhum cálculo financeiro próprio;
        tudo reutiliza os serviços oficiais. Sem segredos em logs. */
-    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project'],
+    SEC_EVENT_TYPES: ['login', 'logout', 'register', 'password_reset', 'authorization_denied', 'sensitive_access', 'financial_action', 'import', 'reconciliation', 'automation', 'ai_action', 'ai_tool', 'whatsapp_webhook', 'whatsapp_link', 'whatsapp_revoke', 'notification', 'configuration_change', 'security_event', 'integrity_event', 'export', 'agenda', 'habit', 'routine', 'project', 'inbox'],
     secHash: function (s) {
       s = String(s == null ? '' : s);
       var h1 = 0x811c9dc5;
@@ -15570,6 +16330,24 @@ window.Juntos = window.Juntos || {};
     canCompleteProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
     canArchiveProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
     canDeleteProject: function (userId, projectId) { return DB.canEditProject(userId, projectId); },
+    canViewInbox: function (userId, itemId) {
+      var c = DB.authzContext(userId);
+      if (!c.member) return false;
+      if (!itemId) return true;
+      var db = read();
+      var it = db.inbox_items.find(function (x) { return x.id === itemId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!it && DB.inboxVisible(db, userId, it);
+    },
+    canCaptureInbox: function (userId) { return !!DB.authzContext(userId).member; },
+    canEditInbox: function (userId, itemId) {
+      var c = DB.authzContext(userId);
+      if (!c.member || !itemId) return !!c.member;
+      var db = read();
+      var it = db.inbox_items.find(function (x) { return x.id === itemId && x.couple_id === c.couple_id && !x.deleted_at; });
+      return !!it && DB.inboxCanAct(db, userId, it);
+    },
+    canProcessInbox: function (userId, itemId) { return DB.canEditInbox(userId, itemId); },
+    canDismissInbox: function (userId, itemId) { return DB.canEditInbox(userId, itemId); },
     canManageNotifications: function (userId) { return !!DB.authzContext(userId).member; },
     /* SecurityAuditService: trilha de segurança separada da auditoria
        financeira (audit_logs). Sem segredos; IP/UA só como hash. */
